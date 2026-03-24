@@ -2,13 +2,13 @@
 
 ## Текущее состояние проекта
 
-**Дата последнего обновления:** 2026-03-24
-**Следующая задача:** Фаза 1 — продолжение: /admin/users + /register
+**Дата последнего обновления:** 2026-03-25
+**Следующая задача:** Фаза 2 — Настройки и кабинеты WB
 
 | Фаза | Статус | Описание |
 |------|--------|----------|
 | Фаза 0 | ✅ ВЫПОЛНЕНО | Инициализация: Next.js, Tailwind, shadcn/ui, Docker, Prisma schema |
-| Фаза 1 | 🔄 В ПРОЦЕССЕ | Аутентификация, роли, приглашения |
+| Фаза 1 | ✅ ВЫПОЛНЕНО | Аутентификация, роли, приглашения, dashboard layout |
 | Фаза 2 | — | Настройки и кабинеты WB |
 | Фаза 3 | — | Карточки товаров |
 | Фаза 4 | — | Справочники |
@@ -31,6 +31,14 @@
 4. **shadcn/ui стиль `default` + цвет `slate`** — цвета переведены в oklch для совместимости с Tailwind v4.
 
 5. **Node.js 22** вместо 20+ — используемая версия Node.js 22.16.0.
+
+6. **DashboardShell использует `useSession()` (client), а не `getServerSession` в layout** — в Next.js App Router `getServerSession` в Server Component layout не всегда корректно прокидывает сессию при клиентской навигации. Layout (`(dashboard)/layout.tsx`) — простой враппер без логики; `DashboardShell` (`'use client'`) сам читает сессию через `useSession()` и рендерит skeleton при загрузке.
+
+7. **Конфликт `app/page.tsx` и `(dashboard)/page.tsx`** — Route groups (`(dashboard)`) не добавляют URL-сегмент, поэтому оба файла разрешаются в `/`. Next.js выбирает `app/page.tsx` первым. Файл `app/page.tsx` из Фазы 0 (содержал `redirect('/login')`) был удалён — главная страница теперь только `(dashboard)/page.tsx`.
+
+8. **Server Actions для всех мутаций пользователей** — `createInvitation`, `updateUserRole`, `toggleUserActive`, `deleteUser`, `registerByInvitation` реализованы как Server Actions в `src/lib/actions/users.ts`. API Routes не создавались.
+
+9. **`checkRole(session, requiredRole)`** — утилита в `src/lib/auth/check-role.ts`. Принимает `Session | null`, возвращает `boolean`. Используется и в Server Components (`getServerSession` → `checkRole`), и в Server Actions. Иерархия ролей: ADMIN(3) > MANAGER(2) > VIEWER(1).
 
 ---
 
@@ -104,20 +112,28 @@
 7. Создать .env.example с описанием всех переменных
 ```
 
-### ⏳ Фаза 1: Аутентификация и пользователи — СЛЕДУЮЩАЯ
+### ✅ Фаза 1: Аутентификация и пользователи — ВЫПОЛНЕНО
 ```
-Задачи:
-1. Prisma schema: User, Session, Invitation
-2. NextAuth.js с Credentials provider
-3. Middleware: защита всех маршрутов (кроме /login)
-4. Seed-скрипт: создание ADMIN из env (ADMIN_EMAIL, ADMIN_PASSWORD)
-5. Страница /login
-6. Страница /admin/users:
-   - Таблица пользователей (имя, email, роль, статус, дата создания)
-   - Кнопка "Пригласить" → модалка: выбор роли → генерация ссылки
-   - Действия: изменить роль, деактивировать, удалить
-7. Страница /register?token=xxx — регистрация по приглашению
-8. Middleware для проверки ролей (ADMIN, MANAGER, VIEWER)
+Реализовано:
+1. Prisma schema: User, Invitation (вся schema создана в Фазе 0)
+2. NextAuth.js с Credentials provider (src/lib/auth/index.ts)
+   - JWT стратегия, maxAge 30 дней
+   - bcryptjs для хэширования паролей
+3. Middleware: защита всех маршрутов кроме /login, /register, /api/auth/*
+4. Seed-скрипт: ADMIN из ADMIN_EMAIL / ADMIN_PASSWORD (prisma/seed.ts)
+5. Страница /login — форма с react-hook-form + zod
+6. Dashboard layout:
+   - DashboardShell (client) — управляет состоянием sidebar
+   - Sidebar — collapsible (w-64 ↔ w-16), мобильный Sheet, AccountSelector stub
+   - Header — DropdownMenu с logout (signOut)
+   - Placeholder страницы: /cards, /reports, /sales-plan, /references, /advertising, /settings
+7. Страница /admin/users (только ADMIN):
+   - Таблица: имя, email, роль (Badge), статус (Badge), дата создания
+   - InviteDialog: выбор роли → одноразовая ссылка /register?token=xxx (7 дней)
+   - UserRowActions: изменить роль (submenu), деактивировать, удалить
+8. Страница /register?token=xxx — валидация токена, регистрация, redirect → /login
+9. checkRole(session, requiredRole) — src/lib/auth/check-role.ts
+10. Server Actions: src/lib/actions/users.ts
 ```
 
 ### Фаза 2: Настройки и кабинеты WB
