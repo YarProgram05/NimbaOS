@@ -3,12 +3,12 @@
 ## Текущее состояние проекта
 
 **Дата последнего обновления:** 2026-03-24
-**Следующая задача:** Фаза 1 — Аутентификация и пользователи
+**Следующая задача:** Фаза 1 — продолжение: /admin/users + /register
 
 | Фаза | Статус | Описание |
 |------|--------|----------|
 | Фаза 0 | ✅ ВЫПОЛНЕНО | Инициализация: Next.js, Tailwind, shadcn/ui, Docker, Prisma schema |
-| Фаза 1 | ⏳ СЛЕДУЮЩАЯ | Аутентификация, роли, приглашения |
+| Фаза 1 | 🔄 В ПРОЦЕССЕ | Аутентификация, роли, приглашения |
 | Фаза 2 | — | Настройки и кабинеты WB |
 | Фаза 3 | — | Карточки товаров |
 | Фаза 4 | — | Справочники |
@@ -24,7 +24,7 @@
 
 1. **Tailwind CSS v4 вместо v3** — shadcn@4.1 генерирует CSS под Tailwind v4 (oklch-цвета, `@theme inline`, `@import "tailwindcss"`). Tailwind v4 не использует `tailwind.config.ts` — конфиг живёт в `globals.css`.
 
-2. **Prisma 7 вместо классической версии** — URL подключения вынесен в `prisma.config.ts` (не в `schema.prisma`). `PrismaClient` инициализируется без `datasourceUrl` — читает из `process.env.DATABASE_URL` через конфиг.
+2. **Prisma 7 вместо классической версии** — URL подключения вынесен в `prisma.config.ts` (не в `schema.prisma`). **Важно:** Prisma 7 использует driver adapters — `PrismaClient` требует `adapter`. Используется `@prisma/adapter-pg` + `pg`. Паттерн: `new PrismaPg({ connectionString: process.env.DATABASE_URL! })` → передать в конструктор. `new PrismaClient()` без аргументов — ошибка.
 
 3. **Вся Prisma schema создана в Фазе 0** — спецификация предполагала поэтапное добавление моделей по фазам, но вся schema (16 моделей) создана сразу для целостности БД и правильных foreign keys.
 
