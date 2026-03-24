@@ -1,5 +1,39 @@
 # CLAUDE.md — Инструкции для Claude Code
 
+## Текущее состояние проекта
+
+**Дата последнего обновления:** 2026-03-24
+**Следующая задача:** Фаза 1 — Аутентификация и пользователи
+
+| Фаза | Статус | Описание |
+|------|--------|----------|
+| Фаза 0 | ✅ ВЫПОЛНЕНО | Инициализация: Next.js, Tailwind, shadcn/ui, Docker, Prisma schema |
+| Фаза 1 | ⏳ СЛЕДУЮЩАЯ | Аутентификация, роли, приглашения |
+| Фаза 2 | — | Настройки и кабинеты WB |
+| Фаза 3 | — | Карточки товаров |
+| Фаза 4 | — | Справочники |
+| Фаза 5 | — | Финансовые отчёты |
+| Фаза 6 | — | План продаж |
+| Фаза 7 | — | Рекламные кампании |
+| Фаза 8 | — | Фоновая синхронизация |
+| Фаза 9 | — | Финальная доработка |
+
+---
+
+## Принятые решения (отличия от спецификации)
+
+1. **Tailwind CSS v4 вместо v3** — shadcn@4.1 генерирует CSS под Tailwind v4 (oklch-цвета, `@theme inline`, `@import "tailwindcss"`). Tailwind v4 не использует `tailwind.config.ts` — конфиг живёт в `globals.css`.
+
+2. **Prisma 7 вместо классической версии** — URL подключения вынесен в `prisma.config.ts` (не в `schema.prisma`). `PrismaClient` инициализируется без `datasourceUrl` — читает из `process.env.DATABASE_URL` через конфиг.
+
+3. **Вся Prisma schema создана в Фазе 0** — спецификация предполагала поэтапное добавление моделей по фазам, но вся schema (16 моделей) создана сразу для целостности БД и правильных foreign keys.
+
+4. **shadcn/ui стиль `default` + цвет `slate`** — цвета переведены в oklch для совместимости с Tailwind v4.
+
+5. **Node.js 22** вместо 20+ — используемая версия Node.js 22.16.0.
+
+---
+
 ## О проекте
 
 Ты разрабатываешь **WB Cabinet Digitizer** — закрытую веб-платформу для оцифровки кабинетов продавца на Wildberries. Полная спецификация проекта находится в файле `SPECIFICATION.md` — прочитай его перед началом любой работы.
@@ -31,7 +65,7 @@
 
 ## Фазы реализации
 
-### Фаза 0: Инициализация проекта
+### ✅ Фаза 0: Инициализация проекта — ВЫПОЛНЕНО
 ```
 Задачи:
 1. Создать Next.js 14 проект с App Router и TypeScript
@@ -70,7 +104,7 @@
 7. Создать .env.example с описанием всех переменных
 ```
 
-### Фаза 1: Аутентификация и пользователи
+### ⏳ Фаза 1: Аутентификация и пользователи — СЛЕДУЮЩАЯ
 ```
 Задачи:
 1. Prisma schema: User, Session, Invitation
@@ -346,15 +380,23 @@ const WB_API_DOMAINS = {
 
 ```bash
 # Разработка
-npm run dev               # Next.js dev server
-npm run db:push           # Prisma push schema
-npm run db:migrate        # Prisma migrate
-npm run db:seed           # Seed ADMIN user
-npm run db:studio         # Prisma Studio
+npm run dev               # Next.js dev server (http://localhost:3000)
+npm run type-check        # TypeScript проверка без сборки
+npm run build             # Production сборка
+
+# База данных (Prisma 7)
+npm run db:push           # Синхронизировать schema → БД (dev)
+npm run db:migrate        # Создать и применить миграцию
+npm run db:seed           # Seed ADMIN user (ADMIN_EMAIL / ADMIN_PASSWORD из .env)
+npm run db:studio         # Prisma Studio (визуальный редактор БД)
+
+# Docker
+npm run docker:dev        # Поднять PostgreSQL 16 + Redis 7
+npm run docker:dev:down   # Остановить контейнеры
 
 # Продакшн
-docker-compose up -d      # Запуск всех сервисов
-docker-compose logs -f    # Просмотр логов
+docker compose up -d      # Запуск всех сервисов
+docker compose logs -f    # Просмотр логов
 ```
 
 ---

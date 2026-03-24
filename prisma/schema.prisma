@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ─────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+// ─── Auth ──────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(VIEWER)
+  isActive     Boolean  @default(true)
+  invitedById  String?
+  createdAt    DateTime @default(now())
+
+  invitedBy    User?        @relation("UserInvites", fields: [invitedById], references: [id])
+  invitees     User[]       @relation("UserInvites")
+  invitations  Invitation[] @relation("InvitationCreator")
+
+  @@map("users")
+}
+
+model Invitation {
+  id          String    @id @default(uuid())
+  token       String    @unique @default(uuid())
+  role        Role      @default(VIEWER)
+  createdById String
+  usedById    String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  createdBy   User      @relation("InvitationCreator", fields: [createdById], references: [id])
+
+  @@map("invitations")
+}
+
+// ─── WB Accounts ───────────────────────────────────────────────
+
+model WbAccount {
+  id           String    @id @default(uuid())
+  name         String
+  apiKey       String                       // AES-256-GCM encrypted
+  taxRate      Decimal   @default(0) @db.Decimal(5, 2)
+  sellerName   String?
+  sellerId     String?
+  tradeMark    String?
+  isActive     Boolean   @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  products           Product[]
+  realizationReports RealizationReport[]
+  adCampaigns        AdCampaign[]
+  salesPlans         SalesPlan[]
+  costPrices         CostPrice[]
+  selfPurchases      SelfPurchase[]
+  externalAds        ExternalAd[]
+  articleOverrides   ArticleOverride[]
+
+  @@map("wb_accounts")
+}
+
+// ─── Products ──────────────────────────────────────────────────
+
+model Product {
+  id               String   @id @default(uuid())
+  wbAccountId      String
+  nmId             Int
+  vendorCode       String
+  vendorCodeLocal  String?
+  brand            String?
+  category         String?
+  subjectId        Int?
+  title            String?
+  photoUrl         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  wbAccount  WbAccount      @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  sizes      ProductSize[]
+  materials  ProductMaterial[]
+
+  @@unique([wbAccountId, nmId])
+  @@index([nmId])
+  @@index([vendorCode])
+  @@index([wbAccountId])
+  @@map("products")
+}
+
+model ProductSize {
+  id        String   @id @default(uuid())
+  productId String
+  techSize  String
+  wbSize    String?
+  barcode   String
+  price     Decimal? @db.Decimal(10, 2)
+  discount  Int?
+  spp       Decimal? @db.Decimal(5, 2)
+  createdAt DateTime @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([barcode])
+  @@map("product_sizes")
+}
+
+model ProductMaterial {
+  id                String  @id @default(uuid())
+  productId         String
+  composition       String
+  compositionLocal  String?
+
+  product           Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_materials")
+}
+
+// ─── References (Справочники) ───────────────────────────────────
+
+model CostPrice {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  vendorCode  String
+  costPrice   Decimal  @db.Decimal(10, 2)
+  updatedAt   DateTime @updatedAt
+
+  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, vendorCode])
+  @@index([wbAccountId])
+  @@index([vendorCode])
+  @@map("cost_prices")
+}
+
+model SelfPurchase {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  vendorCode  String
+  date        DateTime @db.Date
+  quantity    Int
+  amount      Decimal  @db.Decimal(10, 2)
+  cashback    Decimal? @db.Decimal(10, 2)
+  note        String?
+  createdAt   DateTime @default(now())
+
+  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@index([wbAccountId])
+  @@index([vendorCode])
+  @@index([date])
+  @@map("self_purchases")
+}
+
+model ExternalAd {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  vendorCode  String?
+  date        DateTime @db.Date
+  amount      Decimal  @db.Decimal(10, 2)
+  source      String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@index([wbAccountId])
+  @@index([date])
+  @@map("external_ads")
+}
+
+model ArticleOverride {
+  id               String  @id @default(uuid())
+  wbAccountId      String
+  vendorCode       String
+  localName        String?
+  localColor       String?
+  localSize        String?
+  localComposition String?
+
+  wbAccount        WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, vendorCode])
+  @@index([wbAccountId])
+  @@map("article_overrides")
+}
+
+// ─── Financial Reports ─────────────────────────────────────────
+
+model RealizationReport {
+  id                    String   @id @default(uuid())
+  wbAccountId           String
+  rrdId                 BigInt   @unique
+  realizationReportId   Int
+  dateFrom              DateTime @db.Date
+  dateTo                DateTime @db.Date
+  nmId                  Int
+  vendorCode            String
+  barcode               String?
+  docTypeName           String
+  quantity              Int
+  retailPrice           Decimal  @db.Decimal(10, 2)
+  retailPriceWithDisc   Decimal  @db.Decimal(10, 2)
+  ppvzForPay            Decimal  @db.Decimal(10, 2)
+  ppvzSppPrc            Decimal  @db.Decimal(5, 2)
+  deliveryRub           Decimal  @db.Decimal(10, 2)
+  penalty               Decimal  @db.Decimal(10, 2)
+  additionalPayment     Decimal  @db.Decimal(10, 2)
+  storageFee            Decimal  @db.Decimal(10, 2)
+  deduction             Decimal  @db.Decimal(10, 2)
+  acceptance            Decimal  @db.Decimal(10, 2)
+  acquiringFee          Decimal  @db.Decimal(10, 2)
+  commissionPercent     Decimal  @db.Decimal(5, 2)
+  ppvzSalesCommission   Decimal  @db.Decimal(10, 2)
+  salePercent           Decimal  @db.Decimal(5, 2)
+  bonusTypeName         String?
+  srid                  String?
+  subjectName           String?
+  brandName             String?
+  officeName            String?
+  supplierOperName      String?
+  orderDt               DateTime?
+  saleDt                DateTime?
+  rrDt                  DateTime? @db.Date
+  fetchedAt             DateTime  @default(now())
+
+  wbAccount             WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@index([wbAccountId])
+  @@index([nmId])
+  @@index([vendorCode])
+  @@index([dateFrom, dateTo])
+  @@index([wbAccountId, nmId, dateFrom])
+  @@map("realization_reports")
+}
+
+// ─── Advertising Campaigns ─────────────────────────────────────
+
+model AdCampaign {
+  id               String   @id @default(uuid())
+  wbAccountId      String
+  advertId         Int
+  name             String
+  status           Int
+  bidType          String?
+  paymentType      String?
+  placementSearch  Boolean  @default(false)
+  placementReco    Boolean  @default(false)
+  budget           Decimal? @db.Decimal(12, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  wbAccount        WbAccount          @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  stats            AdCampaignStat[]
+  clusters         AdCampaignCluster[]
+
+  @@unique([wbAccountId, advertId])
+  @@index([wbAccountId])
+  @@index([status])
+  @@map("ad_campaigns")
+}
+
+model AdCampaignStat {
+  id         String   @id @default(uuid())
+  campaignId String
+  date       DateTime @db.Date
+  source     String   // "search" | "recommendations" | "total"
+  views      Int      @default(0)
+  clicks     Int      @default(0)
+  ctr        Decimal  @default(0) @db.Decimal(6, 4)
+  cpc        Decimal  @default(0) @db.Decimal(10, 2)
+  spend      Decimal  @default(0) @db.Decimal(10, 2)
+  orders     Int      @default(0)
+  cartAdds   Int      @default(0)
+  bid        Decimal? @db.Decimal(10, 2)
+
+  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date, source])
+  @@index([campaignId])
+  @@index([date])
+  @@map("ad_campaign_stats")
+}
+
+model AdCampaignCluster {
+  id         String   @id @default(uuid())
+  campaignId String
+  cluster    String
+  ctr        Decimal  @default(0) @db.Decimal(6, 4)
+  position   Decimal  @default(0) @db.Decimal(6, 2)
+  views      Int      @default(0)
+  clicks     Int      @default(0)
+  cartAdds   Int      @default(0)
+  orders     Int      @default(0)
+  cpm        Decimal  @default(0) @db.Decimal(10, 2)
+  dateFrom   DateTime @db.Date
+  dateTo     DateTime @db.Date
+
+  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([dateFrom, dateTo])
+  @@map("ad_campaign_clusters")
+}
+
+// ─── Sales Plan ────────────────────────────────────────────────
+
+model SalesPlan {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  name        String
+  description String?
+  dateFrom    DateTime @db.Date
+  dateTo      DateTime @db.Date
+  drrPercent  Decimal  @db.Decimal(5, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wbAccount   WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  items       SalesPlanItem[]
+
+  @@index([wbAccountId])
+  @@map("sales_plans")
+}
+
+model SalesPlanItem {
+  id             String  @id @default(uuid())
+  planId         String
+  nmId           Int
+  vendorCode     String
+  plannedQty     Int
+  price          Decimal @db.Decimal(10, 2)
+  buyoutPercent  Decimal @db.Decimal(5, 2)
+
+  plan           SalesPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([nmId])
+  @@map("sales_plan_items")
+}
