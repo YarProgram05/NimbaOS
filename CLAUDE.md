@@ -3,7 +3,7 @@
 ## Текущее состояние проекта
 
 **Дата последнего обновления:** 2026-03-25
-**Следующая задача:** Фаза 4 — Справочники
+**Следующая задача:** Фаза 5 — Финансовые отчёты
 
 | Фаза | Статус | Описание |
 |------|--------|----------|
@@ -11,7 +11,7 @@
 | Фаза 1 | ✅ ВЫПОЛНЕНО | Аутентификация, роли, приглашения, dashboard layout |
 | Фаза 2 | ✅ ВЫПОЛНЕНО | Настройки, кабинеты WB, шифрование, WB API клиент, AccountSelector |
 | Фаза 3 | ✅ ВЫПОЛНЕНО | Карточки товаров: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
-| Фаза 4 | — | Справочники |
+| Фаза 4 | ✅ ВЫПОЛНЕНО | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
 | Фаза 5 | — | Финансовые отчёты |
 | Фаза 6 | — | План продаж |
 | Фаза 7 | — | Рекламные кампании |
@@ -64,6 +64,14 @@
 19. **Цена с WB Кошельком = 2% на `sppPrice`** — константа `WB_WALLET_DISCOUNT = 2` захардкожена в `price-cell.tsx`. Применяется к `sppPrice ?? sellerPrice`.
 
 20. **AccountSelector пушит `?account=id` в URL** — при смене кабинета `account-selector.tsx` пишет `?account=id` в URL. Server Component `/cards/page.tsx` читает этот параметр и подгружает данные нужного кабинета. Без этого Server Component не знал бы о выборе (AccountContext — только клиент).
+
+21. **Справочники используют Server Actions вместо API Routes** — спецификация упоминала API Routes (`GET/POST/PUT/DELETE /api/references/...`), но по правилам проекта все простые CRUD-мутации реализуются через Server Actions. Созданы 13 actions в `src/lib/actions/references.ts`.
+
+22. **VendorCombobox — Popover + Input без cmdk** — пакеты `cmdk` и `@radix-ui/react-alert-dialog` не установлены. Combobox реализован через уже существующий `Popover` + `Input` + отфильтрованный список. Delete confirmation — через `Dialog` (не AlertDialog). Всё на уже установленных зависимостях.
+
+23. **Вкладка /references сохраняется в URL (`?tab=`)** — спецификация не специфицировала поведение URL для вкладок, но для корректной навигации и bookmarking активная вкладка записывается в `?tab=` через `router.replace` (без засорения history).
+
+24. **`ProductSize.spp` расширен до `@db.Decimal(10, 2)`** — поле `spp` изначально было `@db.Decimal(5, 2)` (макс 999.99), но хранит фактическую цену продажи в рублях (может быть тысячи). Исправлено в Фазе 4. Schema обновлена, `db:push` применён.
 
 ---
 
@@ -161,9 +169,9 @@
 10. Server Actions: src/lib/actions/users.ts
 ```
 
-### Фаза 2: Настройки и кабинеты WB
+### ✅ Фаза 2: Настройки и кабинеты WB — ВЫПОЛНЕНО
 ```
-Задачи:
+Реализовано:
 1. Prisma schema: WbAccount
 2. Модуль шифрования (lib/encryption): AES-256-GCM encrypt/decrypt
 3. WB API клиент (lib/wb-api/client.ts):
@@ -179,9 +187,9 @@
 5. Компонент AccountSelector — dropdown выбора кабинета (глобальный в sidebar)
 ```
 
-### Фаза 3: Карточки товаров
+### ✅ Фаза 3: Карточки товаров — ВЫПОЛНЕНО
 ```
-Задачи:
+Реализовано:
 1. Prisma schema: Product, ProductSize, ProductMaterial
 2. WB API модуль (lib/wb-api/products.ts):
    - fetchCardsList(): POST /content/v2/get/cards/list (пагинация через cursor)
@@ -196,22 +204,20 @@
    - Фильтры: по бренду, категории
 ```
 
-### Фаза 4: Справочники
+### ✅ Фаза 4: Справочники — ВЫПОЛНЕНО
 ```
-Задачи:
-1. Prisma schema: CostPrice, SelfPurchase, ExternalAd, ArticleOverride
-2. Страница /references с вкладками (Tabs):
-   a) Себестоимость: DataTable + AddDialog + EditDialog + DeleteConfirm
-   b) Самовыкупы: DataTable + CRUD
-   c) Внешняя реклама: DataTable + CRUD
-   d) Переименования: DataTable + CRUD
-3. API Routes для каждой сущности:
-   - GET /api/references/cost-price
-   - POST /api/references/cost-price
-   - PUT /api/references/cost-price/[id]
-   - DELETE /api/references/cost-price/[id]
-   (аналогично для остальных)
-4. Импорт из CSV (опционально, но полезно)
+Реализовано:
+1. Prisma schema: CostPrice, SelfPurchase, ExternalAd, ArticleOverride (все модели были созданы в Фазе 0)
+2. Страница /references с 4 вкладками (shadcn Tabs):
+   a) Себестоимость: DataTable + Add/Edit Dialog + Delete + upsert по vendorCode
+   b) Самовыкупы: DataTable + full CRUD
+   c) Внешняя реклама: DataTable + full CRUD
+   d) Переименования: DataTable + Add/Edit Dialog + Delete + upsert по vendorCode
+3. Server Actions (НЕ API Routes) — src/lib/actions/references.ts: 13 actions
+4. VendorCombobox (Popover + Input) для выбора артикула из Products
+5. Активная вкладка сохраняется в URL (?tab=...) через router.replace
+6. Клиентская пагинация (PAGE_SIZE=20), фильтрация по кабинету WB
+7. Типы: src/types/references.ts
 ```
 
 ### Фаза 5: Финансовые отчёты
