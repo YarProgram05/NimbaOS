@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { formatRub } from '@/lib/utils/format'
-import { updateProductPriceAction } from '@/lib/actions/products'
+import { updateProductPriceAction, refreshProductPriceAction } from '@/lib/actions/products'
 import type { ProductRow } from '@/types/products'
 
 const WB_WALLET_DISCOUNT = 2  // WB wallet gives an additional 2% off
@@ -29,16 +29,22 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
   const [discountInput, setDiscountInput] = useState(
     row.discount !== null ? row.discount.toString() : '0',
   )
+
+  // Local state for synced prices — updated after refresh
+  const [syncedSellerPrice, setSyncedSellerPrice] = useState<number | null>(
+    row.price !== null ? parseFloat(row.price) : null,
+  )
+  const [syncedSppPrice, setSyncedSppPrice] = useState<number | null>(
+    row.sppPrice !== null ? parseFloat(row.sppPrice) : null,
+  )
+
   const [saving, startSave] = useTransition()
+  const [refreshing, startRefresh] = useTransition()
 
   // ── Derived prices ───────────────────────────────────────────────────────────
   const baseNum      = parseFloat(basePriceInput) || 0
   const discountNum  = Math.min(95, Math.max(0, parseFloat(discountInput) || 0))
   const sellerPrice  = baseNum * (1 - discountNum / 100)
-
-  // From DB (what was synced): used only for tooltip display
-  const syncedSellerPrice = row.price     !== null ? parseFloat(row.price)    : null
-  const syncedSppPrice    = row.sppPrice  !== null ? parseFloat(row.sppPrice) : null
 
   // SPP % (back-calculated if we have both seller price and SPP price)
   const sppPercent =
@@ -81,6 +87,23 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
     })
   }
 
+  // ── Refresh handler ──────────────────────────────────────────────────────────
+  function handleRefresh() {
+    startRefresh(async () => {
+      const result = await refreshProductPriceAction(wbAccountId, row.nmId)
+      if (result.success) {
+        const { basePrice, discount, sellerPrice: spp } = result.data
+        setBasePriceInput(Math.round(basePrice).toString())
+        setDiscountInput(discount.toString())
+        setSyncedSellerPrice(basePrice * (1 - discount / 100))
+        setSyncedSppPrice(spp)
+        toast.success('Цена обновлена из WB')
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
   // ── Display price (synced seller price, or calculated if not yet synced) ─────
   const displayPrice = syncedSellerPrice ?? sellerPrice
 
@@ -91,20 +114,24 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
         <Popover open={open} onOpenChange={setOpen}>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
-              <button className="text-right w-full hover:opacity-70 transition-opacity cursor-pointer">
-                <div className="text-sm font-medium">{formatRub(displayPrice)}</div>
-                {(row.discount ?? 0) > 0 && (
-                  <div className="text-xs text-muted-foreground">−{row.discount}%</div>
-                )}
+              <button className="inline-flex hover:opacity-80 transition-opacity cursor-pointer">
+                <div className="flex flex-col items-end gap-0.5 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded-lg">
+                  <div className="text-base font-semibold text-foreground">{formatRub(displayPrice)}</div>
+                  {(row.discount ?? 0) > 0 && (
+                    <div className="text-xs text-muted-foreground">−{row.discount}%</div>
+                  )}
+                  {sppPercent !== null && syncedSppPrice !== null && (
+                    <div className="text-xs text-emerald-600 font-medium">
+                      с СПП ({sppPercent}%) {formatRub(syncedSppPrice)}
+                    </div>
+                  )}
+                </div>
               </button>
             </PopoverTrigger>
           </TooltipTrigger>
 
           {/* ── Hover tooltip ──────────────────────────────────────────────── */}
           <TooltipContent side="left" className="space-y-0.5 text-xs">
-            {sppPercent !== null && syncedSppPrice !== null && (
-              <div>Цена с СПП ({sppPercent}%): {formatRub(syncedSppPrice)}</div>
-            )}
             {wbWalletPrice !== null && (
               <div>Цена с WB картой ({WB_WALLET_DISCOUNT}%): {formatRub(wbWalletPrice)}</div>
             )}
@@ -116,10 +143,18 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
           {/* ── Click popover: edit panel ───────────────────────────────────── */}
           <PopoverContent side="left" className="w-64 p-4 space-y-3">
             <div className="space-y-1">
-              <Label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                Базовая цена
-                <RefreshCw className="h-3 w-3" />
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-muted-foreground">Базовая цена</Label>
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  title="Обновить цену из WB"
+                  className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               <Input
                 type="number"
                 min={1}

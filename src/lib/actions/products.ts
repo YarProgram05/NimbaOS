@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
 import { syncProducts } from '@/lib/services/sync-products'
-import { uploadPriceTask } from '@/lib/wb-api/products'
+import { uploadPriceTask, fetchPricesByNmId } from '@/lib/wb-api/products'
 import type { ActionResult } from '@/types'
 import type {
   SyncResult,
@@ -222,6 +222,53 @@ export async function updateProductPriceAction(
     return { success: true, data: undefined }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Ошибка обновления цены'
+    return { success: false, error: msg }
+  }
+}
+
+// ── refreshProductPriceAction ───────────────────────────────────────────────────
+
+export async function refreshProductPriceAction(
+  wbAccountId: string,
+  nmId: number,
+): Promise<ActionResult<{ basePrice: number; discount: number; sellerPrice: number }>> {
+  try {
+    await requireSession()
+
+    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
+
+    const account = await prisma.wbAccount.findUniqueOrThrow({
+      where: { id: wbAccountId },
+      select: { apiKey: true },
+    })
+    const apiKey = decrypt(account.apiKey)
+    const client = new WbApiClient(apiKey)
+
+    const item = await fetchPricesByNmId(client, nmId)
+    if (!item) return { success: false, error: 'Товар не найден в WB' }
+
+    const size = item.sizes[0]
+    if (!size) return { success: false, error: 'Нет данных о цене' }
+
+    const basePrice = size.price        // in roubles
+    const discount = item.discount
+    const sellerPrice = size.discountedPrice
+
+    // Update DB
+    const product = await prisma.product.findUnique({
+      where: { wbAccountId_nmId: { wbAccountId, nmId } },
+      select: { id: true },
+    })
+    if (product) {
+      await prisma.productSize.updateMany({
+        where: { productId: product.id },
+        data: { price: basePrice, discount, spp: sellerPrice },
+      })
+    }
+
+    return { success: true, data: { basePrice, discount, sellerPrice } }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Ошибка получения цены'
     return { success: false, error: msg }
   }
 }

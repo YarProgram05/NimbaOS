@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { AccountSelector } from './account-selector'
+import { useAccount } from '@/components/providers/account-context'
 import type { UserRole } from '@/types'
 
 interface NavItem {
@@ -51,15 +52,18 @@ function NavLink({
   item,
   isActive,
   isCollapsed,
+  accountId,
 }: {
   item: NavItem
   isActive: boolean
   isCollapsed: boolean
+  accountId?: string | null
 }) {
   const Icon = item.icon
+  const href = accountId ? `${item.href}?account=${accountId}` : item.href
   return (
     <Link
-      href={item.href}
+      href={href}
       title={isCollapsed ? item.label : undefined}
       className={cn(
         'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -82,6 +86,7 @@ function NavContent({
   isCollapsed?: boolean
 }) {
   const pathname = usePathname()
+  const { selectedId } = useAccount()
   const allItems =
     userRole === 'ADMIN' ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS] : NAV_ITEMS
 
@@ -93,6 +98,7 @@ function NavContent({
           item={item}
           isActive={pathname.startsWith(item.href)}
           isCollapsed={isCollapsed}
+          accountId={selectedId}
         />
       ))}
     </nav>

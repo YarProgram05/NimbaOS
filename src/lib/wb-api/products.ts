@@ -78,6 +78,22 @@ export async function fetchPrices(
 }
 
 /**
+ * Fetches price data for a single nmId.
+ * GET /api/v2/list/goods/filter?filterNmID=... — prices domain.
+ */
+export async function fetchPricesByNmId(
+  client: WbApiClient,
+  nmId: number,
+): Promise<WbGoodsItem | null> {
+  const resp = await client.get<WbPricesResponse>(
+    'prices',
+    '/api/v2/list/goods/filter',
+    { limit: '1', filterNmID: String(nmId) },
+  )
+  return resp?.data?.listGoods?.[0] ?? null
+}
+
+/**
  * Creates a price-update task on WB.
  * POST /api/v2/upload/task — prices domain.
  * WB processes the update asynchronously; typical lag is a few seconds.

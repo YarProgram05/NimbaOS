@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { DataTable } from '@/components/shared/data-table'
+import { VendorCombobox } from './vendor-combobox'
 import { createSelfPurchase, updateSelfPurchase, deleteSelfPurchase } from '@/lib/actions/references'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { SelfPurchaseRow, VendorCodeOption } from '@/types/references'
@@ -50,7 +51,7 @@ const PAGE_SIZE = 20
 
 export function SelfPurchaseTab({
   rows,
-  vendorCodes: _vendorCodes,
+  vendorCodes,
   wbAccountId,
   onMutate,
 }: SelfPurchaseTabProps) {
@@ -210,6 +211,7 @@ export function SelfPurchaseTab({
           }
         }}
         wbAccountId={wbAccountId}
+        vendorCodes={vendorCodes}
         editTarget={editTarget}
         onSuccess={onMutate}
       />
@@ -239,6 +241,7 @@ interface SelfPurchaseDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   wbAccountId: string
+  vendorCodes: VendorCodeOption[]
   editTarget: SelfPurchaseRow | null
   onSuccess: () => void
 }
@@ -247,6 +250,7 @@ function SelfPurchaseDialog({
   open,
   onOpenChange,
   wbAccountId,
+  vendorCodes,
   editTarget,
   onSuccess,
 }: SelfPurchaseDialogProps) {
@@ -256,6 +260,7 @@ function SelfPurchaseDialog({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -304,29 +309,40 @@ function SelfPurchaseDialog({
           <DialogTitle>{isEdit ? 'Редактировать самовыкуп' : 'Добавить самовыкуп'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sp-vendor">Артикул поставщика</Label>
-              <Input
-                id="sp-vendor"
-                placeholder="ABC-123"
-                {...register('vendorCode')}
+          <div className="flex flex-col gap-1.5">
+            <Label>Артикул поставщика</Label>
+            {isEdit ? (
+              <p className="text-sm font-medium border rounded-md px-3 py-2 bg-muted">
+                {editTarget.vendorCode}
+              </p>
+            ) : (
+              <Controller
+                name="vendorCode"
+                control={control}
+                render={({ field }) => (
+                  <VendorCombobox
+                    value={field.value}
+                    onChange={field.onChange}
+                    vendorCodes={vendorCodes}
+                  />
+                )}
               />
-              {errors.vendorCode && (
-                <p className="text-sm text-destructive">{errors.vendorCode.message}</p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sp-date">Дата</Label>
-              <Input
-                id="sp-date"
-                type="date"
-                {...register('date')}
-              />
-              {errors.date && (
-                <p className="text-sm text-destructive">{errors.date.message}</p>
-              )}
-            </div>
+            )}
+            {errors.vendorCode && (
+              <p className="text-sm text-destructive">{errors.vendorCode.message}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sp-date">Дата</Label>
+            <Input
+              id="sp-date"
+              type="date"
+              {...register('date')}
+            />
+            {errors.date && (
+              <p className="text-sm text-destructive">{errors.date.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

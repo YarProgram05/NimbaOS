@@ -66,7 +66,10 @@ export function VendorCombobox({
             autoFocus
           />
         </div>
-        <div className="max-h-60 overflow-y-auto">
+        <div
+          className="max-h-60 overflow-y-auto overscroll-contain"
+          onWheel={(e) => e.stopPropagation()}
+        >
           {filtered.length === 0 ? (
             <p className="py-3 text-sm text-muted-foreground text-center">Не найдено</p>
           ) : (

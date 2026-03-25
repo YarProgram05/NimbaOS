@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { DataTable } from '@/components/shared/data-table'
+import { VendorCombobox } from './vendor-combobox'
 import { createExternalAd, updateExternalAd, deleteExternalAd } from '@/lib/actions/references'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { ExternalAdRow, VendorCodeOption } from '@/types/references'
@@ -49,7 +50,7 @@ const PAGE_SIZE = 20
 
 export function ExternalAdTab({
   rows,
-  vendorCodes: _vendorCodes,
+  vendorCodes,
   wbAccountId,
   onMutate,
 }: ExternalAdTabProps) {
@@ -205,6 +206,7 @@ export function ExternalAdTab({
           }
         }}
         wbAccountId={wbAccountId}
+        vendorCodes={vendorCodes}
         editTarget={editTarget}
         onSuccess={onMutate}
       />
@@ -234,6 +236,7 @@ interface ExternalAdDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   wbAccountId: string
+  vendorCodes: VendorCodeOption[]
   editTarget: ExternalAdRow | null
   onSuccess: () => void
 }
@@ -242,6 +245,7 @@ function ExternalAdDialog({
   open,
   onOpenChange,
   wbAccountId,
+  vendorCodes,
   editTarget,
   onSuccess,
 }: ExternalAdDialogProps) {
@@ -251,6 +255,7 @@ function ExternalAdDialog({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -326,23 +331,29 @@ function ExternalAdDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ea-vendor">Артикул (необязательно)</Label>
-              <Input
-                id="ea-vendor"
-                placeholder="ABC-123"
-                {...register('vendorCode')}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ea-source">Источник</Label>
-              <Input
-                id="ea-source"
-                placeholder="Telegram, Instagram..."
-                {...register('source')}
-              />
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Артикул поставщика (необязательно)</Label>
+            <Controller
+              name="vendorCode"
+              control={control}
+              render={({ field }) => (
+                <VendorCombobox
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  vendorCodes={vendorCodes}
+                  placeholder="Выберите артикул (необязательно)..."
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ea-source">Источник</Label>
+            <Input
+              id="ea-source"
+              placeholder="Telegram, Instagram..."
+              {...register('source')}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">

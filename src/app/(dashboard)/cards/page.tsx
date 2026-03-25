@@ -57,7 +57,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
 
   // ── Parse + validate search params ──────────────────────────────────────────
   const page     = Math.max(1, parseInt(params.page ?? '1', 10) || 1)
-  const pageSize = Math.min(100, Math.max(10, parseInt(params.pageSize ?? '50', 10) || 50))
+  const pageSize = Math.min(100, Math.max(10, parseInt(params.pageSize ?? '100', 10) || 100))
   const search   = params.search?.trim() ?? ''
   const brand    = params.brand?.trim() ?? ''
   const category = params.category?.trim() ?? ''

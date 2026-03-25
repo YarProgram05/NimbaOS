@@ -29,9 +29,10 @@ import type { WbAccountSummary } from '@/lib/actions/accounts'
 
 interface TaxRateCellProps {
   account: WbAccountSummary
+  isReadOnly?: boolean
 }
 
-function TaxRateCell({ account }: TaxRateCellProps) {
+function TaxRateCell({ account, isReadOnly }: TaxRateCellProps) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(account.taxRate)
   const [saving, setSaving] = useState(false)
@@ -69,6 +70,10 @@ function TaxRateCell({ account }: TaxRateCellProps) {
   function cancel() {
     setValue(account.taxRate)
     setEditing(false)
+  }
+
+  if (isReadOnly) {
+    return <span className="text-sm">{value}%</span>
   }
 
   if (editing) {
@@ -110,9 +115,10 @@ function TaxRateCell({ account }: TaxRateCellProps) {
 interface AccountRowProps {
   account: WbAccountSummary
   onDeactivated: () => void
+  isReadOnly?: boolean
 }
 
-function AccountRow({ account, onDeactivated }: AccountRowProps) {
+function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
 
@@ -152,18 +158,20 @@ function AccountRow({ account, onDeactivated }: AccountRowProps) {
           <Badge variant="secondary">Активен</Badge>
         </TableCell>
         <TableCell>
-          <TaxRateCell account={account} />
+          <TaxRateCell account={account} isReadOnly={isReadOnly} />
         </TableCell>
         <TableCell className="text-right">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={() => setConfirmOpen(true)}
-            title="Деактивировать"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {!isReadOnly && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmOpen(true)}
+              title="Деактивировать"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </TableCell>
       </TableRow>
 
@@ -192,9 +200,10 @@ function AccountRow({ account, onDeactivated }: AccountRowProps) {
 
 interface AccountsSectionProps {
   accounts: WbAccountSummary[]
+  isReadOnly?: boolean
 }
 
-export function AccountsSection({ accounts }: AccountsSectionProps) {
+export function AccountsSection({ accounts, isReadOnly }: AccountsSectionProps) {
   const router = useRouter()
 
   function refresh() {
@@ -211,7 +220,7 @@ export function AccountsSection({ accounts }: AccountsSectionProps) {
               Добавьте API-ключи ваших кабинетов Wildberries
             </CardDescription>
           </div>
-          <AddAccountDialog onSuccess={refresh} />
+          {!isReadOnly && <AddAccountDialog onSuccess={refresh} />}
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -235,7 +244,7 @@ export function AccountsSection({ accounts }: AccountsSectionProps) {
             </TableHeader>
             <TableBody>
               {accounts.map((account) => (
-                <AccountRow key={account.id} account={account} onDeactivated={refresh} />
+                <AccountRow key={account.id} account={account} onDeactivated={refresh} isReadOnly={isReadOnly} />
               ))}
             </TableBody>
           </Table>

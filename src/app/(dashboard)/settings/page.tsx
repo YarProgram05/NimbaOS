@@ -9,6 +9,7 @@ import type { WbAccountSummary } from '@/lib/actions/accounts'
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
+  const userRole = session?.user?.role ?? 'VIEWER'
 
   const rawAccounts = await prisma.wbAccount.findMany({
     where: { isActive: true },
@@ -60,7 +61,7 @@ export default async function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-4">
-          <AccountsSection accounts={accounts} />
+          <AccountsSection accounts={accounts} isReadOnly={userRole === 'VIEWER'} />
         </TabsContent>
       </Tabs>
     </div>
