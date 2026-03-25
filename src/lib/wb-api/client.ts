@@ -11,6 +11,20 @@ export class WbApiError extends Error {
   }
 }
 
+export class WbRateLimitError extends WbApiError {
+  constructor(
+    domain: WbApiDomain,
+    public readonly retryAfterSec?: number,
+  ) {
+    super(
+      `WB API rate limit exceeded on domain "${domain}"${retryAfterSec ? ` — retry after ${retryAfterSec}s` : ''}`,
+      429,
+      domain,
+    )
+    this.name = 'WbRateLimitError'
+  }
+}
+
 const lastRequestTime: Partial<Record<WbApiDomain, number>> = {}
 
 async function throttle(domain: WbApiDomain): Promise<void> {
@@ -59,9 +73,12 @@ export class WbApiClient {
 
     if (response.status === 429) {
       const retryAfter = response.headers.get('X-Ratelimit-Retry')
-      const waitMs = retryAfter ? Number(retryAfter) * 1000 : 5000
-      await sleep(waitMs)
-      return this.request<T>(domain, path, options, retries)
+      const retryAfterSec = retryAfter ? Number(retryAfter) : undefined
+      if (retries <= 0) {
+        throw new WbRateLimitError(domain, retryAfterSec)
+      }
+      await sleep(retryAfterSec ? retryAfterSec * 1000 : 5000)
+      return this.request<T>(domain, path, options, retries - 1)
     }
 
     if (!response.ok) {

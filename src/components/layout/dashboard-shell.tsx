@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
+import { AccountProvider } from '@/components/providers/account-context'
 import type { SessionUser, UserRole } from '@/types'
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -29,18 +30,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar
-        isCollapsed={isCollapsed}
-        onCollapse={() => setIsCollapsed((v) => !v)}
-        userRole={user.role}
-        isMobileOpen={isMobileOpen}
-        onMobileClose={() => setIsMobileOpen(false)}
-      />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header user={user} onMobileMenuOpen={() => setIsMobileOpen(true)} />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+    <AccountProvider>
+      <div className="flex h-screen overflow-hidden bg-background">
+        <Sidebar
+          isCollapsed={isCollapsed}
+          onCollapse={() => setIsCollapsed((v) => !v)}
+          userRole={user.role}
+          isMobileOpen={isMobileOpen}
+          onMobileClose={() => setIsMobileOpen(false)}
+        />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Header user={user} onMobileMenuOpen={() => setIsMobileOpen(true)} />
+          <main className="flex-1 overflow-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </AccountProvider>
   )
 }

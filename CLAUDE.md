@@ -3,13 +3,13 @@
 ## Текущее состояние проекта
 
 **Дата последнего обновления:** 2026-03-25
-**Следующая задача:** Фаза 2 — Настройки и кабинеты WB
+**Следующая задача:** Фаза 3 — Карточки товаров
 
 | Фаза | Статус | Описание |
 |------|--------|----------|
 | Фаза 0 | ✅ ВЫПОЛНЕНО | Инициализация: Next.js, Tailwind, shadcn/ui, Docker, Prisma schema |
 | Фаза 1 | ✅ ВЫПОЛНЕНО | Аутентификация, роли, приглашения, dashboard layout |
-| Фаза 2 | — | Настройки и кабинеты WB |
+| Фаза 2 | ✅ ВЫПОЛНЕНО | Настройки, кабинеты WB, шифрование, WB API клиент, AccountSelector |
 | Фаза 3 | — | Карточки товаров |
 | Фаза 4 | — | Справочники |
 | Фаза 5 | — | Финансовые отчёты |
@@ -39,6 +39,19 @@
 8. **Server Actions для всех мутаций пользователей** — `createInvitation`, `updateUserRole`, `toggleUserActive`, `deleteUser`, `registerByInvitation` реализованы как Server Actions в `src/lib/actions/users.ts`. API Routes не создавались.
 
 9. **`checkRole(session, requiredRole)`** — утилита в `src/lib/auth/check-role.ts`. Принимает `Session | null`, возвращает `boolean`. Используется и в Server Components (`getServerSession` → `checkRole`), и в Server Actions. Иерархия ролей: ADMIN(3) > MANAGER(2) > VIEWER(1).
+
+10. **WB API клиент — три уровня абстракции:**
+    - `src/lib/wb-api/client.ts` — `WbApiClient(apiKey)`: низкоуровневый HTTP клиент с rate limiting, retry, `WbApiError`, `WbRateLimitError` (выбрасывается после 3 retry на 429).
+    - `src/lib/wb-api/common.ts` — `ping(client)`, `getSellerInfo(client)`: методы общего API WB.
+    - `src/lib/wb-api/accounts.ts` — `validateAndFetchSellerInfo(apiKey)`: высокоуровневая валидация ключа.
+
+11. **Server Actions для WbAccount** — `src/lib/actions/accounts.ts`: `getWbAccounts`, `addWbAccount`, `updateTaxRate`, `toggleAccountActive`, `updateUserProfile`. Паттерн тот же, что в `users.ts`.
+
+12. **AccountProvider + useAccount()** — `src/components/providers/account-context.tsx`. Провайдер живёт внутри `DashboardShell` (после проверки сессии). Хранит список кабинетов и выбранный `selectedId`. Выбор персистируется в `localStorage('wb_selected_account')`. При деактивации кабинета — автоматически переключается на первый доступный.
+
+13. **Страница /settings** — Tabs: вкладка «Профиль» (имя + email read-only) и «Кабинеты WB» (таблица + диалог добавления с полями: название, API-ключ с show/hide, налоговая ставка %). Мутации через router.refresh() для обновления Server Component.
+
+14. **Название сервиса NimbaOS** — изменено в layout.tsx (title), login/page.tsx, sidebar.tsx, package.json.
 
 ---
 

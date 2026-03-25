@@ -124,7 +124,7 @@ export function Sidebar({
         >
           {!isCollapsed && (
             <span className="text-sm font-semibold text-sidebar-foreground truncate">
-              WB Digitizer
+              NimbaOS
             </span>
           )}
         </div>
@@ -170,7 +170,7 @@ export function Sidebar({
           <SheetTitle className="sr-only">Навигация</SheetTitle>
           <div className="flex h-14 items-center border-b border-sidebar-border px-4">
             <span className="text-sm font-semibold text-sidebar-foreground">
-              WB Digitizer
+              NimbaOS
             </span>
           </div>
           <div className="px-3 py-3">

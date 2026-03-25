@@ -51,7 +51,7 @@ export default function LoginPage() {
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Вход</CardTitle>
-        <CardDescription>WB Cabinet Digitizer</CardDescription>
+        <CardDescription>NimbaOS</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

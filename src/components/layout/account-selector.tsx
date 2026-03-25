@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   Select,
   SelectContent,
@@ -7,15 +8,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useAccount } from '@/components/providers/account-context'
 
 export function AccountSelector() {
+  const { accounts, selectedId, selectAccount } = useAccount()
+
+  if (accounts === null) {
+    return (
+      <Select disabled>
+        <SelectTrigger className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground">
+          <SelectValue placeholder="Загрузка..." />
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    )
+  }
+
+  if (accounts.length === 0) {
+    return (
+      <Link
+        href="/settings"
+        className="flex items-center justify-center rounded-md px-3 py-2 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors border border-dashed border-sidebar-border"
+      >
+        + Добавить кабинет
+      </Link>
+    )
+  }
+
   return (
-    <Select disabled>
+    <Select value={selectedId ?? ''} onValueChange={selectAccount}>
       <SelectTrigger className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground">
-        <SelectValue placeholder="Нет кабинетов" />
+        <SelectValue placeholder="Выберите кабинет" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="placeholder">Кабинеты в фазе 2</SelectItem>
+        {accounts.map((account) => (
+          <SelectItem key={account.id} value={account.id}>
+            <span className="font-medium">{account.name}</span>
+            {account.sellerName && (
+              <span className="ml-1 text-muted-foreground text-xs">· {account.sellerName}</span>
+            )}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   )

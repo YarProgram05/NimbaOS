@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' })
 
 export const metadata: Metadata = {
-  title: 'WB Cabinet Digitizer',
+  title: 'NimbaOS',
   description: 'Платформа для оцифровки кабинетов продавца на Wildberries',
 }
 
