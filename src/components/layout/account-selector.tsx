@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter, usePathname } from 'next/navigation'
 import {
   Select,
   SelectContent,
@@ -12,6 +13,17 @@ import { useAccount } from '@/components/providers/account-context'
 
 export function AccountSelector() {
   const { accounts, selectedId, selectAccount } = useAccount()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  function handleSelect(id: string) {
+    selectAccount(id)
+    // Propagate the account change to Server Component pages via URL param
+    const params = new URLSearchParams(window.location.search)
+    params.set('account', id)
+    params.delete('page')
+    router.push(`${pathname}?${params.toString()}`)
+  }
 
   if (accounts === null) {
     return (
@@ -36,7 +48,7 @@ export function AccountSelector() {
   }
 
   return (
-    <Select value={selectedId ?? ''} onValueChange={selectAccount}>
+    <Select value={selectedId ?? ''} onValueChange={handleSelect}>
       <SelectTrigger className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground">
         <SelectValue placeholder="Выберите кабинет" />
       </SelectTrigger>
