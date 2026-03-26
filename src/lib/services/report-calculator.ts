@@ -16,7 +16,7 @@ export async function calculateReport(
   const dto = new Date(dateTo)
 
   // 1. Parallel fetch of all required data
-  const [rows, costPrices, selfPurchases, externalAds, overrides, account] =
+  const [rows, costPrices, selfPurchases, externalAds, overrides, account, products] =
     await Promise.all([
       prisma.realizationReport.findMany({
         where: {
@@ -36,6 +36,10 @@ export async function calculateReport(
       prisma.wbAccount.findUniqueOrThrow({
         where: { id: wbAccountId },
         select: { taxRate: true },
+      }),
+      prisma.product.findMany({
+        where: { wbAccountId },
+        select: { nmId: true, vendorCode: true },
       }),
     ])
 
@@ -72,6 +76,12 @@ export async function calculateReport(
     overrideMap.set(ov.vendorCode, { localName: ov.localName })
   }
 
+  // nmId → vendorCode fallback (WB API reportDetailByPeriod often omits vendor_code)
+  const nmVendorMap = new Map<number, string>()
+  for (const p of products) {
+    if (p.vendorCode) nmVendorMap.set(p.nmId, p.vendorCode)
+  }
+
   const taxRate = d(account.taxRate)
 
   // 3. Group rows by nmId
@@ -87,7 +97,7 @@ export async function calculateReport(
   let totalOP = 0
 
   for (const [nmId, group] of Array.from(grouped.entries())) {
-    const row = calculateGroup(nmId, group, costMap, spMap, extAdMap, overrideMap, taxRate)
+    const row = calculateGroup(nmId, group, costMap, spMap, extAdMap, overrideMap, taxRate, nmVendorMap)
     totalOP += Number(row.operatingProfit)
     reportRows.push(row)
   }
@@ -101,17 +111,60 @@ export async function calculateReport(
   reportRows.sort((a, b) => Number(b.sale) - Number(a.sale))
 
   // 7. Summary row (all rows aggregated)
-  const summary = calculateGroup(0, rows, costMap, spMap, extAdMap, overrideMap, taxRate)
+  const summary = calculateGroup(0, rows, costMap, spMap, extAdMap, overrideMap, taxRate, nmVendorMap)
   summary.subjectName = 'Итого'
   summary.vendorCode = ''
   summary.brandName = ''
-  // Add unassigned external ads to summary
-  summary.externalAd = fmt(Number(summary.externalAd) + extAdUnassigned)
-  // Recalculate OP with unassigned external ads
-  const summaryOp = Number(summary.operatingProfit) - extAdUnassigned
-  summary.operatingProfit = fmt(summaryOp)
-  summary.operatingProfitUnit = safeDivide(summaryOp, summary.boughtWithReturns)
+
+  // ── Summary: aggregate reference-based fields from per-item rows ──────────────
+  // calculateGroup(nmId=0, allRows) cannot resolve per-item vendorCodes when all
+  // realization_report rows have empty vendor_code (WB API omission). Aggregate from
+  // individual rows that already resolved their vendorCodes via nmVendorMap.
+  const sumCostPrice     = reportRows.reduce((s, r) => s + Number(r.costPrice), 0)
+  const sumExtAd         = reportRows.reduce((s, r) => s + Number(r.externalAd), 0)
+  const sumSpCost        = reportRows.reduce((s, r) => s + Number(r.selfPurchaseCost), 0)
+  const sumCashback      = reportRows.reduce((s, r) => s + Number(r.cashbackDistributions), 0)
+  const sumSpAmount      = reportRows.reduce((s, r) => s + Number(r.selfPurchaseAmount), 0)
+
+  summary.costPrice            = fmt(sumCostPrice)
+  summary.selfPurchaseCost     = fmt(sumSpCost)
+  summary.cashbackDistributions = fmt(sumCashback)
+  summary.selfPurchaseAmount   = fmt(sumSpAmount)
+  summary.selfPurchases        = fmt(sumSpAmount + sumCashback)
+
+  // External ad: per-item assigned + global unassigned
+  const totalExtAd = sumExtAd + extAdUnassigned
+  summary.externalAd = fmt(totalExtAd)
+
+  // Recalculate taxes (depends on toTransfer, which is already correct in summary)
+  const summaryToTransfer = Number(summary.toTransfer)
+  const summaryTaxes = summaryToTransfer * (taxRate / 100)
+  summary.taxes = fmt(summaryTaxes)
+
+  // Recalculate operating profit with corrected reference-based costs
+  const summaryOp =
+    summaryToTransfer
+    - 0 // adAll — Phase 7
+    - totalExtAd
+    - Number(summary.logistics)
+    - sumCostPrice
+    - Number(summary.storageFee)
+    - Number(summary.acceptance)
+    - Number(summary.additionalPayment)
+    - Number(summary.penalty)
+    - summaryTaxes
+    - Number(summary.deductions)
+    - sumSpAmount
+    - sumCashback
+
+  summary.operatingProfit      = fmt(summaryOp)
+  summary.operatingProfitUnit  = safeDivide(summaryOp, summary.boughtWithReturns)
   summary.operatingProfitShare = '100.00'
+
+  // Recalculate marginality and rentability for summary
+  const summarySale = Number(summary.sale)
+  summary.marginality = safeDivide((summarySale - sumCostPrice) * 100, summarySale)
+  summary.rentability = safeDivide(summaryOp * 100, sumCostPrice)
 
   // Find last fetchedAt as lastSyncAt
   let lastSyncAt: string | null = null
@@ -144,6 +197,7 @@ function calculateGroup(
   extAdMap: Map<string, number>,
   overrideMap: Map<string, { localName: string | null }>,
   taxRate: number,
+  nmVendorMap: Map<number, string>,
 ): ReportRow {
   // Collect unique vendorCode(s) for this nmId group
   const vendorCodes = new Set<string>()
@@ -151,12 +205,14 @@ function calculateGroup(
   let brandName = ''
 
   // Accumulators
-  let salesAmount = 0           // retail_price_withdisc_rub for "Продажа"
-  let returnsAmount = 0         // retail_price_withdisc_rub for "Возврат"
+  let salesAmtWithSpp = 0       // Σ retailPriceWithDisc × (1 − sppPrc/100) for "Продажа" — actual buyer price
+  let salesAmtNoSpp = 0         // Σ retailPriceWithDisc for "Продажа" — with seller discount, no WB SPP
+  let returnsAmtWithSpp = 0     // same for "Возврат"
+  let returnsAmtNoSpp = 0       // same for "Возврат"
   let salesForPay = 0           // ppvz_for_pay for "Продажа"
   let returnsForPay = 0         // ppvz_for_pay for "Возврат"
-  let salesCount = 0            // count of "Продажа"
-  let returnsCount = 0          // count of "Возврат"
+  let salesCount = 0            // sum of quantity for "Продажа"
+  let returnsCount = 0          // sum of quantity for "Возврат"
   let totalDelivery = 0
   let totalPenalty = 0
   let totalAdditional = 0
@@ -165,11 +221,8 @@ function calculateGroup(
   let totalAcceptance = 0
   let totalAcquiring = 0
   let totalCommission = 0
-  let deliveredCount = 0        // count of supplierOperName = "Логистика"
 
   // Detailed breakdowns
-  let salesNoSpp = 0            // retail_amount by "Продажа" (without SPP — approximated as retail_price * quantity)
-  let returnsNoSpp = 0          // retail_amount by "Возврат"
   let commissionOnSale = 0
   let commissionOnReturn = 0
   let acquiringOnSale = 0
@@ -183,7 +236,6 @@ function calculateGroup(
     const isSale = row.docTypeName === 'Продажа'
     const isReturn = row.docTypeName === 'Возврат'
     const retailWithDisc = d(row.retailPriceWithDisc)
-    const retailPrice = d(row.retailPrice)
     const forPay = d(row.ppvzForPay)
     const delivery = d(row.deliveryRub)
     const penalty = d(row.penalty)
@@ -195,17 +247,19 @@ function calculateGroup(
     const commission = d(row.ppvzSalesCommission)
 
     if (isSale) {
-      salesAmount += retailWithDisc
+      const sppFactor = 1 - d(row.ppvzSppPrc) / 100
+      salesAmtWithSpp += retailWithDisc * sppFactor
+      salesAmtNoSpp += retailWithDisc
       salesForPay += forPay
       salesCount += row.quantity
-      salesNoSpp += retailPrice * row.quantity
       commissionOnSale += commission
       acquiringOnSale += acquiring
     } else if (isReturn) {
-      returnsAmount += retailWithDisc
+      const sppFactor = 1 - d(row.ppvzSppPrc) / 100
+      returnsAmtWithSpp += retailWithDisc * sppFactor
+      returnsAmtNoSpp += retailWithDisc
       returnsForPay += forPay
       returnsCount += row.quantity
-      returnsNoSpp += retailPrice * row.quantity
       commissionOnReturn += commission
       acquiringOnReturn += acquiring
     }
@@ -218,23 +272,34 @@ function calculateGroup(
     totalAcceptance += acceptance
     totalAcquiring += acquiring
     totalCommission += commission
+  }
 
-    if (row.supplierOperName === 'Логистика') {
-      deliveredCount++
-    }
+  // Delivered = выкупы + возвраты (+ отмены = 0 до Фазы 8)
+  const deliveredCount = salesCount + returnsCount
+
+  // ── Resolve effective vendor codes ────────────────────────────────────────────
+  // WB API reportDetailByPeriod sometimes returns empty vendor_code.
+  // Fall back to the Products table (synced via Phase 3) keyed by nmId.
+  const resolvedVendorCodes = new Set<string>()
+  for (const vc of Array.from(vendorCodes)) {
+    if (vc) resolvedVendorCodes.add(vc)
+  }
+  if (resolvedVendorCodes.size === 0 && nmId > 0) {
+    const fallback = nmVendorMap.get(nmId)
+    if (fallback) resolvedVendorCodes.add(fallback)
   }
 
   // Derived metrics
-  const sale = salesAmount - returnsAmount                           // Col 4
+  const sale = salesAmtWithSpp - returnsAmtWithSpp                  // Col 4 — с учётом WB СПП
   const toTransfer = salesForPay - returnsForPay                    // Col 5
   const boughtWithReturns = salesCount - returnsCount               // Col 11
   const boughtWithoutReturns = salesCount                           // Col 38
 
-  // Avg price (Col 10)
-  const avgPrice = safeDivide(salesAmount, boughtWithoutReturns)
+  // Avg price (Col 10) — с СПП (actual buyer price)
+  const avgPrice = safeDivide(salesAmtWithSpp, salesCount)
 
-  // Buyout % (Col 12)
-  const buyoutPercent = safeDivide(boughtWithReturns * 100, boughtWithoutReturns)
+  // Buyout % (Col 12) — выкуплено / (выкупы + возвраты) × 100
+  const buyoutPercent = safeDivide(boughtWithReturns * 100, deliveredCount)
 
   // Cost price from reference (Col 27)
   let costPriceTotal = 0
@@ -243,7 +308,7 @@ function calculateGroup(
   let spTotalCashback = 0
   let extAdTotal = 0
 
-  const vcArray = Array.from(vendorCodes)
+  const vcArray = resolvedVendorCodes.size > 0 ? Array.from(resolvedVendorCodes) : Array.from(vendorCodes)
   for (const vc of vcArray) {
     const unitCost = costMap.get(vc) ?? 0
     costPriceTotal += unitCost * boughtWithReturns
@@ -322,7 +387,7 @@ function calculateGroup(
   const storageFromSalesPercent = safeDivide(totalStorage * 100, sale)
 
   // Determine display vendorCode (with override)
-  const primaryVendorCode = vendorCodes.values().next().value ?? ''
+  const primaryVendorCode = (resolvedVendorCodes.size > 0 ? resolvedVendorCodes : vendorCodes).values().next().value ?? ''
   const override = overrideMap.get(primaryVendorCode)
   const displayVendorCode = override?.localName ?? primaryVendorCode
 
@@ -375,11 +440,11 @@ function calculateGroup(
 
     cancellations: 0, // Phase 8
 
-    salesReturnsNoSpp: fmt(salesNoSpp - returnsNoSpp),
-    salesWithSpp: fmt(salesAmount),
-    returnsWithSpp: fmt(returnsAmount),
-    salesNoSpp: fmt(salesNoSpp),
-    returnsNoSpp: fmt(returnsNoSpp),
+    salesReturnsNoSpp: fmt(salesAmtNoSpp - returnsAmtNoSpp),
+    salesWithSpp: fmt(salesAmtWithSpp),
+    returnsWithSpp: fmt(returnsAmtWithSpp),
+    salesNoSpp: fmt(salesAmtNoSpp),
+    returnsNoSpp: fmt(returnsAmtNoSpp),
     commissionOnSale: fmt(commissionOnSale),
     commissionOnReturn: fmt(commissionOnReturn),
     deductions: fmt(totalDeduction),

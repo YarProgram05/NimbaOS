@@ -6,7 +6,7 @@
 ## Проект
 
 **NimbaOS** — закрытая веб-платформа оцифровки кабинетов продавца на Wildberries.
-Последнее обновление: **2026-03-26** | Следующая задача: **Фаза 5 — сверка данных с официальным отчётом WB**
+Последнее обновление: **2026-03-26** | Следующая задача: **Фаза 5 (доработки) → Фаза 6**
 
 ## Стек
 
@@ -22,30 +22,40 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 | 2 | ✅ | Настройки: кабинеты WB, AES-256 шифрование, WB API клиент, AccountSelector |
 | 3 | ✅ | Карточки: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
 | 4 | ✅ | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
-| **5** | **⚠️** | **Финансовые отчёты** — UI готов, данные требуют сверки с WB |
+| **5** | **⚠️** | **Финансовые отчёты** — UI, формулы, vendorCode из Products; сверка toTransfer ✓; ряд колонок требует доработки |
 | 6 | — | План продаж |
 | 7 | — | Рекламные кампании |
 | 8 | — | Фоновая синхронизация (Bull MQ) |
 | 9 | — | Финальная доработка (Excel, responsive, Docker prod) |
 
-## Фаза 5 — Финансовые отчёты (UI готов, данные требуют сверки)
+## Фаза 5 — Финансовые отчёты (⚠️ в работе — требуются доработки)
 
 ### Что сделано:
 - `src/types/reports.ts` — типы
 - `src/lib/wb-api/reports.ts` — WB API fetch (rrdid-пагинация)
 - `src/lib/services/sync-reports.ts` — sync → DB
-- `src/lib/services/report-calculator.ts` — 52 формулы
+- `src/lib/services/report-calculator.ts` — 52 формулы + vendorCode fallback из Products
 - `src/lib/actions/reports.ts` — Server Actions (sync, getReportData, exportXlsx)
 - `src/app/(dashboard)/reports/columns.tsx` — 52 колонки, 9 групп, тултипы, ширины
-- `src/app/(dashboard)/reports/report-table.tsx` — frozen cols (border-separate), ресайз, summary tfoot
+- `src/app/(dashboard)/reports/report-table.tsx` — frozen cols, ресайз, summary tfoot
 - `src/app/(dashboard)/reports/reports-client.tsx` — DateRangePicker, sync, export Excel
 - `src/app/(dashboard)/reports/page.tsx` — Server Component
 - `src/components/date-range-picker.tsx` — пресеты, 2 месяца, кнопка «Применить»
+- `scripts/debug-report.ts` — debug-check для сверки ppvzForPay
 
-### Известные проблемы (следующая задача):
-- Данные не совпадают с официальным финансовым отчётом WB (раздел «Финансы»)
-- Артикулы могут не отображаться для некоторых строк (пустой vendorCode из API)
-- В следующей сессии: пользователь пришлёт скриншоты/данные официального отчёта кабинета **WB Galioni (WB 2)** для сверки и корректировки формул в `report-calculator.ts`
+### Ключевые факты о данных WB API:
+- `reportDetailByPeriod` возвращает **пустой `vendor_code`** для всех строк (баг WB API)
+- Фикс: `report-calculator.ts` строит `nmVendorMap` из таблицы `Products` (Phase 3) и использует как fallback
+- `ppvzForPay` для Возврат строк приходит **положительным** (как и для Продаж); формула `salesForPay - returnsForPay` верна
+- `toTransfer` (К перечислению) для WB Galioni 16-22.02.2026: 83 991.92 ₽ ✓
+- `sale` = `Σ retailPriceWithDisc × (1−sppPrc/100)` (с учётом WB СПП) — расчёт выручки по цене покупателя
+- `delivered` = salesCount + returnsCount (а не строки "Логистика")
+- Итоговый расчёт summary: reference-based поля (costPrice, extAd, selfPurchase) агрегируются из per-item rows
+
+### ⚠️ Известные проблемы (требуют исправления):
+- **Выкуп %** — формула `boughtWithReturns / deliveredCount` реализована, но результат в UI требует проверки
+- **Маржинальность** — формула `(sale - costPrice) / sale` не исправилась на практике, нужна отладка
+- **Другие колонки** — часть показателей выгружается некорректно (выявляется при сверке с WB); список уточняется в следующей сессии
 
 ### Заглушки (следующие фазы):
 - Col 15-16 (Реклама) = 0 → Фаза 7

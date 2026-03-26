@@ -70,7 +70,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Продажа',
     size: 120,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'sales', tooltip: 'Сумма продаж за период (retailPriceWithDisc × кол-во продаж)' },
+    meta: { group: 'sales', tooltip: 'Сумма продаж с учётом СПП = (продажи − возвраты) по цене покупателя: retailPriceWithDisc × (1 − ppvzSppPrc/100)' },
   },
   {
     id: 'toTransfer',
@@ -118,7 +118,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Цена ср.',
     size: 100,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'sales', tooltip: 'Средняя цена продажи = Продажи ÷ количество выкупленных штук' },
+    meta: { group: 'sales', tooltip: 'Средняя цена продажи с учётом СПП = Продажи (с СПП) ÷ количество продаж (без возвратов)' },
   },
 
   // ── Quantities ────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Выкуп %',
     size: 90,
     cell: ({ getValue }) => formatPct(getValue<string>()),
-    meta: { group: 'quantities', tooltip: 'Процент выкупа = выкуплено ÷ доставлено × 100' },
+    meta: { group: 'quantities', tooltip: 'Процент выкупа = выкуплено ÷ (выкупы + возвраты) × 100' },
   },
   {
     id: 'boughtWithoutReturns',
@@ -162,7 +162,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Маржинальность',
     size: 140,
     cell: ({ getValue }) => formatPct(getValue<string>()),
-    meta: { group: 'margins', tooltip: 'Маржинальность = ОП ÷ Продажи × 100. Показывает, какой % от выручки остаётся как прибыль' },
+    meta: { group: 'margins', tooltip: 'Маржинальность = (Продажи с СПП − Себестоимость) ÷ Продажи с СПП × 100' },
   },
   {
     id: 'rentability',
@@ -222,7 +222,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Доставлено',
     size: 110,
     cell: ({ getValue }) => formatNum(getValue<number>()),
-    meta: { group: 'logistics', tooltip: 'Количество доставленных единиц = продажи + возвраты (по quantity)' },
+    meta: { group: 'logistics', tooltip: 'Количество единиц товара = выкупы + возвраты (+ отмены, Phase 8)' },
   },
   {
     id: 'logisticsFromSalesPercent',
@@ -364,7 +364,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Прод.-возвр. без СПП',
     size: 185,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'Продажи минус возвраты по розничной цене без СПП = retailPriceWithDisc (прод.) − retailPriceWithDisc (возвр.)' },
+    meta: { group: 'detailed', tooltip: 'Продажи минус возвраты без WB СПП = Σ retailPriceWithDisc (прод.) − Σ retailPriceWithDisc (возвр.) — с согласованной скидкой продавца, без WB СПП' },
   },
   {
     id: 'salesWithSpp',
@@ -372,7 +372,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Продажи с СПП',
     size: 140,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'Сумма продаж по цене покупателя (с учётом СПП) = сумма retailPriceWithDisc по строкам "Продажа"' },
+    meta: { group: 'detailed', tooltip: 'Сумма продаж с учётом WB СПП = Σ (retailPriceWithDisc × (1 − ppvzSppPrc/100)) по строкам "Продажа"' },
   },
   {
     id: 'returnsWithSpp',
@@ -380,7 +380,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Возвраты с СПП',
     size: 140,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'Сумма возвратов по цене покупателя = сумма retailPriceWithDisc по строкам "Возврат"' },
+    meta: { group: 'detailed', tooltip: 'Сумма возвратов с учётом WB СПП = Σ (retailPriceWithDisc × (1 − ppvzSppPrc/100)) по строкам "Возврат"' },
   },
   {
     id: 'salesNoSpp',
@@ -388,7 +388,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Продажи без СПП',
     size: 150,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'Сумма продаж по розничной цене без СПП = сумма retailPrice по строкам "Продажа"' },
+    meta: { group: 'detailed', tooltip: 'Сумма продаж без WB СПП = Σ retailPriceWithDisc по строкам "Продажа" (с согласованной скидкой продавца, без WB СПП)' },
   },
   {
     id: 'returnsNoSpp',
@@ -396,7 +396,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Возвраты без СПП',
     size: 155,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'Сумма возвратов по розничной цене без СПП = сумма retailPrice по строкам "Возврат"' },
+    meta: { group: 'detailed', tooltip: 'Сумма возвратов без WB СПП = Σ retailPriceWithDisc по строкам "Возврат" (с согласованной скидкой продавца, без WB СПП)' },
   },
   {
     id: 'commissionOnSale',
@@ -436,7 +436,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Возвр. к перечисл.',
     size: 160,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'detailed', tooltip: 'К перечислению по возвратам = сумма ppvzForPay по строкам "Возврат" (отрицательные)' },
+    meta: { group: 'detailed', tooltip: 'К перечислению по возвратам = сумма ppvzForPay по строкам "Возврат" (вычитается из продаж)' },
   },
   {
     id: 'acquiringOnSale',
