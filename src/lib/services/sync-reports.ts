@@ -80,7 +80,7 @@ function mapRowToPrisma(wbAccountId: string, row: WbRealizationRow) {
     dateFrom:             new Date(row.date_from),
     dateTo:               new Date(row.date_to),
     nmId:                 row.nm_id,
-    vendorCode:           row.vendor_code,
+    vendorCode:           row.vendor_code ?? '',
     barcode:              row.barcode ?? null,
     docTypeName:          row.doc_type_name,
     quantity:             row.quantity,

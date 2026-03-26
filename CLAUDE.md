@@ -6,7 +6,7 @@
 ## Проект
 
 **NimbaOS** — закрытая веб-платформа оцифровки кабинетов продавца на Wildberries.
-Последнее обновление: **2026-03-26** | Следующая задача: **Фаза 5 — UI отчётов (подзадачи 5–10)**
+Последнее обновление: **2026-03-26** | Следующая задача: **Фаза 5 — сверка данных с официальным отчётом WB**
 
 ## Стек
 
@@ -22,34 +22,35 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 | 2 | ✅ | Настройки: кабинеты WB, AES-256 шифрование, WB API клиент, AccountSelector |
 | 3 | ✅ | Карточки: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
 | 4 | ✅ | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
-| **5** | **⏳** | **Финансовые отчёты** — бэкенд готов, UI в работе |
+| **5** | **⚠️** | **Финансовые отчёты** — UI готов, данные требуют сверки с WB |
 | 6 | — | План продаж |
 | 7 | — | Рекламные кампании |
 | 8 | — | Фоновая синхронизация (Bull MQ) |
 | 9 | — | Финальная доработка (Excel, responsive, Docker prod) |
 
-## Фаза 5 — Финансовые отчёты (текущая задача)
+## Фаза 5 — Финансовые отчёты (UI готов, данные требуют сверки)
 
-### Готово (подзадачи 1–4):
-- `src/types/reports.ts` — WbRealizationRow (snake_case API), ReportRow (52 столбца), ReportData, ReportSyncResult, ColumnGroup
-- `src/lib/wb-api/reports.ts` — fetchRealizationReportPage(): rrdid-пагинация, стоп на 204/пустой массив
-- `src/lib/services/sync-reports.ts` — syncRealizationReport(): цикл страниц → createMany({ skipDuplicates }) по rrdId unique
-- `src/lib/services/report-calculator.ts` — calculateReport(): группировка по nmId, 52 формулы, двухпроходный расчёт (col 9 = ОП/totalОП), summary row, safeDivide(), обогащение из CostPrice/SelfPurchase/ExternalAd/ArticleOverride
-- Зависимости: `xlsx`, `react-day-picker` установлены
+### Что сделано:
+- `src/types/reports.ts` — типы
+- `src/lib/wb-api/reports.ts` — WB API fetch (rrdid-пагинация)
+- `src/lib/services/sync-reports.ts` — sync → DB
+- `src/lib/services/report-calculator.ts` — 52 формулы
+- `src/lib/actions/reports.ts` — Server Actions (sync, getReportData, exportXlsx)
+- `src/app/(dashboard)/reports/columns.tsx` — 52 колонки, 9 групп, тултипы, ширины
+- `src/app/(dashboard)/reports/report-table.tsx` — frozen cols (border-separate), ресайз, summary tfoot
+- `src/app/(dashboard)/reports/reports-client.tsx` — DateRangePicker, sync, export Excel
+- `src/app/(dashboard)/reports/page.tsx` — Server Component
+- `src/components/date-range-picker.tsx` — пресеты, 2 месяца, кнопка «Применить»
 
-### Осталось (подзадачи 5–10):
-```
-5. src/lib/actions/reports.ts — Server Actions: syncReportsAction, getReportData, exportReportXlsx
-6. reports/columns.tsx — 52 определения колонок, 9 групп (identity/sales/quantities/margins/advertising/logistics/references/fees/detailed)
-7. reports/report-table.tsx — frozen первые 3 col (sticky CSS), горизонтальный скролл, summary row в <tfoot>
-8. reports/reports-client.tsx — DateRangePicker (react-day-picker), кнопка синхр., toggle групп колонок, экспорт Excel
-9. reports/page.tsx — Server Component: searchParams (account, dateFrom, dateTo), дефолт = текущий месяц
-```
+### Известные проблемы (следующая задача):
+- Данные не совпадают с официальным финансовым отчётом WB (раздел «Финансы»)
+- Артикулы могут не отображаться для некоторых строк (пустой vendorCode из API)
+- В следующей сессии: пользователь пришлёт скриншоты/данные официального отчёта кабинета **WB Galioni (WB 2)** для сверки и корректировки формул в `report-calculator.ts`
 
-### Заглушки (будут заполнены в следующих фазах):
-- Col 15-16 (Реклама баланс/все) = 0 → Фаза 7
-- Col 39 (Отмены) = 0 → Фаза 8 (orders API)
-- Col 51 (Ярлыки) = "" → можно обогатить из Product.tags
+### Заглушки (следующие фазы):
+- Col 15-16 (Реклама) = 0 → Фаза 7
+- Col 39 (Отмены) = 0 → Фаза 8
+- Col 51 (Ярлыки) = "" → Product.tags
 
 ## Критические особенности Prisma 7
 
