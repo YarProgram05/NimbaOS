@@ -136,7 +136,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Выкуп %',
     size: 90,
     cell: ({ getValue }) => formatPct(getValue<string>()),
-    meta: { group: 'quantities', tooltip: 'Процент выкупа = выкуплено ÷ (выкупы + возвраты) × 100' },
+    meta: { group: 'quantities', tooltip: 'Процент выкупа = выкуплено ÷ (продажи + отмены) × 100' },
   },
   {
     id: 'boughtWithoutReturns',
@@ -162,7 +162,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Маржинальность',
     size: 140,
     cell: ({ getValue }) => formatPct(getValue<string>()),
-    meta: { group: 'margins', tooltip: 'Маржинальность = (Продажи с СПП − Себестоимость) ÷ Продажи с СПП × 100' },
+    meta: { group: 'margins', tooltip: 'Маржинальность = ОП ÷ Продажи × 100' },
   },
   {
     id: 'rentability',
@@ -214,7 +214,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Лог. ед.',
     size: 90,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'logistics', tooltip: 'Логистика на единицу = Логистика ÷ доставлено' },
+    meta: { group: 'logistics', tooltip: 'Логистика на единицу = Логистика ÷ выкуплено (продажи − возвраты)' },
   },
   {
     id: 'delivered',
@@ -222,7 +222,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Доставлено',
     size: 110,
     cell: ({ getValue }) => formatNum(getValue<number>()),
-    meta: { group: 'logistics', tooltip: 'Количество единиц товара = выкупы + возвраты (+ отмены, Phase 8)' },
+    meta: { group: 'logistics', tooltip: 'Количество единиц отправленных покупателю = продажи + отмены' },
   },
   {
     id: 'logisticsFromSalesPercent',
@@ -322,7 +322,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     header: 'Налоги',
     size: 95,
     cell: ({ getValue }) => formatRub(getValue<string>()),
-    meta: { group: 'fees', tooltip: 'Налоги = Итого к оплате × ставка налога (из настроек кабинета)' },
+    meta: { group: 'fees', tooltip: 'Налоги = Продажи × ставка налога (УСН доходы, из настроек кабинета)' },
   },
   {
     id: 'commission',

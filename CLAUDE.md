@@ -6,7 +6,7 @@
 ## Проект
 
 **NimbaOS** — закрытая веб-платформа оцифровки кабинетов продавца на Wildberries.
-Последнее обновление: **2026-03-26** | Следующая задача: **Фаза 5 (доработки) → Фаза 6**
+Последнее обновление: **2026-03-27** | Следующая задача: **Фаза 5 (доработки: Storage API) → Фаза 6**
 
 ## Стек
 
@@ -22,7 +22,7 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 | 2 | ✅ | Настройки: кабинеты WB, AES-256 шифрование, WB API клиент, AccountSelector |
 | 3 | ✅ | Карточки: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
 | 4 | ✅ | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
-| **5** | **⚠️** | **Финансовые отчёты** — UI, формулы, vendorCode из Products; сверка toTransfer ✓; ряд колонок требует доработки |
+| **5** | **⚠️** | **Финансовые отчёты** — UI, формулы, сортировка, DnD колонок, фильтры, группировка; хранение per-article требует нового API |
 | 6 | — | План продаж |
 | 7 | — | Рекламные кампании |
 | 8 | — | Фоновая синхронизация (Bull MQ) |
@@ -37,8 +37,8 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 - `src/lib/services/report-calculator.ts` — 52 формулы + vendorCode fallback из Products
 - `src/lib/actions/reports.ts` — Server Actions (sync, getReportData, exportXlsx)
 - `src/app/(dashboard)/reports/columns.tsx` — 52 колонки, 9 групп, тултипы, ширины
-- `src/app/(dashboard)/reports/report-table.tsx` — frozen cols, ресайз, summary tfoot
-- `src/app/(dashboard)/reports/reports-client.tsx` — DateRangePicker, sync, export Excel
+- `src/app/(dashboard)/reports/report-table.tsx` — frozen cols, ресайз, сортировка, DnD колонок, sticky Итого, localStorage порядок
+- `src/app/(dashboard)/reports/reports-client.tsx` — DateRangePicker, sync, export Excel, фильтры (Бренд/Категория/Ярлык), группировка
 - `src/app/(dashboard)/reports/page.tsx` — Server Component
 - `src/components/date-range-picker.tsx` — пресеты, 2 месяца, кнопка «Применить»
 - `scripts/debug-report.ts` — debug-check для сверки ppvzForPay
@@ -49,17 +49,26 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 - `ppvzForPay` для Возврат строк приходит **положительным** (как и для Продаж); формула `salesForPay - returnsForPay` верна
 - `toTransfer` (К перечислению) для WB Galioni 16-22.02.2026: 83 991.92 ₽ ✓
 - `sale` = `Σ retailPriceWithDisc × (1−sppPrc/100)` (с учётом WB СПП) — расчёт выручки по цене покупателя
-- `delivered` = salesCount + returnsCount (а не строки "Логистика")
+- `delivered` = salesCount + cancellationsCount (отправлено к покупателю: продажи + отмены)
+- **Хранение**: WB возвращает storage строки с `nmId=0` (не по артикулам). Распределяется пропорционально outbound-доставкам по артикулу.
+- **Отмены**: `bonusTypeName = 'К клиенту при отмене'` в Логистика-строках — уже в БД, считаем как `cancellationsCount`
+- **Маржинальность** = ОП / Продажи × 100 (не (продажа - себест.) / продажа)
+- **% от ОП** = ОП_артикула × 100 / ОП_всего
+- **Выкуп %** = boughtWithReturns × 100 / (salesCount + cancellationsCount)
 - Итоговый расчёт summary: reference-based поля (costPrice, extAd, selfPurchase) агрегируются из per-item rows
 
-### ⚠️ Известные проблемы (требуют исправления):
-- **Выкуп %** — формула `boughtWithReturns / deliveredCount` реализована, но результат в UI требует проверки
-- **Маржинальность** — формула `(sale - costPrice) / sale` не исправилась на практике, нужна отладка
-- **Другие колонки** — часть показателей выгружается некорректно (выявляется при сверке с WB); список уточняется в следующей сессии
+### Хранение по артикулам — ограничение:
+- WB `reportDetailByPeriod` возвращает хранение **только в строках nmId=0** (глобальный агрегат по дням)
+- Пропорциональное распределение по артикулам из nmId=0 строк НЕ ТОЧНОЕ (зависит от объёма запасов×дни, которых у нас нет)
+- Артикулы без продаж/логистики в периоде (только хранение) не попадают в отчёт
+- Правильное решение: GET `https://seller-analytics-api.wildberries.ru/api/v1/analytics/paid-storage` — возвращает хранение по артикулу×день; требует отдельного синка в Phase 5.x
+
+### Формулы (исправленные):
+- **Налоги** = Продажи × ставка/100 (УСН доходы, ставка из настроек кабинета)
+- **Лог. ед.** = Логистика / Выкуплено (boughtWithReturns = продажи − возвраты)
 
 ### Заглушки (следующие фазы):
 - Col 15-16 (Реклама) = 0 → Фаза 7
-- Col 39 (Отмены) = 0 → Фаза 8
 - Col 51 (Ярлыки) = "" → Product.tags
 
 ## Критические особенности Prisma 7

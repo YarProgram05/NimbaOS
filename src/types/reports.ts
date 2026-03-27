@@ -8,7 +8,7 @@ export interface WbRealizationRow {
   nm_id: number
   vendor_code: string
   barcode: string | null
-  doc_type_name: string              // "Продажа" | "Возврат"
+  doc_type_name: string              // "Продажа" | "Возврат" | ""
   quantity: number
   retail_price: number
   retail_price_withdisc_rub: number
@@ -104,7 +104,7 @@ export interface ReportRow {
   acquiringFee: string               // Col 35 — Эквайринг
 
   // Cancellations
-  cancellations: number              // Col 39 — Отмены (0 до Phase 8)
+  cancellations: number              // Col 39 — Отмены (bonusTypeName="К клиенту при отмене")
 
   // Detailed breakdowns
   salesReturnsNoSpp: string          // Col 40 — Продажи-возвраты без СПП

@@ -84,33 +84,56 @@ export async function calculateReport(
 
   const taxRate = d(account.taxRate)
 
-  // 3. Group rows by nmId
+  // 3. Pre-pass: collect global storage (nmId=0 rows) and outbound delivery counts per article.
+  // WB reports storage as aggregate daily rows with nmId=0, not per-article.
+  // Cancellations are "Логистика" rows with bonusTypeName="К клиенту при отмене" (per-article nmId).
+  let globalStorageTotal = 0
+  const outboundPerNm = new Map<number, number>() // nmId → "К клиенту" outbound delivery count
+  let totalOutbound = 0
+
+  for (const row of rows) {
+    if (row.nmId === 0) {
+      globalStorageTotal += d(row.storageFee)
+    } else if (
+      row.supplierOperName === 'Логистика' &&
+      (row.bonusTypeName === 'К клиенту при продаже' || row.bonusTypeName === 'К клиенту при отмене')
+    ) {
+      outboundPerNm.set(row.nmId, (outboundPerNm.get(row.nmId) ?? 0) + 1)
+      totalOutbound++
+    }
+  }
+
+  // 4. Group rows by nmId — exclude nmId=0 global rows (storage etc.)
   const grouped = new Map<number, typeof rows>()
   for (const row of rows) {
+    if (row.nmId === 0) continue
     const arr = grouped.get(row.nmId) ?? []
     arr.push(row)
     grouped.set(row.nmId, arr)
   }
 
-  // 4. Calculate per-nmId (pass 1: everything except operatingProfitShare)
+  // 5. Calculate per-nmId (pass 1: everything except operatingProfitShare)
+  //    Distribute global storage proportionally by outbound delivery count per article.
   const reportRows: ReportRow[] = []
   let totalOP = 0
 
   for (const [nmId, group] of Array.from(grouped.entries())) {
-    const row = calculateGroup(nmId, group, costMap, spMap, extAdMap, overrideMap, taxRate, nmVendorMap)
+    const outbound = outboundPerNm.get(nmId) ?? 0
+    const extraStorage = totalOutbound > 0 ? globalStorageTotal * (outbound / totalOutbound) : 0
+    const row = calculateGroup(nmId, group, costMap, spMap, extAdMap, overrideMap, taxRate, nmVendorMap, extraStorage)
     totalOP += Number(row.operatingProfit)
     reportRows.push(row)
   }
 
-  // 5. Pass 2: operatingProfitShare (% от всей ОП)
+  // 6. Pass 2: operatingProfitShare (% от всей ОП) — article OP as % of total
   for (const row of reportRows) {
-    row.operatingProfitShare = safeDivide(Number(row.operatingProfit), totalOP, 2)
+    row.operatingProfitShare = safeDivide(Number(row.operatingProfit) * 100, totalOP, 2)
   }
 
-  // 6. Sort by sale descending (biggest sellers first)
+  // 7. Sort by sale descending (biggest sellers first)
   reportRows.sort((a, b) => Number(b.sale) - Number(a.sale))
 
-  // 7. Summary row (all rows aggregated)
+  // 8. Summary row (all rows aggregated)
   const summary = calculateGroup(0, rows, costMap, spMap, extAdMap, overrideMap, taxRate, nmVendorMap)
   summary.subjectName = 'Итого'
   summary.vendorCode = ''
@@ -136,9 +159,10 @@ export async function calculateReport(
   const totalExtAd = sumExtAd + extAdUnassigned
   summary.externalAd = fmt(totalExtAd)
 
-  // Recalculate taxes (depends on toTransfer, which is already correct in summary)
+  // Recalculate taxes: налог с выручки = Продажи × ставка (УСН доходы)
   const summaryToTransfer = Number(summary.toTransfer)
-  const summaryTaxes = summaryToTransfer * (taxRate / 100)
+  const summarySaleForTax = Number(summary.sale)
+  const summaryTaxes = Math.max(0, summarySaleForTax * (taxRate / 100))
   summary.taxes = fmt(summaryTaxes)
 
   // Recalculate operating profit with corrected reference-based costs
@@ -163,7 +187,7 @@ export async function calculateReport(
 
   // Recalculate marginality and rentability for summary
   const summarySale = Number(summary.sale)
-  summary.marginality = safeDivide((summarySale - sumCostPrice) * 100, summarySale)
+  summary.marginality = safeDivide(summaryOp * 100, summarySale)  // ОП / Продажи × 100
   summary.rentability = safeDivide(summaryOp * 100, sumCostPrice)
 
   // Find last fetchedAt as lastSyncAt
@@ -198,6 +222,7 @@ function calculateGroup(
   overrideMap: Map<string, { localName: string | null }>,
   taxRate: number,
   nmVendorMap: Map<number, string>,
+  extraStorageFee = 0,
 ): ReportRow {
   // Collect unique vendorCode(s) for this nmId group
   const vendorCodes = new Set<string>()
@@ -213,6 +238,7 @@ function calculateGroup(
   let returnsForPay = 0         // ppvz_for_pay for "Возврат"
   let salesCount = 0            // sum of quantity for "Продажа"
   let returnsCount = 0          // sum of quantity for "Возврат"
+  let cancellationsCount = 0    // count of "К клиенту при отмене" logistics rows
   let totalDelivery = 0
   let totalPenalty = 0
   let totalAdditional = 0
@@ -262,6 +288,9 @@ function calculateGroup(
       returnsCount += row.quantity
       commissionOnReturn += commission
       acquiringOnReturn += acquiring
+    } else if (row.supplierOperName === 'Логистика' && row.bonusTypeName === 'К клиенту при отмене') {
+      // Cancellation: item was dispatched to pickup point but customer didn't pick it up
+      cancellationsCount++
     }
 
     totalDelivery += delivery
@@ -274,8 +303,12 @@ function calculateGroup(
     totalCommission += commission
   }
 
-  // Delivered = выкупы + возвраты (+ отмены = 0 до Фазы 8)
-  const deliveredCount = salesCount + returnsCount
+  // Add allocated global storage (distributed from nmId=0 rows by caller)
+  totalStorage += extraStorageFee
+
+  // Delivered = items dispatched to pickup point (outbound to customer)
+  // = successful sales + cancelled orders (both physically shipped to pickup)
+  const deliveredCount = salesCount + cancellationsCount
 
   // ── Resolve effective vendor codes ────────────────────────────────────────────
   // WB API reportDetailByPeriod sometimes returns empty vendor_code.
@@ -298,7 +331,7 @@ function calculateGroup(
   // Avg price (Col 10) — с СПП (actual buyer price)
   const avgPrice = safeDivide(salesAmtWithSpp, salesCount)
 
-  // Buyout % (Col 12) — выкуплено / (выкупы + возвраты) × 100
+  // Buyout % (Col 12) — выкуплено / (продажи + отмены) × 100
   const buyoutPercent = safeDivide(boughtWithReturns * 100, deliveredCount)
 
   // Cost price from reference (Col 27)
@@ -331,8 +364,8 @@ function calculateGroup(
     if (sp) selfPurchaseCost += sp.quantity * unitCost
   }
 
-  // Taxes (Col 32)
-  const taxes = toTransfer * (taxRate / 100)
+  // Taxes (Col 32): налог с выручки = Продажи × ставка (УСН доходы); не может быть < 0
+  const taxes = Math.max(0, sale * (taxRate / 100))
 
   // Ad balance / all (Col 15-16) — 0 until Phase 7
   const adBalance = 0
@@ -368,8 +401,8 @@ function calculateGroup(
   // ОП ед. (Col 8)
   const opUnit = safeDivide(op, boughtWithReturns)
 
-  // Маржинальность (Col 13): (sale - costPrice) / sale × 100
-  const marginality = safeDivide((sale - costPriceTotal) * 100, sale)
+  // Маржинальность (Col 13): ОП / Продажи × 100
+  const marginality = safeDivide(op * 100, sale)
 
   // Рентабельность (Col 14): ОП / costPrice × 100
   const rentability = safeDivide(op * 100, costPriceTotal)
@@ -377,8 +410,8 @@ function calculateGroup(
   // ДРР % (Col 17)
   const drr = safeDivide(adAll * 100, sale)
 
-  // Логистика ед. (Col 19)
-  const logisticsUnit = safeDivide(totalDelivery, deliveredCount)
+  // Логистика ед. (Col 19): Логистика / выкуплено (продажи − возвраты)
+  const logisticsUnit = safeDivide(totalDelivery, boughtWithReturns)
 
   // Логистика от продаж % (Col 21)
   const logisticsFromSalesPercent = safeDivide(totalDelivery * 100, sale)
@@ -438,7 +471,7 @@ function calculateGroup(
     selfPurchases: fmt(spTotalAmount + spTotalCashback),
     acquiringFee: fmt(totalAcquiring),
 
-    cancellations: 0, // Phase 8
+    cancellations: cancellationsCount,
 
     salesReturnsNoSpp: fmt(salesAmtNoSpp - returnsAmtNoSpp),
     salesWithSpp: fmt(salesAmtWithSpp),
