@@ -22,6 +22,11 @@ export function aggregateReportRows(
   const totalAdAll = sumStr(rows, 'adAll')
   const totalLogistics = sumStr(rows, 'logistics')
   const totalStorageFee = sumStr(rows, 'storageFee')
+  const totalSalesWithSpp = sumStr(rows, 'salesWithSpp')
+  const totalCommissionOnSale = sumStr(rows, 'commissionOnSale')
+  const totalCommissionOnReturn = sumStr(rows, 'commissionOnReturn')
+  const totalAcquiringOnSale = sumStr(rows, 'acquiringOnSale')
+  const totalAcquiringOnReturn = sumStr(rows, 'acquiringOnReturn')
 
   return {
     nmId: options.nmId ?? 0,
@@ -35,14 +40,16 @@ export function aggregateReportRows(
     operatingProfit: fmt(totalOperatingProfit),
     operatingProfitUnit: safeDivide(totalOperatingProfit, totalBoughtWithReturns),
     operatingProfitShare: fmt(sumStr(rows, 'operatingProfitShare')),
-    avgPrice: safeDivide(totalSale, totalBoughtWithoutReturns),
+    avgPrice: totalBoughtWithoutReturns > 0 && totalBoughtWithReturns > 0
+      ? safeDivide(totalSalesWithSpp, totalBoughtWithoutReturns)
+      : '0.00',
 
     boughtWithReturns: totalBoughtWithReturns,
-    buyoutPercent: safeDivide(totalBoughtWithReturns * 100, totalDelivered),
+    buyoutPercent: safeDivideMinZero(totalBoughtWithReturns * 100, totalDelivered),
     boughtWithoutReturns: totalBoughtWithoutReturns,
     returns: sumNum(rows, 'returns'),
 
-    marginality: safeDivide(totalOperatingProfit * 100, totalSale),
+    marginality: safeMarginality(totalOperatingProfit, totalSale),
     rentability: safeDivide(totalOperatingProfit * 100, totalCostPrice),
 
     adBalance: fmt(sumStr(rows, 'adBalance')),
@@ -52,23 +59,23 @@ export function aggregateReportRows(
     logistics: fmt(totalLogistics),
     logisticsUnit: safeDivide(totalLogistics, totalBoughtWithReturns),
     delivered: totalDelivered,
-    logisticsFromSalesPercent: safeDivide(totalLogistics * 100, totalSale),
+    logisticsFromSalesPercent: safeDivideMinZero(totalLogistics * 100, totalSale),
 
     externalAd: fmt(sumStr(rows, 'externalAd')),
     selfPurchaseCost: fmt(sumStr(rows, 'selfPurchaseCost')),
     cashbackDistributions: fmt(sumStr(rows, 'cashbackDistributions')),
     selfPurchaseAmount: fmt(sumStr(rows, 'selfPurchaseAmount')),
 
-    storageFromSalesPercent: safeDivide(totalStorageFee * 100, totalSale),
+    storageFromSalesPercent: safeDivideMinZero(totalStorageFee * 100, totalSale),
     costPrice: fmt(totalCostPrice),
     storageFee: fmt(totalStorageFee),
     acceptance: fmt(sumStr(rows, 'acceptance')),
     additionalPayment: fmt(sumStr(rows, 'additionalPayment')),
     penalty: fmt(sumStr(rows, 'penalty')),
     taxes: fmt(sumStr(rows, 'taxes')),
-    commission: fmt(sumStr(rows, 'commission')),
+    commission: fmt(totalCommissionOnSale - totalCommissionOnReturn),
     selfPurchases: fmt(sumStr(rows, 'selfPurchases')),
-    acquiringFee: fmt(sumStr(rows, 'acquiringFee')),
+    acquiringFee: fmt(totalAcquiringOnSale - totalAcquiringOnReturn),
 
     cancellations: sumNum(rows, 'cancellations'),
 
@@ -99,6 +106,16 @@ function sumNum(rows: ReportRow[], key: keyof ReportRow): number {
 function safeDivide(numerator: number, denominator: number): string {
   if (denominator === 0) return '0.00'
   return (numerator / denominator).toFixed(2)
+}
+
+function safeDivideMinZero(numerator: number, denominator: number): string {
+  if (denominator === 0) return '0.00'
+  return Math.max(0, numerator / denominator).toFixed(2)
+}
+
+function safeMarginality(operatingProfit: number, sale: number): string {
+  if (operatingProfit < 0 && sale < 0) return '0.00'
+  return safeDivide(operatingProfit * 100, sale)
 }
 
 function fmt(value: number): string {

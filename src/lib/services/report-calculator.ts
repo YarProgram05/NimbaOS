@@ -23,8 +23,16 @@ export async function calculateReport(
       prisma.realizationReport.findMany({
         where: {
           wbAccountId,
-          dateFrom: { gte: dfrom },
-          dateTo: { lte: dto },
+          OR: [
+            {
+              rrDt: { gte: dfrom, lte: dto },
+            },
+            {
+              rrDt: null,
+              dateFrom: { lte: dto },
+              dateTo: { gte: dfrom },
+            },
+          ],
         },
       }),
       prisma.costPrice.findMany({ where: { wbAccountId } }),
@@ -231,8 +239,6 @@ function calculateGroup(
   let totalStorage = 0
   let totalDeduction = 0
   let totalAcceptance = 0
-  let totalAcquiring = 0
-  let totalCommission = 0
   let commissionOnSale = 0
   let commissionOnReturn = 0
   let acquiringOnSale = 0
@@ -282,8 +288,6 @@ function calculateGroup(
     if (!skipRealizationStorage) totalStorage += storage
     totalDeduction += deduction
     totalAcceptance += acceptance
-    totalAcquiring += acquiring
-    totalCommission += commission
   }
 
   totalStorage += extraStorageFee
@@ -303,8 +307,10 @@ function calculateGroup(
   const toTransfer = salesForPay - returnsForPay
   const boughtWithReturns = salesCount - returnsCount
   const boughtWithoutReturns = salesCount
-  const avgPrice = safeDivide(salesAmtWithSpp, salesCount)
-  const buyoutPercent = safeDivide(boughtWithReturns * 100, deliveredCount)
+  const avgPrice = salesCount > 0 && boughtWithReturns > 0 ? safeDivide(salesAmtWithSpp, salesCount) : '0.00'
+  const buyoutPercent = safeDivideMinZero(boughtWithReturns * 100, deliveredCount)
+  const totalCommission = commissionOnSale - commissionOnReturn
+  const totalAcquiring = acquiringOnSale - acquiringOnReturn
 
   let costPriceTotal = 0
   let spTotalAmount = 0
@@ -362,12 +368,12 @@ function calculateGroup(
     - totalDeduction
 
   const operatingProfitUnit = safeDivide(operatingProfit, boughtWithReturns)
-  const marginality = safeDivide(operatingProfit * 100, sale)
+  const marginality = safeMarginality(operatingProfit, sale)
   const rentability = safeDivide(operatingProfit * 100, costPriceTotal)
   const drr = safeDivide(adAll * 100, sale)
   const logisticsUnit = safeDivide(totalDelivery, boughtWithReturns)
-  const logisticsFromSalesPercent = safeDivide(totalDelivery * 100, sale)
-  const storageFromSalesPercent = safeDivide(totalStorage * 100, sale)
+  const logisticsFromSalesPercent = safeDivideMinZero(totalDelivery * 100, sale)
+  const storageFromSalesPercent = safeDivideMinZero(totalStorage * 100, sale)
 
   const primaryVendorCode = (resolvedVendorCodes.size > 0 ? resolvedVendorCodes : vendorCodes).values().next().value ?? ''
   const override = overrideMap.get(primaryVendorCode)
@@ -450,4 +456,14 @@ function fmt(value: number): string {
 function safeDivide(numerator: number, denominator: number, decimals = 2): string {
   if (denominator === 0) return (0).toFixed(decimals)
   return (numerator / denominator).toFixed(decimals)
+}
+
+function safeDivideMinZero(numerator: number, denominator: number, decimals = 2): string {
+  if (denominator === 0) return (0).toFixed(decimals)
+  return Math.max(0, numerator / denominator).toFixed(decimals)
+}
+
+function safeMarginality(operatingProfit: number, sale: number, decimals = 2): string {
+  if (operatingProfit < 0 && sale < 0) return (0).toFixed(decimals)
+  return safeDivide(operatingProfit * 100, sale, decimals)
 }

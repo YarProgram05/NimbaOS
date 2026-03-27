@@ -139,7 +139,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 100,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'sales', tooltip: 'Средняя цена продажи с учётом СПП = Продажи (с СПП) ÷ количество продаж (без возвратов)' },
+    meta: { group: 'sales', tooltip: 'Средняя цена продажи с учётом СПП = продажи с СПП ÷ количество продаж. Если выкупов нет, показывается 0' },
   },
 
   // ── Quantities ────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 140,
     cell: ({ getValue }) => formatPct(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'margins', tooltip: 'Маржинальность = ОП ÷ Продажи × 100' },
+    meta: { group: 'margins', tooltip: 'Маржинальность = ОП ÷ Продажи × 100. Если и ОП, и Продажи отрицательные, показывается 0' },
   },
   {
     id: 'rentability',
@@ -372,7 +372,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 100,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'fees', tooltip: 'Комиссия WB = ppvzSalesCommission (продажи) + ppvzSalesCommission (возвраты)' },
+    meta: { group: 'fees', tooltip: 'Комиссия WB = комиссия при продажах минус комиссия при возвратах' },
   },
   {
     id: 'selfPurchases',
@@ -390,7 +390,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 100,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'fees', tooltip: 'Расходы на эквайринг = сумма acquiringFee по всем строкам' },
+    meta: { group: 'fees', tooltip: 'Расходы на эквайринг = эквайринг при продажах минус эквайринг при возвратах' },
   },
   {
     id: 'cancellations',
