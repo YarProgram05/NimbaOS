@@ -35,6 +35,55 @@ export interface WbRealizationRow {
   rr_dt: string | null
 }
 
+// ── WB API — Paid storage responses (analytics domain, task-based flow) ──────
+
+export interface WbPaidStorageTaskResponse {
+  data: {
+    taskId: string
+  }
+}
+
+export interface WbPaidStorageTaskStatusResponse {
+  data: {
+    id: string
+    status: string
+  }
+}
+
+export interface WbPaidStorageRow {
+  date: string                // "YYYY-MM-DD"
+  logWarehouseCoef?: number | null
+  officeId?: number | null
+  warehouse?: string | null
+  warehouseCoef?: number | null
+  giId?: number | null
+  chrtId: number
+  size?: string | null
+  barcode?: string | null
+  subject?: string | null
+  brand?: string | null
+  vendorCode?: string | null
+  nmId: number
+  volume?: number | null
+  calcType?: string | null
+  warehousePrice: number      // storage cost from the generated report row
+  barcodesCount?: number | null
+  palletPlaceCode?: number | null
+  palletCount?: number | null
+  originalDate?: string | null
+  loyaltyDiscount?: number | null
+  tariffFixDate?: string | null
+  tariffLowerDate?: string | null
+}
+
+export interface PaidStorageSyncResult {
+  totalRows: number
+  upserted: number
+  pages: number
+  errors: number
+  durationMs: number
+}
+
 // ── Sync service result ──────────────────────────────────────────────────────
 
 export interface ReportSyncResult {
@@ -43,6 +92,8 @@ export interface ReportSyncResult {
   pages: number
   errors: number
   durationMs: number
+  storageUpserted: number
+  storageErrors: number
 }
 
 // ── Calculated report row (52 columns) ───────────────────────────────────────

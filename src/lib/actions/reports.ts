@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import * as XLSX from 'xlsx'
 import { authOptions } from '@/lib/auth'
 import { syncRealizationReport } from '@/lib/services/sync-reports'
+import { syncPaidStorage } from '@/lib/services/sync-paid-storage'
 import { calculateReport } from '@/lib/services/report-calculator'
 import type { ActionResult } from '@/types'
 import type { ReportSyncResult, ReportData, ReportRow } from '@/types/reports'
@@ -25,8 +26,20 @@ export async function syncReportsAction(
     await requireSession()
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
     if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
+
+    // Run realization report and paid-storage syncs sequentially to respect
+    // per-domain throttle (statistics: 1 req/min, analytics: 3 req/min).
     const result = await syncRealizationReport(wbAccountId, dateFrom, dateTo)
-    return { success: true, data: result }
+    const storageResult = await syncPaidStorage(wbAccountId, dateFrom, dateTo)
+
+    return {
+      success: true,
+      data: {
+        ...result,
+        storageUpserted: storageResult.upserted,
+        storageErrors: storageResult.errors,
+      },
+    }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации' }
   }

@@ -87,10 +87,10 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
     dragColId.current = colId
   }
 
-  function handleDragOver(e: React.DragEvent, colId: string) {
-    e.preventDefault()
+  function handleDragOver(e: React.DragEvent, colId: string, colIdx: number) {
     const from = dragColId.current
-    if (!from || from === colId) return
+    if (!from || from === colId || colIdx < FROZEN_COUNT) return
+    e.preventDefault()
     setColumnOrder((prev) => {
       const next = [...prev]
       const fromIdx = next.indexOf(from)
@@ -135,7 +135,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                     title={tooltip}
                     draggable={!isFrozen}
                     onDragStart={() => handleDragStart(header.column.id)}
-                    onDragOver={(e) => handleDragOver(e, header.column.id)}
+                    onDragOver={(e) => handleDragOver(e, header.column.id, idx)}
                     onDragEnd={handleDragEnd}
                     className={[
                       'relative whitespace-nowrap px-3 py-2 text-left font-medium text-muted-foreground',

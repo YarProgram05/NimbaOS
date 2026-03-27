@@ -63,6 +63,7 @@ model WbAccount {
 
   products           Product[]
   realizationReports RealizationReport[]
+  paidStorage        PaidStorage[]
   adCampaigns        AdCampaign[]
   salesPlans         SalesPlan[]
   costPrices         CostPrice[]
@@ -245,6 +246,32 @@ model RealizationReport {
   @@index([dateFrom, dateTo])
   @@index([wbAccountId, nmId, dateFrom])
   @@map("realization_reports")
+}
+
+model PaidStorage {
+  id            String   @id @default(uuid())
+  wbAccountId   String
+  date          DateTime @db.Date
+  nmId          Int
+  vendorCode    String
+  barcode       String?
+  brand         String?
+  subject       String?
+  category      String?
+  warehouseName String?
+  chrtId        Int
+  size          String?
+  qty           Int      @default(0)
+  cost          Decimal  @db.Decimal(10, 2)
+  fetchedAt     DateTime @default(now())
+
+  wbAccount     WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, date, nmId, chrtId])
+  @@index([wbAccountId])
+  @@index([wbAccountId, date])
+  @@index([wbAccountId, nmId])
+  @@map("paid_storage")
 }
 
 // ─── Advertising Campaigns ─────────────────────────────────────

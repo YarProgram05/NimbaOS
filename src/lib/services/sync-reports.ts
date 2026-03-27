@@ -21,6 +21,8 @@ export async function syncRealizationReport(
     pages: 0,
     errors: 0,
     durationMs: 0,
+    storageUpserted: 0,
+    storageErrors: 0,
   }
 
   // 1. Fetch and decrypt the API key

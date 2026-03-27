@@ -1,0 +1,106 @@
+import type { ReportRow } from '@/types/reports'
+
+interface AggregateReportRowsOptions {
+  nmId?: number
+  subjectName?: string
+  vendorCode?: string
+  brandName?: string
+}
+
+export function aggregateReportRows(
+  rows: ReportRow[],
+  options: AggregateReportRowsOptions = {},
+): ReportRow {
+  const totalSale = sumStr(rows, 'sale')
+  const totalToTransfer = sumStr(rows, 'toTransfer')
+  const totalToPay = sumStr(rows, 'totalToPay')
+  const totalOperatingProfit = sumStr(rows, 'operatingProfit')
+  const totalBoughtWithReturns = sumNum(rows, 'boughtWithReturns')
+  const totalBoughtWithoutReturns = sumNum(rows, 'boughtWithoutReturns')
+  const totalDelivered = sumNum(rows, 'delivered')
+  const totalCostPrice = sumStr(rows, 'costPrice')
+  const totalAdAll = sumStr(rows, 'adAll')
+  const totalLogistics = sumStr(rows, 'logistics')
+  const totalStorageFee = sumStr(rows, 'storageFee')
+
+  return {
+    nmId: options.nmId ?? 0,
+    subjectName: options.subjectName ?? '',
+    vendorCode: options.vendorCode ?? '',
+    brandName: options.brandName ?? '',
+
+    sale: fmt(totalSale),
+    toTransfer: fmt(totalToTransfer),
+    totalToPay: fmt(totalToPay),
+    operatingProfit: fmt(totalOperatingProfit),
+    operatingProfitUnit: safeDivide(totalOperatingProfit, totalBoughtWithReturns),
+    operatingProfitShare: fmt(sumStr(rows, 'operatingProfitShare')),
+    avgPrice: safeDivide(totalSale, totalBoughtWithoutReturns),
+
+    boughtWithReturns: totalBoughtWithReturns,
+    buyoutPercent: safeDivide(totalBoughtWithReturns * 100, totalDelivered),
+    boughtWithoutReturns: totalBoughtWithoutReturns,
+    returns: sumNum(rows, 'returns'),
+
+    marginality: safeDivide(totalOperatingProfit * 100, totalSale),
+    rentability: safeDivide(totalOperatingProfit * 100, totalCostPrice),
+
+    adBalance: fmt(sumStr(rows, 'adBalance')),
+    adAll: fmt(totalAdAll),
+    drr: safeDivide(totalAdAll * 100, totalSale),
+
+    logistics: fmt(totalLogistics),
+    logisticsUnit: safeDivide(totalLogistics, totalBoughtWithReturns),
+    delivered: totalDelivered,
+    logisticsFromSalesPercent: safeDivide(totalLogistics * 100, totalSale),
+
+    externalAd: fmt(sumStr(rows, 'externalAd')),
+    selfPurchaseCost: fmt(sumStr(rows, 'selfPurchaseCost')),
+    cashbackDistributions: fmt(sumStr(rows, 'cashbackDistributions')),
+    selfPurchaseAmount: fmt(sumStr(rows, 'selfPurchaseAmount')),
+
+    storageFromSalesPercent: safeDivide(totalStorageFee * 100, totalSale),
+    costPrice: fmt(totalCostPrice),
+    storageFee: fmt(totalStorageFee),
+    acceptance: fmt(sumStr(rows, 'acceptance')),
+    additionalPayment: fmt(sumStr(rows, 'additionalPayment')),
+    penalty: fmt(sumStr(rows, 'penalty')),
+    taxes: fmt(sumStr(rows, 'taxes')),
+    commission: fmt(sumStr(rows, 'commission')),
+    selfPurchases: fmt(sumStr(rows, 'selfPurchases')),
+    acquiringFee: fmt(sumStr(rows, 'acquiringFee')),
+
+    cancellations: sumNum(rows, 'cancellations'),
+
+    salesReturnsNoSpp: fmt(sumStr(rows, 'salesReturnsNoSpp')),
+    salesWithSpp: fmt(sumStr(rows, 'salesWithSpp')),
+    returnsWithSpp: fmt(sumStr(rows, 'returnsWithSpp')),
+    salesNoSpp: fmt(sumStr(rows, 'salesNoSpp')),
+    returnsNoSpp: fmt(sumStr(rows, 'returnsNoSpp')),
+    commissionOnSale: fmt(sumStr(rows, 'commissionOnSale')),
+    commissionOnReturn: fmt(sumStr(rows, 'commissionOnReturn')),
+    deductions: fmt(sumStr(rows, 'deductions')),
+    salesToTransfer: fmt(sumStr(rows, 'salesToTransfer')),
+    returnsToTransfer: fmt(sumStr(rows, 'returnsToTransfer')),
+    acquiringOnSale: fmt(sumStr(rows, 'acquiringOnSale')),
+    tags: '',
+    acquiringOnReturn: fmt(sumStr(rows, 'acquiringOnReturn')),
+  }
+}
+
+function sumStr(rows: ReportRow[], key: keyof ReportRow): number {
+  return rows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0)
+}
+
+function sumNum(rows: ReportRow[], key: keyof ReportRow): number {
+  return rows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0)
+}
+
+function safeDivide(numerator: number, denominator: number): string {
+  if (denominator === 0) return '0.00'
+  return (numerator / denominator).toFixed(2)
+}
+
+function fmt(value: number): string {
+  return value.toFixed(2)
+}
