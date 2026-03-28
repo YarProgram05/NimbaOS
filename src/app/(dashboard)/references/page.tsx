@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import {
-  getCostPrices,
+  getCostPriceItems,
   getSelfPurchases,
   getExternalAds,
   getArticleOverrides,
@@ -61,9 +61,9 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
     : 'cost-price'
 
   // ── Fetch all datasets in parallel ──────────────────────────────────────────
-  const [costPrices, selfPurchases, externalAds, articleOverrides, vendorCodes] =
+  const [costPriceItems, selfPurchases, externalAds, articleOverrides, vendorCodes] =
     await Promise.all([
-      getCostPrices(wbAccountId),
+      getCostPriceItems(wbAccountId),
       getSelfPurchases(wbAccountId),
       getExternalAds(wbAccountId),
       getArticleOverrides(wbAccountId),
@@ -74,7 +74,7 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
     <ReferencesClient
       wbAccountId={wbAccountId}
       initialTab={tab}
-      costPrices={costPrices}
+      costPriceItems={costPriceItems}
       selfPurchases={selfPurchases}
       externalAds={externalAds}
       articleOverrides={articleOverrides}

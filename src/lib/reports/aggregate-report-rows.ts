@@ -33,6 +33,7 @@ export function aggregateReportRows(
     subjectName: options.subjectName ?? '',
     vendorCode: options.vendorCode ?? '',
     brandName: options.brandName ?? '',
+    photoUrl: null,
 
     sale: fmt(totalSale),
     toTransfer: fmt(totalToTransfer),

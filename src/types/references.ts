@@ -10,6 +10,19 @@ export interface CostPriceRow {
   updatedAt: string       // ISO datetime string
 }
 
+/** Merged view: all products joined with their cost price (if set). */
+export interface CostPriceItem {
+  id: string | null
+  wbAccountId: string
+  vendorCode: string
+  nmId: number | null
+  category: string | null
+  photoUrl: string | null
+  title: string | null
+  costPrice: string | null    // null if not yet set
+  updatedAt: string | null    // null if not yet set
+}
+
 export interface SelfPurchaseRow {
   id: string
   wbAccountId: string

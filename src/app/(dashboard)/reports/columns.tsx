@@ -1,5 +1,6 @@
 import type { ColumnDef, SortingFn } from '@tanstack/react-table'
 import type { ReportRow, ColumnGroup, ColumnGroupId } from '@/types/reports'
+import { WbArticleLink } from '@/components/wb-article-link'
 
 /** Numeric sort for string-valued columns (monetary, percentage).
  *  Fixes ascending sort of negatives: "-200" must come before "-100". */
@@ -48,8 +49,10 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     id: 'nmId',
     accessorKey: 'nmId',
     header: 'Арт. ВБ',
-    size: 100,
-    cell: ({ getValue }) => getValue<number>(),
+    size: 110,
+    cell: ({ row }) => (
+      <WbArticleLink nmId={row.original.nmId} photoUrl={row.original.photoUrl} />
+    ),
     meta: { group: 'identity', tooltip: 'Артикул товара в системе Wildberries (nmId)' },
   },
   {

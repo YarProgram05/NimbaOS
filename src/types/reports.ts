@@ -105,6 +105,7 @@ export interface ReportRow {
   subjectName: string                // Col 2  — Категория
   vendorCode: string                 // Col 3  — Артикул поставщика (с учётом переименования)
   brandName: string                  // Col 36 — Бренд
+  photoUrl: string | null            // Фото товара из таблицы Products (для тултипа)
 
   // Sales summary
   sale: string                       // Col 4  — Продажа

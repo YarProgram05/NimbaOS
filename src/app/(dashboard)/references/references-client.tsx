@@ -8,7 +8,7 @@ import { SelfPurchaseTab } from './self-purchase-tab'
 import { ExternalAdTab } from './external-ad-tab'
 import { ArticleOverrideTab } from './article-override-tab'
 import type {
-  CostPriceRow,
+  CostPriceItem,
   SelfPurchaseRow,
   ExternalAdRow,
   ArticleOverrideRow,
@@ -18,7 +18,7 @@ import type {
 interface ReferencesClientProps {
   wbAccountId: string
   initialTab: string
-  costPrices: CostPriceRow[]
+  costPriceItems: CostPriceItem[]
   selfPurchases: SelfPurchaseRow[]
   externalAds: ExternalAdRow[]
   articleOverrides: ArticleOverrideRow[]
@@ -28,7 +28,7 @@ interface ReferencesClientProps {
 export function ReferencesClient({
   wbAccountId,
   initialTab,
-  costPrices,
+  costPriceItems,
   selfPurchases,
   externalAds,
   articleOverrides,
@@ -66,8 +66,7 @@ export function ReferencesClient({
 
         <TabsContent value="cost-price" className="mt-4">
           <CostPriceTab
-            rows={costPrices}
-            vendorCodes={vendorCodes}
+            items={costPriceItems}
             wbAccountId={wbAccountId}
             onMutate={handleMutate}
           />

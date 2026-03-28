@@ -44,7 +44,7 @@ interface ArticleOverrideTabProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 100
 
 export function ArticleOverrideTab({
   rows,

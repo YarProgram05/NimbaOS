@@ -94,7 +94,7 @@ export async function exportReportXlsx(
     ]
 
     const headerLabels: Record<keyof ReportRow, string> = {
-      nmId: 'Артикул ВБ', subjectName: 'Категория', vendorCode: 'Артикул', brandName: 'Бренд',
+      nmId: 'Артикул ВБ', subjectName: 'Категория', vendorCode: 'Артикул', brandName: 'Бренд', photoUrl: '',
       sale: 'Продажа', toTransfer: 'К перечислению', totalToPay: 'Итого к оплате',
       operatingProfit: 'ОП', operatingProfitUnit: 'ОП ед.', operatingProfitShare: '% от ОП', avgPrice: 'Цена ср.',
       boughtWithReturns: 'Выкуплено', buyoutPercent: 'Выкуп %', boughtWithoutReturns: 'Без возврата', returns: 'Возвраты',

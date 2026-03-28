@@ -49,7 +49,7 @@ export async function calculateReport(
       }),
       prisma.product.findMany({
         where: { wbAccountId },
-        select: { nmId: true, vendorCode: true, category: true, brand: true },
+        select: { nmId: true, vendorCode: true, category: true, brand: true, photoUrl: true },
       }),
       prisma.paidStorage.findMany({
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
@@ -85,13 +85,14 @@ export async function calculateReport(
 
   const nmVendorMap = new Map<number, string>()
   const vendorNmMap = new Map<string, number>()
-  const productMetaMap = new Map<number, { subjectName: string; brandName: string }>()
+  const productMetaMap = new Map<number, { subjectName: string; brandName: string; photoUrl: string | null }>()
   for (const p of products) {
     if (p.vendorCode) nmVendorMap.set(p.nmId, p.vendorCode)
     if (p.vendorCode && !vendorNmMap.has(p.vendorCode)) vendorNmMap.set(p.vendorCode, p.nmId)
     productMetaMap.set(p.nmId, {
       subjectName: p.category ?? '',
       brandName: p.brand ?? '',
+      photoUrl: p.photoUrl ?? null,
     })
   }
 
@@ -215,7 +216,7 @@ function calculateGroup(
   overrideMap: Map<string, { localName: string | null }>,
   taxRate: number,
   nmVendorMap: Map<number, string>,
-  productMetaMap: Map<number, { subjectName: string; brandName: string }>,
+  productMetaMap: Map<number, { subjectName: string; brandName: string; photoUrl: string | null }>,
   extraStorageFee = 0,
   skipRealizationStorage = false,
 ): ReportRow {
@@ -223,6 +224,7 @@ function calculateGroup(
   const productMeta = nmId > 0 ? productMetaMap.get(nmId) : undefined
   let subjectName = productMeta?.subjectName ?? ''
   let brandName = productMeta?.brandName ?? ''
+  const photoUrl = productMeta?.photoUrl ?? null
 
   let salesAmtWithSpp = 0
   let salesAmtNoSpp = 0
@@ -384,6 +386,7 @@ function calculateGroup(
     subjectName,
     vendorCode: displayVendorCode,
     brandName,
+    photoUrl,
 
     sale: fmt(sale),
     toTransfer: fmt(toTransfer),

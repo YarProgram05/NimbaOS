@@ -1,5 +1,6 @@
 'use server'
 
+import * as XLSX from 'xlsx'
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -7,6 +8,7 @@ import { prisma } from '@/lib/db'
 import type { ActionResult } from '@/types'
 import type {
   CostPriceRow,
+  CostPriceItem,
   SelfPurchaseRow,
   ExternalAdRow,
   ArticleOverrideRow,
@@ -115,6 +117,87 @@ export async function getVendorCodes(wbAccountId: string): Promise<VendorCodeOpt
   })
 
   return rows.map((r) => ({ vendorCode: r.vendorCode, title: r.title }))
+}
+
+export async function getCostPriceItems(wbAccountId: string): Promise<CostPriceItem[]> {
+  await requireSession()
+
+  const [products, prices] = await Promise.all([
+    prisma.product.findMany({
+      where: { wbAccountId },
+      select: { vendorCode: true, nmId: true, category: true, photoUrl: true, title: true },
+      distinct: ['vendorCode'],
+      orderBy: { vendorCode: 'asc' },
+    }),
+    prisma.costPrice.findMany({ where: { wbAccountId } }),
+  ])
+
+  const priceMap = new Map(prices.map((p) => [p.vendorCode, p]))
+
+  return products.map((p) => {
+    const price = priceMap.get(p.vendorCode)
+    return {
+      id: price?.id ?? null,
+      wbAccountId,
+      vendorCode: p.vendorCode,
+      nmId: p.nmId,
+      category: p.category ?? null,
+      photoUrl: p.photoUrl ?? null,
+      title: p.title ?? null,
+      costPrice: price?.costPrice.toString() ?? null,
+      updatedAt: price?.updatedAt.toISOString() ?? null,
+    }
+  })
+}
+
+export async function bulkUpsertCostPrices(
+  wbAccountId: string,
+  items: { vendorCode: string; costPrice: number }[],
+): Promise<ActionResult<{ updated: number }>> {
+  await requireSession()
+
+  const valid = items.filter((i) => i.vendorCode.trim() && i.costPrice > 0)
+  if (!valid.length) return { success: true, data: { updated: 0 } }
+
+  await prisma.$transaction(
+    valid.map((item) =>
+      prisma.costPrice.upsert({
+        where: { wbAccountId_vendorCode: { wbAccountId, vendorCode: item.vendorCode } },
+        create: { wbAccountId, vendorCode: item.vendorCode, costPrice: item.costPrice },
+        update: { costPrice: item.costPrice },
+      }),
+    ),
+  )
+
+  revalidatePath('/references')
+  return { success: true, data: { updated: valid.length } }
+}
+
+export async function exportCostPriceTemplate(
+  wbAccountId: string,
+): Promise<ActionResult<{ base64: string; filename: string }>> {
+  await requireSession()
+
+  const items = await getCostPriceItems(wbAccountId)
+
+  const headers = ['Артикул продавца', 'Артикул ВБ', 'Категория', 'Себестоимость']
+  const data = items.map((item) => [
+    item.vendorCode,
+    item.nmId ?? '',
+    item.category ?? '',
+    item.costPrice ? parseFloat(item.costPrice) : '',
+  ])
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+  ws['!cols'] = [{ width: 30 }, { width: 15 }, { width: 20 }, { width: 15 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Себестоимость')
+
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+  const base64 = Buffer.from(buf).toString('base64')
+  const filename = `cost_price_${new Date().toISOString().slice(0, 10)}.xlsx`
+
+  return { success: true, data: { base64, filename } }
 }
 
 // ─── CostPrice Mutations ────────────────────────────────────────────────────
