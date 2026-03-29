@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import type { ActionResult } from '@/types'
+import { getAutoFillByNmId } from '@/lib/services/spp-calculator'
+import { syncOrders } from '@/lib/services/sync-orders'
+import { syncSales } from '@/lib/services/sync-sales'
 import type {
   SalesPlanRow,
   SalesPlanDetail,
@@ -12,6 +15,7 @@ import type {
   SalesPlanItemInput,
   SalesPlanUpdateInput,
   SalesPlanItemUpdateInput,
+  PlanSyncResult,
 } from '@/types/sales-plan'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -207,15 +211,28 @@ export async function addPlanItemsAction(
     if (!planId) return { success: false, error: 'План не указан' }
     if (!items.length) return { success: false, error: 'Список артикулов пуст' }
 
+    // Auto-fill buyout % and price for items with 0
+    const plan = await prisma.salesPlan.findUniqueOrThrow({
+      where: { id: planId },
+      select: { wbAccountId: true },
+    })
+    const needAutoFill = items.filter((i) => !i.buyoutPercent || !i.price)
+    const autoFillMap = needAutoFill.length
+      ? await getAutoFillByNmId(plan.wbAccountId, needAutoFill.map((i) => i.nmId))
+      : new Map()
+
     const result = await prisma.salesPlanItem.createMany({
-      data: items.map((i) => ({
-        planId,
-        nmId: i.nmId,
-        vendorCode: i.vendorCode,
-        plannedQty: i.plannedQty,
-        price: i.price,
-        buyoutPercent: i.buyoutPercent,
-      })),
+      data: items.map((i) => {
+        const af = autoFillMap.get(i.nmId)
+        return {
+          planId,
+          nmId: i.nmId,
+          vendorCode: i.vendorCode,
+          plannedQty: i.plannedQty,
+          price: i.price || af?.avgPrice || 0,
+          buyoutPercent: i.buyoutPercent || af?.buyoutPercent || 0,
+        }
+      }),
       skipDuplicates: true,
     })
 
@@ -251,18 +268,26 @@ export async function addItemsFromStockAction(
     })
     const existingNmIds = new Set(existingItems.map((i) => i.nmId))
 
-    const newItems = products
-      .filter((p) => !existingNmIds.has(p.nmId))
-      .map((p) => ({
+    const newProducts = products.filter((p) => !existingNmIds.has(p.nmId))
+    if (!newProducts.length) return { success: true, data: { added: 0 } }
+
+    // Auto-fill buyout % and avg price from realization reports (prev month)
+    const autoFillMap = await getAutoFillByNmId(
+      wbAccountId,
+      newProducts.map((p) => p.nmId),
+    )
+
+    const newItems = newProducts.map((p) => {
+      const af = autoFillMap.get(p.nmId)
+      return {
         planId,
         nmId: p.nmId,
         vendorCode: p.vendorCode,
         plannedQty: 0,
-        price: 0,
-        buyoutPercent: 0,
-      }))
-
-    if (!newItems.length) return { success: true, data: { added: 0 } }
+        price: af?.avgPrice ?? 0,
+        buyoutPercent: af?.buyoutPercent ?? 0,
+      }
+    })
 
     const result = await prisma.salesPlanItem.createMany({
       data: newItems,
@@ -316,5 +341,89 @@ export async function removePlanItemAction(
     return { success: true, data: undefined }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка удаления артикула' }
+  }
+}
+
+// ─── Search Products (for add-article dialog) ─────────────────────────────
+
+export interface ProductSearchRow {
+  nmId: number
+  vendorCode: string
+  category: string | null
+  photoUrl: string | null
+  title: string | null
+}
+
+export async function searchProductsForPlanAction(
+  wbAccountId: string,
+  query: string,
+): Promise<ActionResult<ProductSearchRow[]>> {
+  try {
+    await requireSession()
+    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
+    const q = query.trim()
+    if (!q) return { success: true, data: [] }
+
+    const isNumeric = /^\d+$/.test(q)
+
+    const products = await prisma.product.findMany({
+      where: {
+        wbAccountId,
+        ...(isNumeric
+          ? { nmId: { equals: parseInt(q) } }
+          : { vendorCode: { contains: q, mode: 'insensitive' as const } }),
+      },
+      select: { nmId: true, vendorCode: true, category: true, photoUrl: true, title: true },
+      take: 50,
+    })
+
+    return { success: true, data: products }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка поиска' }
+  }
+}
+
+// ─── Sync Plan Data (orders + sales) ──────────────────────────────────────
+
+export async function syncPlanDataAction(
+  planId: string,
+  mode: 'today' | 'full' | 'custom',
+  customFrom?: string,
+  customTo?: string,
+): Promise<ActionResult<PlanSyncResult>> {
+  try {
+    await requireSession()
+    if (!planId) return { success: false, error: 'План не указан' }
+
+    const plan = await prisma.salesPlan.findUnique({
+      where: { id: planId },
+      select: { wbAccountId: true, dateFrom: true, dateTo: true },
+    })
+    if (!plan) return { success: false, error: 'План не найден' }
+
+    // Determine sync period
+    let dateFrom: string
+    if (mode === 'today') {
+      dateFrom = new Date().toISOString().slice(0, 10)
+    } else if (mode === 'custom' && customFrom) {
+      dateFrom = customFrom
+    } else {
+      // full — from plan start
+      dateFrom = plan.dateFrom.toISOString().slice(0, 10)
+    }
+
+    // Sequential: orders → sales (both on statistics domain, 1 req/min)
+    const ordersResult = await syncOrders(plan.wbAccountId, dateFrom)
+    const salesResult = await syncSales(plan.wbAccountId, dateFrom)
+
+    return {
+      success: true,
+      data: {
+        orders: ordersResult,
+        sales: salesResult,
+      },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации' }
   }
 }

@@ -6,7 +6,7 @@
 ## Проект
 
 **NimbaOS** — закрытая веб-платформа оцифровки кабинетов продавца на Wildberries.
-Последнее обновление: **2026-03-29** | Следующая задача: **Фаза 6 (план продаж)**
+Последнее обновление: **2026-03-29** | Текущая задача: **Фаза 6 (план продаж) — подзадачи 1–4a завершены**
 
 ## Стек
 
@@ -162,35 +162,71 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 
 ## Фаза 6 — План продаж (🔧 в работе)
 
-### Подзадача 1 (✅ завершена): Prisma schema + типы + CRUD Server Actions
+> Детальный план подзадач — в [PHASE6_PLAN.md](PHASE6_PLAN.md)
 
-**Новые модели Prisma:**
-- `WbOrder` (таблица `wb_orders`, unique: `[wbAccountId, srid]`) — заказы из WB statistics API
-- `WbSale` (таблица `wb_sales`, unique: `[wbAccountId, srid]`) — продажи из WB statistics API
-- `SalesPlan` и `SalesPlanItem` — уже были в схеме (Phase 0)
+### Подзадача 1 (✅): Prisma schema + типы + CRUD Server Actions
+- Модели `WbOrder`, `WbSale` + relations; `SalesPlan`, `SalesPlanItem` уже были
+- `src/types/sales-plan.ts` — WB API types, internal types, sync results, daily metrics
+- `src/lib/actions/sales-plan.ts` — 11 Server Actions (CRUD + sync + search)
 
-**Новые файлы:**
-- `src/types/sales-plan.ts` — типы: WB API responses (`WbOrderRow`, `WbSaleRow`), internal types (`SalesPlanRow`, `SalesPlanDetail`, `SalesPlanItemRow`), input types, sync results, daily metrics (`DailyMetrics`, `ArticleDetailData`, `PlanMetricsData`)
-- `src/lib/actions/sales-plan.ts` — 9 Server Actions: `getPlansAction`, `createPlanAction`, `getPlanDetailAction`, `updatePlanAction`, `deletePlanAction`, `addPlanItemsAction`, `addItemsFromStockAction`, `updatePlanItemAction`, `removePlanItemAction`
+### Подзадача 2 (✅): UI списка планов + создание плана
+- `src/app/(dashboard)/sales-plan/page.tsx` — Server Component: resolve account, fetch plans
+- `src/app/(dashboard)/sales-plan/sales-plan-client.tsx` — карточки планов, удаление с подтверждением, пустое состояние
+- `src/app/(dashboard)/sales-plan/create-plan-dialog.tsx` — Dialog: название, период (DateRangePicker), ДРР %
 
-**Ключевые решения:**
-- `getPlanDetailAction` обогащает items данными из Products (photoUrl, category, title, brand)
-- `addItemsFromStockAction` проверяет дубликаты по nmId перед добавлением
-- Decimal-поля сериализуются в string (как в reports)
+### Подзадача 3 (✅): Детализация плана — управление артикулами
+- `src/app/(dashboard)/sales-plan/[planId]/page.tsx` — Server Component
+- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — шапка (inline-edit), таблица артикулов (inline-edit план/цена/выкуп%), сортировка, dropdown «Добавить артикулы» (из остатков / по-отдельности), удаление артикулов
+- `src/app/(dashboard)/sales-plan/[planId]/add-article-dialog.tsx` — поиск по nmId/vendorCode, чекбоксы, массовое добавление
+- `src/lib/services/spp-calculator.ts` — `getAutoFillByNmId`: средний % выкупа и средняя цена из `RealizationReport` за прошлый месяц (auto-fill при добавлении)
 
-### Что ещё предстоит (подзадачи 2–8):
-- UI списка планов (карточки) + диалог создания
-- Детализация плана с inline-редактированием артикулов
-- WB API интеграция: Orders + Sales (statistics domain) + Analytics Funnel (analytics domain)
-- Калькулятор ежедневных метрик
-- UI daily grid (перевёрнутая таблица: метрики × даты)
-- Аналитика воронки (Переходы, Корзина %, Корзина шт., Заказ %)
-- Excel-экспорт + полировка
+### Подзадача 4a (✅): WB API — заказы и продажи + sync-сервисы
+- `src/lib/wb-api/orders.ts` — `fetchOrdersPage` (statistics domain, lastChangeDate пагинация)
+- `src/lib/wb-api/sales.ts` — `fetchSalesPage` (аналогично)
+- `src/lib/services/sync-orders.ts` — `syncOrders`: decrypt → paginate → createMany skipDuplicates
+- `src/lib/services/sync-sales.ts` — `syncSales`: аналогично, `isReturn` по `saleID.startsWith('R')`
+- `syncPlanDataAction` — оркестратор: mode (today/full/custom) → syncOrders → syncSales последовательно
+
+### Что ещё предстоит (подзадачи 4b–7):
+- 4b: WB API аналитика воронки (Prisma model WbFunnelStat, sync-funnel)
+- 5: Калькулятор ежедневных метрик
+- 6: UI daily grid (перевёрнутая таблица: метрики × даты)
+- 7: Excel-экспорт + полировка
 
 ### WB API endpoints для Фазы 6:
 - `GET /api/v1/supplier/orders` — statistics domain, пагинация lastChangeDate, стоп на `[]`
 - `GET /api/v1/supplier/sales` — statistics domain, аналогичная пагинация
 - `POST /api/analytics/v3/sales-funnel/products/history` — analytics domain, воронка по дням
+
+### Итог сессии 2026-03-29 — Фаза 6: подзадачи 2–4a
+
+#### 1. Что сделано
+- UI списка планов: карточки с названием, периодом, ДРР, кол-вом артикулов
+- Создание плана через диалог (название, описание, DateRangePicker, ДРР %)
+- Удаление планов из списка с диалогом подтверждения
+- Детализация плана: шапка (inline-edit), таблица артикулов (inline-edit по 3 полям: план шт., цена, выкуп %)
+- Добавление артикулов: «Из остатков» (все Products аккаунта) и «По-отдельности» (поиск по nmId/vendorCode)
+- Удаление артикулов из плана (иконка корзины)
+- Автозаполнение % выкупа и средней цены из RealizationReport за прошлый календарный месяц
+- WB API: fetchOrdersPage / fetchSalesPage (statistics domain, lastChangeDate пагинация)
+- Sync-сервисы: syncOrders / syncSales → createMany skipDuplicates
+- syncPlanDataAction: оркестратор синхронизации (today/full/custom)
+
+#### 2. Что работает
+- Полный CRUD планов: создание, просмотр списка, переход в детализацию, удаление
+- Управление артикулами: добавление из остатков / поштучно, inline-редактирование, удаление
+- Автозаполнение цены и выкупа из данных прошлого месяца при добавлении артикулов
+- Навигация: `/sales-plan` → `/sales-plan/[planId]` с `?account=` параметром
+- Sync-сервисы для заказов и продаж WB (слой данных готов)
+
+#### 3. Что осталось доделать
+- Подзадача 4b: аналитика воронки (WbFunnelStat, sync-funnel)
+- Подзадача 5: калькулятор ежедневных метрик
+- Подзадача 6: UI daily grid
+- Подзадача 7: Excel-экспорт + полировка
+
+#### 4. Известные баги
+- Автозаполнение % выкупа и средней цены при добавлении артикулов может давать некорректные значения — требуется проработка формул расчёта (данные берутся из RealizationReport за прошлый месяц, но логика агрегации нуждается в уточнении)
 
 ## Критические особенности Prisma 7
 

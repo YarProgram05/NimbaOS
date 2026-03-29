@@ -40,7 +40,7 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
 
 ---
 
-### Подзадача 2: UI списка планов + создание плана
+### Подзадача 2: UI списка планов + создание плана ✅
 
 **Цель:** Заменить заглушку на рабочий список планов с карточками и диалогом создания.
 
@@ -51,56 +51,50 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
   - Кнопка «Создать план» → открывает диалог
   - Клик по карточке → переход на `/sales-plan/[planId]?account=...`
   - Пустое состояние: «Нет планов. Создайте первый.»
+  - Удаление плана: иконка корзины на карточке (hover) + диалог подтверждения
 - `src/app/(dashboard)/sales-plan/create-plan-dialog.tsx` — Dialog с формой:
   - Поля: название, описание (optional), dateFrom, dateTo, целевой ДРР %
   - Submit → `createPlanAction` → redirect на детализацию
 
-**Паттерны:** shadcn Dialog, Card; DateRangePicker из `src/components/date-range-picker.tsx`; `useTransition` для loading
-
-**Проверка:** Открыть `/sales-plan`, создать план, увидеть карточку, кликнуть — попасть в детализацию.
+**Статус:** Завершена.
 
 ---
 
-### Подзадача 3: Детализация плана — управление артикулами
+### Подзадача 3: Детализация плана — управление артикулами ✅
 
 **Цель:** Страница плана позволяет добавлять/удалять/редактировать артикулы inline.
 
 **Файлы:**
 - `src/app/(dashboard)/sales-plan/[planId]/page.tsx` — Server Component: fetch plan detail, render client
 - `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — Client Component:
-  - Шапка плана (название, период, ДРР — редактируемые)
+  - Шапка плана (название, ДРР — inline-редактируемые)
   - Таблица артикулов: Арт. ВБ (WbArticleLink), Артикул поставщика, Категория, План шт. (edit), Цена (edit), Выкуп % (edit)
   - Inline-редактирование по паттерну из `cost-price-tab.tsx` (editValues, dirty, save on Enter/checkmark)
   - Кнопка «Добавить артикулы» с dropdown: «Из остатков» / «По-отдельности»
-  - «Из остатков» → `addItemsFromStockAction` (все Products аккаунта)
-  - «По-отдельности» → диалог поиска
   - Удаление артикулов (иконка корзины в строке)
-- `src/app/(dashboard)/sales-plan/[planId]/add-article-dialog.tsx` — поиск по nmId/vendorCode, выбор, подтверждение
-- `src/lib/services/spp-calculator.ts` — `getAvgSppByNmId(wbAccountId, nmIds[], days=14)`: средний SPP из `RealizationReport` для auto-fill buyoutPercent
+  - Сортировка по всем столбцам
+- `src/app/(dashboard)/sales-plan/[planId]/add-article-dialog.tsx` — поиск по nmId/vendorCode, чекбоксы, массовое добавление
+- `src/lib/services/spp-calculator.ts` — `getAutoFillByNmId(wbAccountId, nmIds[])`: средний % выкупа и средняя цена из `RealizationReport` за прошлый календарный месяц
+- `src/lib/actions/sales-plan.ts` — добавлен `searchProductsForPlanAction` для поиска товаров
 
-**Паттерны:** `WbArticleLink` из `src/components/wb-article-link.tsx`; inline edit из `cost-price-tab.tsx`
+**Известный баг:** автозаполнение % выкупа и средней цены может давать некорректные значения — требуется проработка формул.
 
-**Проверка:** Добавить артикулы из остатков, отредактировать план/цену/выкуп inline, удалить артикул. SPP автозаполняется.
+**Статус:** Завершена.
 
 ---
 
-### Подзадача 4a: WB API — заказы и продажи + sync-сервисы
+### Подзадача 4a: WB API — заказы и продажи + sync-сервисы ✅
 
 **Цель:** Получать данные о заказах и продажах из WB API, хранить в БД.
 
 **Файлы:**
-- `src/lib/wb-api/orders.ts` — `fetchOrdersPage(client, dateFrom, lastChangeDate?)`: `GET /api/v1/supplier/orders` (statistics domain, пагинация через lastChangeDate, стоп на `[]`)
-- `src/lib/wb-api/sales.ts` — `fetchSalesPage(client, dateFrom, lastChangeDate?)`: `GET /api/v1/supplier/sales` (statistics domain, аналогичная пагинация)
+- `src/lib/wb-api/orders.ts` — `fetchOrdersPage(client, dateFrom, lastChangeDate?)`: `GET /api/v1/supplier/orders` (statistics domain, пагинация через flag=1 + lastChangeDate, стоп на `[]`)
+- `src/lib/wb-api/sales.ts` — `fetchSalesPage(client, dateFrom, lastChangeDate?)`: аналогично для `/api/v1/supplier/sales`
 - `src/lib/services/sync-orders.ts` — `syncOrders(wbAccountId, dateFrom)`: decrypt key → WbApiClient → paginate → createMany skipDuplicates → return OrdersSyncResult
-- `src/lib/services/sync-sales.ts` — `syncSales(wbAccountId, dateFrom)`: аналогично
-- `src/lib/actions/sales-plan.ts` — добавить:
-  - `syncPlanDataAction(planId, mode: 'today'|'full'|'custom', customFrom?, customTo?)` — orchestrates: sync orders → sync sales → sync funnel (последовательно)
+- `src/lib/services/sync-sales.ts` — `syncSales(wbAccountId, dateFrom)`: аналогично, `isReturn` определяется по `saleID.startsWith('R')`
+- `src/lib/actions/sales-plan.ts` — `syncPlanDataAction(planId, mode, customFrom?, customTo?)`: оркестратор sync orders → sync sales последовательно
 
-**Rate limits:** statistics domain = 1 req/min. Оба API на одном домене → синхронизация последовательная.
-
-**Паттерны:** `WbApiClient` из `src/lib/wb-api/client.ts`; sync pattern из `src/lib/services/sync-reports.ts`
-
-**Проверка:** Вызвать `syncPlanDataAction`, проверить записи в `wb_orders` и `wb_sales` в БД.
+**Статус:** Завершена.
 
 ---
 
@@ -243,9 +237,9 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
 
 ```
 Подзадача 1 (Schema + Types + Actions) ✅
-  → Подзадача 2 (Plan List UI)
-    → Подзадача 3 (Article Management)
-      → Подзадача 4a (WB API: Orders + Sales)
+  → Подзадача 2 (Plan List UI) ✅
+    → Подзадача 3 (Article Management) ✅
+      → Подзадача 4a (WB API: Orders + Sales) ✅
         → Подзадача 4b (WB API: Analytics Funnel)
           → Подзадача 5 (Calculator + Funnel)
             → Подзадача 6 (Daily Grid UI + Funnel rows)
