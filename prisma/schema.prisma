@@ -66,6 +66,8 @@ model WbAccount {
   paidStorage        PaidStorage[]
   adCampaigns        AdCampaign[]
   salesPlans         SalesPlan[]
+  wbOrders           WbOrder[]
+  wbSales            WbSale[]
   costPrices         CostPrice[]
   selfPurchases      SelfPurchase[]
   externalAds        ExternalAd[]
@@ -377,4 +379,51 @@ model SalesPlanItem {
   @@index([planId])
   @@index([nmId])
   @@map("sales_plan_items")
+}
+
+// ─── WB Orders & Sales (for Sales Plan) ──────────────────────
+
+model WbOrder {
+  id              String   @id @default(uuid())
+  wbAccountId     String
+  srid            String
+  nmId            Int
+  vendorCode      String
+  date            DateTime @db.Date
+  lastChangeDate  DateTime
+  finishedPrice   Decimal  @db.Decimal(10, 2)
+  isCancel        Boolean  @default(false)
+  regionName      String?
+  warehouseName   String?
+  fetchedAt       DateTime @default(now())
+
+  wbAccount       WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, srid])
+  @@index([wbAccountId, nmId, date])
+  @@index([wbAccountId, date])
+  @@index([wbAccountId, lastChangeDate])
+  @@map("wb_orders")
+}
+
+model WbSale {
+  id              String   @id @default(uuid())
+  wbAccountId     String
+  srid            String
+  nmId            Int
+  vendorCode      String
+  date            DateTime @db.Date
+  lastChangeDate  DateTime
+  priceWithDisc   Decimal  @db.Decimal(10, 2)
+  forPay          Decimal  @db.Decimal(10, 2)
+  isReturn        Boolean  @default(false)
+  fetchedAt       DateTime @default(now())
+
+  wbAccount       WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, srid])
+  @@index([wbAccountId, nmId, date])
+  @@index([wbAccountId, date])
+  @@index([wbAccountId, lastChangeDate])
+  @@map("wb_sales")
 }

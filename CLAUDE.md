@@ -23,7 +23,7 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 | 3 | ✅ | Карточки: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
 | 4 | ✅ | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
 | **5** | **✅** | **Финансовые отчёты** — UI, формулы, сортировка, DnD колонок, фильтры, группировка; Storage API (paid-storage per-article) |
-| 6 | — | План продаж |
+| **6** | **🔧** | **План продаж** — CRUD, UI списка/детализации, WB Orders/Sales/Funnel API, daily grid, Excel-экспорт |
 | 7 | — | Рекламные кампании |
 | 8 | — | Фоновая синхронизация (Bull MQ) |
 | 9 | — | Финальная доработка (Excel, responsive, Docker prod) |
@@ -157,6 +157,40 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 
 #### 4. Известные баги
 - Подтверждённых багов нет.
+
+---
+
+## Фаза 6 — План продаж (🔧 в работе)
+
+### Подзадача 1 (✅ завершена): Prisma schema + типы + CRUD Server Actions
+
+**Новые модели Prisma:**
+- `WbOrder` (таблица `wb_orders`, unique: `[wbAccountId, srid]`) — заказы из WB statistics API
+- `WbSale` (таблица `wb_sales`, unique: `[wbAccountId, srid]`) — продажи из WB statistics API
+- `SalesPlan` и `SalesPlanItem` — уже были в схеме (Phase 0)
+
+**Новые файлы:**
+- `src/types/sales-plan.ts` — типы: WB API responses (`WbOrderRow`, `WbSaleRow`), internal types (`SalesPlanRow`, `SalesPlanDetail`, `SalesPlanItemRow`), input types, sync results, daily metrics (`DailyMetrics`, `ArticleDetailData`, `PlanMetricsData`)
+- `src/lib/actions/sales-plan.ts` — 9 Server Actions: `getPlansAction`, `createPlanAction`, `getPlanDetailAction`, `updatePlanAction`, `deletePlanAction`, `addPlanItemsAction`, `addItemsFromStockAction`, `updatePlanItemAction`, `removePlanItemAction`
+
+**Ключевые решения:**
+- `getPlanDetailAction` обогащает items данными из Products (photoUrl, category, title, brand)
+- `addItemsFromStockAction` проверяет дубликаты по nmId перед добавлением
+- Decimal-поля сериализуются в string (как в reports)
+
+### Что ещё предстоит (подзадачи 2–8):
+- UI списка планов (карточки) + диалог создания
+- Детализация плана с inline-редактированием артикулов
+- WB API интеграция: Orders + Sales (statistics domain) + Analytics Funnel (analytics domain)
+- Калькулятор ежедневных метрик
+- UI daily grid (перевёрнутая таблица: метрики × даты)
+- Аналитика воронки (Переходы, Корзина %, Корзина шт., Заказ %)
+- Excel-экспорт + полировка
+
+### WB API endpoints для Фазы 6:
+- `GET /api/v1/supplier/orders` — statistics domain, пагинация lastChangeDate, стоп на `[]`
+- `GET /api/v1/supplier/sales` — statistics domain, аналогичная пагинация
+- `POST /api/analytics/v3/sales-funnel/products/history` — analytics domain, воронка по дням
 
 ## Критические особенности Prisma 7
 
