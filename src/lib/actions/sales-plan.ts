@@ -110,12 +110,39 @@ export async function getPlanDetailAction(
 
     // Enrich items with Product data (photo, category, title, brand)
     const nmIds = plan.items.map((i) => i.nmId)
-    const products = nmIds.length > 0
-      ? await prisma.product.findMany({
-          where: { wbAccountId: plan.wbAccountId, nmId: { in: nmIds } },
-          select: { nmId: true, photoUrl: true, category: true, title: true, brand: true },
-        })
-      : []
+    const [products, salesCounts] = await Promise.all([
+      nmIds.length > 0
+        ? prisma.product.findMany({
+            where: { wbAccountId: plan.wbAccountId, nmId: { in: nmIds } },
+            select: { nmId: true, photoUrl: true, category: true, title: true, brand: true },
+          })
+        : Promise.resolve([]),
+      // Sales count for previous calendar month (from RealizationReport — same source as autofill)
+      nmIds.length > 0
+        ? (async () => {
+            const now = new Date()
+            const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+            const to = new Date(now.getFullYear(), now.getMonth(), 0)
+            const rows = await prisma.realizationReport.findMany({
+              where: {
+                wbAccountId: plan.wbAccountId,
+                nmId: { in: nmIds },
+                docTypeName: 'Продажа',
+                OR: [
+                  { rrDt: { gte: from, lte: to } },
+                  { rrDt: null, dateFrom: { lte: to }, dateTo: { gte: from } },
+                ],
+              },
+              select: { nmId: true, quantity: true },
+            })
+            const countMap = new Map<number, number>()
+            for (const row of rows) {
+              countMap.set(row.nmId, (countMap.get(row.nmId) ?? 0) + Math.abs(row.quantity))
+            }
+            return countMap
+          })()
+        : Promise.resolve(new Map<number, number>()),
+    ])
     const productMap = new Map(products.map((p) => [p.nmId, p]))
 
     const items: SalesPlanItemRow[] = plan.items.map((i) => {
@@ -131,6 +158,7 @@ export async function getPlanDetailAction(
         category: prod?.category ?? null,
         title: prod?.title ?? null,
         brandName: prod?.brand ?? null,
+        salesCount: salesCounts.get(i.nmId) ?? null,
       }
     })
 
@@ -229,7 +257,7 @@ export async function addPlanItemsAction(
           nmId: i.nmId,
           vendorCode: i.vendorCode,
           plannedQty: i.plannedQty,
-          price: i.price || af?.avgPrice || 0,
+          price: i.price || af?.currentPrice || 0,
           buyoutPercent: i.buyoutPercent || af?.buyoutPercent || 0,
         }
       }),
@@ -284,7 +312,7 @@ export async function addItemsFromStockAction(
         nmId: p.nmId,
         vendorCode: p.vendorCode,
         plannedQty: 0,
-        price: af?.avgPrice ?? 0,
+        price: af?.currentPrice ?? 0,
         buyoutPercent: af?.buyoutPercent ?? 0,
       }
     })

@@ -19,7 +19,7 @@
 
 ```
 WbOrder:      id, wbAccountId, srid (unique), nmId, vendorCode, date, lastChangeDate, finishedPrice, isCancel
-WbSale:       id, wbAccountId, srid (unique), nmId, vendorCode, date, lastChangeDate, priceWithDisc, forPay, isReturn
+WbSale:       id, wbAccountId, srid (unique), nmId, vendorCode, date, lastChangeDate, finishedPrice (nullable), priceWithDisc, forPay, isReturn
 WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartConversion, cartCount, cartToOrderConversion, ordersCount, ordersSumRub
 ```
 
@@ -74,10 +74,12 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
   - Удаление артикулов (иконка корзины в строке)
   - Сортировка по всем столбцам
 - `src/app/(dashboard)/sales-plan/[planId]/add-article-dialog.tsx` — поиск по nmId/vendorCode, чекбоксы, массовое добавление
-- `src/lib/services/spp-calculator.ts` — `getAutoFillByNmId(wbAccountId, nmIds[])`: средний % выкупа и средняя цена из `RealizationReport` за прошлый календарный месяц
-- `src/lib/actions/sales-plan.ts` — добавлен `searchProductsForPlanAction` для поиска товаров
-
-**Известный баг:** автозаполнение % выкупа и средней цены может давать некорректные значения — требуется проработка формул.
+- `src/lib/services/spp-calculator.ts` — `getAutoFillByNmId(wbAccountId, nmIds[])`:
+  - **Цена:** `ProductSize.price × (1 − discount/100)`, среднее по размерам (та же цена, что в разделе «Карточки»)
+  - **Кол-во продаж / % выкупа:** из `RealizationReport` за прошлый месяц; формула идентична `report-calculator.ts`; OR-фильтр для строк с `rrDt=null`
+- `src/lib/actions/sales-plan.ts` — `searchProductsForPlanAction` + в `getPlanDetailAction` подтягивается `salesCount` из `RealizationReport`
+- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — добавлена сортируемая колонка «Продажи, шт.» (кол-во Продажа-строк за прошлый месяц)
+- `src/types/sales-plan.ts` — добавлено поле `salesCount: number | null` в `SalesPlanItemRow`
 
 **Статус:** Завершена.
 

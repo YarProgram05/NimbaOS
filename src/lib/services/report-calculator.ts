@@ -45,7 +45,7 @@ export async function calculateReport(
       prisma.articleOverride.findMany({ where: { wbAccountId } }),
       prisma.wbAccount.findUniqueOrThrow({
         where: { id: wbAccountId },
-        select: { taxRate: true },
+        select: { taxRate: true, lastSyncAt: true },
       }),
       prisma.product.findMany({
         where: { wbAccountId },
@@ -183,20 +183,10 @@ export async function calculateReport(
 
   const summary = aggregateReportRows(reportRows, { subjectName: SUMMARY_LABEL })
 
-  let lastSyncAt: string | null = null
-  if (rows.length > 0) {
-    const maxFetched = rows.reduce<Date>(
-      (max: Date, row: DbRow) => (row.fetchedAt > max ? row.fetchedAt : max),
-      rows[0].fetchedAt,
-    )
-    lastSyncAt = maxFetched.toISOString()
-  } else if (paidStorageRows.length > 0) {
-    const maxFetched = paidStorageRows.reduce<Date>(
-      (max, row) => (row.fetchedAt > max ? row.fetchedAt : max),
-      paidStorageRows[0].fetchedAt,
-    )
-    lastSyncAt = maxFetched.toISOString()
-  }
+  // Use WbAccount.lastSyncAt (updated by syncReportsAction) as the authoritative
+  // sync time. createMany(skipDuplicates) doesn't update fetchedAt on existing rows,
+  // so max(fetchedAt) would show a stale date on re-syncs.
+  const lastSyncAt: string | null = account.lastSyncAt?.toISOString() ?? null
 
   return {
     rows: reportRows,

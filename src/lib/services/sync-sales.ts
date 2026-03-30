@@ -30,6 +30,38 @@ export async function syncSales(
 
   let lastChangeDate: string | undefined = undefined
 
+  async function createSales(rows: Awaited<ReturnType<typeof fetchSalesPage>>) {
+    const mappedBase = rows.map((row) => ({
+      wbAccountId,
+      srid: row.srid,
+      nmId: row.nmId,
+      vendorCode: row.supplierArticle,
+      date: new Date(row.date),
+      lastChangeDate: new Date(row.lastChangeDate),
+      priceWithDisc: row.priceWithDisc,
+      forPay: row.forPay,
+      isReturn: row.saleID.startsWith('R'),
+    }))
+
+    try {
+      return await prisma.wbSale.createMany({
+        data: mappedBase.map((row, index) => ({
+          ...row,
+          finishedPrice: rows[index].finishedPrice,
+        })),
+        skipDuplicates: true,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (!message.includes('finishedPrice')) throw error
+
+      return prisma.wbSale.createMany({
+        data: mappedBase,
+        skipDuplicates: true,
+      })
+    }
+  }
+
   while (true) {
     let rows
     try {
@@ -46,21 +78,7 @@ export async function syncSales(
     result.totalRows += rows.length
 
     try {
-      const mapped = rows.map((row) => ({
-        wbAccountId,
-        srid: row.srid,
-        nmId: row.nmId,
-        vendorCode: row.supplierArticle,
-        date: new Date(row.date),
-        lastChangeDate: new Date(row.lastChangeDate),
-        priceWithDisc: row.priceWithDisc,
-        forPay: row.forPay,
-        isReturn: row.saleID.startsWith('R'),
-      }))
-      const { count } = await prisma.wbSale.createMany({
-        data: mapped,
-        skipDuplicates: true,
-      })
+      const { count } = await createSales(rows)
       result.upserted += count
     } catch {
       result.errors++

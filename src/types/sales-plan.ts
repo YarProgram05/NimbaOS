@@ -86,6 +86,8 @@ export interface SalesPlanItemRow {
   category: string | null
   title: string | null
   brandName: string | null
+  // Enriched from WbSale (previous month stats)
+  salesCount: number | null
 }
 
 export interface SalesPlanDetail {

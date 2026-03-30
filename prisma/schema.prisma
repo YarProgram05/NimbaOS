@@ -414,6 +414,7 @@ model WbSale {
   vendorCode      String
   date            DateTime @db.Date
   lastChangeDate  DateTime
+  finishedPrice   Decimal? @db.Decimal(10, 2)  // фактическая цена покупателя (с учётом СПП)
   priceWithDisc   Decimal  @db.Decimal(10, 2)
   forPay          Decimal  @db.Decimal(10, 2)
   isReturn        Boolean  @default(false)

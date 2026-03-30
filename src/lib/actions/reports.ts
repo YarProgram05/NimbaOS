@@ -32,6 +32,14 @@ export async function syncReportsAction(
     const result = await syncRealizationReport(wbAccountId, dateFrom, dateTo)
     const storageResult = await syncPaidStorage(wbAccountId, dateFrom, dateTo)
 
+    // Stamp lastSyncAt so the UI always shows the actual sync time,
+    // not max(fetchedAt) which doesn't update for existing rows (skipDuplicates).
+    const { prisma } = await import('@/lib/db')
+    await prisma.wbAccount.update({
+      where: { id: wbAccountId },
+      data: { lastSyncAt: new Date() },
+    })
+
     return {
       success: true,
       data: {

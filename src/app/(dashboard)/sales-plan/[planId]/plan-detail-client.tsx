@@ -44,7 +44,7 @@ interface PlanDetailClientProps {
 
 type EditField = 'plannedQty' | 'price' | 'buyoutPercent'
 
-type SortCol = 'vendorCode' | 'nmId' | 'category' | 'plannedQty' | 'price' | 'buyoutPercent'
+type SortCol = 'vendorCode' | 'nmId' | 'category' | 'plannedQty' | 'price' | 'buyoutPercent' | 'salesCount'
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -214,6 +214,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
         case 'plannedQty': va = a.plannedQty; vb = b.plannedQty; break
         case 'price': va = parseFloat(a.price); vb = parseFloat(b.price); break
         case 'buyoutPercent': va = parseFloat(a.buyoutPercent); vb = parseFloat(b.buyoutPercent); break
+        case 'salesCount': va = a.salesCount ?? -1; vb = b.salesCount ?? -1; break
       }
       const cmp = va < vb ? -1 : va > vb ? 1 : 0
       return sortDir === 'asc' ? cmp : -cmp
@@ -352,6 +353,9 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                 <th className="px-4 py-3 text-left font-medium cursor-pointer select-none" onClick={() => handleSort('price')}>
                   <span className="flex items-center">Цена <SortIcon col="price" /></span>
                 </th>
+                <th className="px-4 py-3 text-left font-medium cursor-pointer select-none" onClick={() => handleSort('salesCount')}>
+                  <span className="flex items-center" title="Кол-во продаж (выкупов) за прошлый календарный месяц из WB">Продажи, шт. <SortIcon col="salesCount" /></span>
+                </th>
                 <th className="px-4 py-3 text-left font-medium cursor-pointer select-none" onClick={() => handleSort('buyoutPercent')}>
                   <span className="flex items-center">Выкуп, % <SortIcon col="buyoutPercent" /></span>
                 </th>
@@ -391,6 +395,9 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                         onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
                         className="h-9 w-28"
                       />
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {item.salesCount != null ? item.salesCount : '—'}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
