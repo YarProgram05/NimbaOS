@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useTransition, useRef } from 'react'
+import { useState, useEffect, useMemo, useTransition, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -9,12 +9,16 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  ChevronRight,
+  Download,
   Package,
   Plus,
+  RefreshCw,
   Trash2,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,9 +35,13 @@ import {
   updatePlanItemAction,
   removePlanItemAction,
   addItemsFromStockAction,
+  syncPlanDataAction,
+  getPlanMetricsAction,
+  exportPlanXlsxAction,
 } from '@/lib/actions/sales-plan'
-import type { SalesPlanDetail, SalesPlanItemRow } from '@/types/sales-plan'
+import type { SalesPlanDetail, SalesPlanItemRow, PlanMetricsData, ArticleDetailData } from '@/types/sales-plan'
 import { AddArticleDialog } from './add-article-dialog'
+import { ArticleDetailGrid } from './article-detail-grid'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +81,17 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
   // Add dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [isAddingFromStock, startAddFromStock] = useTransition()
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  // Metrics state
+  const [metricsData, setMetricsData] = useState<PlanMetricsData | null>(null)
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false)
+
+  // Expand/collapse state
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   // ── Init edit values from plan items ────────────────────────────────────
   useEffect(() => {
@@ -132,8 +151,6 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       [itemId]: { ...(prev[itemId] ?? { plannedQty: '0', price: '0', buyoutPercent: '0' }), [field]: value },
     }))
 
-    // Check if dirty
-    const original = field === 'plannedQty' ? String(item.plannedQty) : item[field]
     setDirty((prev) => {
       const next = new Set(prev)
       const curValues = {
@@ -190,6 +207,89 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
         toast.error(result.error)
       }
     })
+  }
+
+  // ── Sync data ─────────────────────────────────────────────────────────
+  const handleSync = useCallback(async (mode: 'today' | 'full') => {
+    if (isSyncing) return
+    setIsSyncing(true)
+    setSyncMessage('Синхронизация заказов и продаж...')
+
+    const syncResult = await syncPlanDataAction(plan.id, mode)
+
+    if (syncResult.success) {
+      const { orders, sales, funnel } = syncResult.data
+      setSyncMessage(
+        `Заказы: ${orders.upserted} | Продажи: ${sales.upserted} | Воронка: ${funnel.upserted} строк`
+      )
+      toast.success('Данные синхронизированы')
+
+      // Load metrics after sync
+      setIsLoadingMetrics(true)
+      const metricsResult = await getPlanMetricsAction(plan.id)
+      if (metricsResult.success) {
+        setMetricsData(metricsResult.data)
+      } else {
+        toast.error(metricsResult.error)
+      }
+      setIsLoadingMetrics(false)
+    } else {
+      setSyncMessage(null)
+      toast.error(syncResult.error)
+    }
+
+    setIsSyncing(false)
+  }, [plan.id, isSyncing])
+
+  // ── Load metrics (without sync) ───────────────────────────────────────
+  const handleLoadMetrics = useCallback(async () => {
+    setIsLoadingMetrics(true)
+    const result = await getPlanMetricsAction(plan.id)
+    if (result.success) {
+      setMetricsData(result.data)
+    } else {
+      toast.error(result.error)
+    }
+    setIsLoadingMetrics(false)
+  }, [plan.id])
+
+  // ── Excel export ───────────────────────────────────────────────────────
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportXlsx = useCallback(async () => {
+    setIsExporting(true)
+    const result = await exportPlanXlsxAction(plan.id)
+    if (result.success) {
+      const { base64, filename } = result.data
+      const byteChars = atob(base64)
+      const byteArr = new Uint8Array(byteChars.length)
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i)
+      const blob = new Blob([byteArr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      toast.error(result.error)
+    }
+    setIsExporting(false)
+  }, [plan.id])
+
+  // ── Toggle expand ─────────────────────────────────────────────────────
+  function toggleExpand(itemId: string) {
+    setExpandedItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }
+
+  // ── Get article metrics data ──────────────────────────────────────────
+  function getArticleData(nmId: number): ArticleDetailData | undefined {
+    return metricsData?.articles.find((a) => a.nmId === nmId)
   }
 
   // ── Sort ────────────────────────────────────────────────────────────────
@@ -298,7 +398,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       </div>
 
       {/* Actions bar */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="gap-2" disabled={isAddingFromStock}>
@@ -318,7 +418,84 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Sync data dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="default" className="gap-2" disabled={isSyncing || plan.items.length === 0}>
+              {isSyncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {isSyncing ? 'Синхронизация...' : 'Получить данные'}
+              <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => handleSync('today')} disabled={isSyncing}>
+              Сегодня
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleSync('full')} disabled={isSyncing}>
+              Полная (весь период плана)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Load metrics without sync */}
+        {!metricsData && !isSyncing && plan.items.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLoadMetrics}
+            disabled={isLoadingMetrics}
+            className="gap-2"
+          >
+            {isLoadingMetrics ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Показать метрики
+          </Button>
+        )}
+
+        {/* Excel export */}
+        {plan.items.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportXlsx}
+            disabled={isExporting}
+            className="gap-2"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Экспорт Excel
+          </Button>
+        )}
+
+        {/* Sync result message */}
+        {syncMessage && (
+          <span className="text-sm text-muted-foreground ml-2">{syncMessage}</span>
+        )}
       </div>
+
+      {/* Loading metrics indicator */}
+      {isLoadingMetrics && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Загрузка метрик...
+        </div>
+      )}
+
+      {/* Hint: no metrics loaded yet */}
+      {!metricsData && !isLoadingMetrics && !isSyncing && plan.items.length > 0 && (
+        <div className="text-sm text-muted-foreground bg-muted/30 rounded-md px-4 py-3">
+          Нажмите «Получить данные» для синхронизации заказов, продаж и воронки из WB, или «Показать метрики» для отображения уже загруженных данных.
+        </div>
+      )}
 
       {/* Items table */}
       {plan.items.length === 0 ? (
@@ -338,6 +515,8 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
           <table className="w-full">
             <thead className="bg-muted/50 border-b">
               <tr>
+                {/* Expand column */}
+                {metricsData && <th className="px-2 py-3 w-8" />}
                 <th className="px-4 py-3 text-left font-medium cursor-pointer select-none" onClick={() => handleSort('vendorCode')}>
                   <span className="flex items-center">Артикул поставщика <SortIcon col="vendorCode" /></span>
                 </th>
@@ -359,6 +538,13 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                 <th className="px-4 py-3 text-left font-medium cursor-pointer select-none" onClick={() => handleSort('buyoutPercent')}>
                   <span className="flex items-center">Выкуп, % <SortIcon col="buyoutPercent" /></span>
                 </th>
+                {/* Fact/Plan summary when metrics loaded */}
+                {metricsData && (
+                  <>
+                    <th className="px-4 py-3 text-center font-medium">Факт</th>
+                    <th className="px-4 py-3 text-center font-medium">%</th>
+                  </>
+                )}
                 <th className="px-4 py-3 w-12" />
               </tr>
             </thead>
@@ -367,79 +553,129 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                 const vals = editValues[item.id] ?? { plannedQty: String(item.plannedQty), price: item.price, buyoutPercent: item.buyoutPercent }
                 const isDirty = dirty.has(item.id)
                 const isSaving = saving.has(item.id)
+                const isExpanded = expandedItems.has(item.id)
+                const articleData = metricsData ? getArticleData(item.nmId) : undefined
+
+                // Fact completion percentage
+                const factMonth = articleData?.summary.factMonth ?? 0
+                const planMonth = item.plannedQty
+                const completionPct = planMonth > 0 ? Math.round((factMonth / planMonth) * 100) : 0
 
                 return (
-                  <tr key={item.id} className="border-t hover:bg-muted/30">
-                    <td className="px-4 py-2.5 font-medium">{item.vendorCode}</td>
-                    <td className="px-4 py-2.5">
-                      <WbArticleLink nmId={item.nmId} photoUrl={item.photoUrl} />
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{item.category ?? '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={vals.plannedQty}
-                        onChange={(e) => handleFieldChange(item.id, 'plannedQty', e.target.value, item)}
-                        onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
-                        className="h-9 w-24"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={vals.price}
-                        onChange={(e) => handleFieldChange(item.id, 'price', e.target.value, item)}
-                        onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
-                        className="h-9 w-28"
-                      />
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {item.salesCount != null ? item.salesCount : '—'}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5">
+                  <>
+                    <tr
+                      key={item.id}
+                      className={`border-t hover:bg-muted/30 ${metricsData ? 'cursor-pointer' : ''}`}
+                      onClick={metricsData ? () => toggleExpand(item.id) : undefined}
+                    >
+                      {/* Expand chevron */}
+                      {metricsData && (
+                        <td className="px-2 py-2.5 text-center">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </td>
+                      )}
+                      <td className="px-4 py-2.5 font-medium">{item.vendorCode}</td>
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <WbArticleLink nmId={item.nmId} photoUrl={item.photoUrl} />
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{item.category ?? '—'}</td>
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <Input
                           type="number"
                           min={0}
-                          max={100}
-                          step={1}
-                          value={vals.buyoutPercent}
-                          onChange={(e) => handleFieldChange(item.id, 'buyoutPercent', e.target.value, item)}
+                          value={vals.plannedQty}
+                          onChange={(e) => handleFieldChange(item.id, 'plannedQty', e.target.value, item)}
                           onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
-                          className="h-9 w-20"
+                          className="h-9 w-24"
                         />
-                        {/* Save checkmark */}
+                      </td>
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={vals.price}
+                          onChange={(e) => handleFieldChange(item.id, 'price', e.target.value, item)}
+                          onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
+                          className="h-9 w-28"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {item.salesCount != null ? item.salesCount : '—'}
+                      </td>
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={vals.buyoutPercent}
+                            onChange={(e) => handleFieldChange(item.id, 'buyoutPercent', e.target.value, item)}
+                            onKeyDown={(e) => e.key === 'Enter' && isDirty && handleSaveItem(item)}
+                            className="h-9 w-20"
+                          />
+                          {/* Save checkmark */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); isDirty && !isSaving && handleSaveItem(item) }}
+                            disabled={isSaving || !isDirty}
+                            title={isDirty ? 'Сохранить' : ''}
+                            className={`flex items-center justify-center h-9 w-9 rounded transition-colors ${
+                              isDirty
+                                ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950 cursor-pointer'
+                                : 'text-muted-foreground/30 cursor-default'
+                            }`}
+                          >
+                            {isSaving ? (
+                              <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent inline-block" />
+                            ) : (
+                              <Check className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                      {/* Fact/Plan summary columns */}
+                      {metricsData && (
+                        <>
+                          <td className="px-4 py-2.5 text-center tabular-nums font-medium">
+                            {factMonth}
+                          </td>
+                          <td className={`px-4 py-2.5 text-center tabular-nums font-medium ${
+                            completionPct >= 100
+                              ? 'text-green-600 dark:text-green-400'
+                              : completionPct >= 50
+                                ? 'text-yellow-600 dark:text-yellow-400'
+                                : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {planMonth > 0 ? `${completionPct}%` : '—'}
+                          </td>
+                        </>
+                      )}
+                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => isDirty && !isSaving && handleSaveItem(item)}
-                          disabled={isSaving || !isDirty}
-                          title={isDirty ? 'Сохранить' : ''}
-                          className={`flex items-center justify-center h-9 w-9 rounded transition-colors ${
-                            isDirty
-                              ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950 cursor-pointer'
-                              : 'text-muted-foreground/30 cursor-default'
-                          }`}
+                          onClick={() => handleRemoveItem(item.id)}
+                          title="Удалить артикул"
+                          className="flex items-center justify-center h-9 w-9 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                         >
-                          {isSaving ? (
-                            <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent inline-block" />
-                          ) : (
-                            <Check className="h-5 w-5" />
-                          )}
+                          <Trash2 className="h-4 w-4" />
                         </button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <button
-                        onClick={() => handleRemoveItem(item.id)}
-                        title="Удалить артикул"
-                        className="flex items-center justify-center h-9 w-9 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                    {/* Expanded detail grid */}
+                    {isExpanded && articleData && (
+                      <tr key={`${item.id}-detail`}>
+                        <td colSpan={metricsData ? 12 : 9} className="p-0">
+                          <div className="px-4 py-3 bg-muted/10 border-t">
+                            <ArticleDetailGrid article={articleData} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 )
               })}
             </tbody>

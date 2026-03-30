@@ -6,7 +6,7 @@
 ## Проект
 
 **NimbaOS** — закрытая веб-платформа оцифровки кабинетов продавца на Wildberries.
-Последнее обновление: **2026-03-30** | Текущая задача: **Фаза 6 (план продаж) — подзадачи 1–4a завершены, автозаполнение исправлено**
+Последнее обновление: **2026-03-30** | Текущая задача: **Фаза 6 (план продаж) — ✅ завершена**
 
 ## Стек
 
@@ -23,7 +23,7 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 | 3 | ✅ | Карточки: синхронизация WB, таблица, поиск/фильтры/сортировка, редактирование цен |
 | 4 | ✅ | Справочники: себестоимость, самовыкупы, внешняя реклама, переименования |
 | **5** | **✅** | **Финансовые отчёты** — UI, формулы, сортировка, DnD колонок, фильтры, группировка; Storage API (paid-storage per-article) |
-| **6** | **🔧** | **План продаж** — CRUD, UI списка/детализации, WB Orders/Sales/Funnel API, daily grid, Excel-экспорт |
+| **6** | **✅** | **План продаж** — CRUD, UI списка/детализации, WB Orders/Sales/Funnel API, daily grid, Excel-экспорт |
 | 7 | — | Рекламные кампании |
 | 8 | — | Фоновая синхронизация (Bull MQ) |
 | 9 | — | Финальная доработка (Excel, responsive, Docker prod) |
@@ -160,7 +160,7 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 
 ---
 
-## Фаза 6 — План продаж (🔧 в работе)
+## Фаза 6 — План продаж (✅ завершена)
 
 > Детальный план подзадач — в [PHASE6_PLAN.md](PHASE6_PLAN.md)
 
@@ -183,15 +183,28 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 ### Подзадача 4a (✅): WB API — заказы и продажи + sync-сервисы
 - `src/lib/wb-api/orders.ts` — `fetchOrdersPage` (statistics domain, lastChangeDate пагинация)
 - `src/lib/wb-api/sales.ts` — `fetchSalesPage` (аналогично)
-- `src/lib/services/sync-orders.ts` — `syncOrders`: decrypt → paginate → createMany skipDuplicates
-- `src/lib/services/sync-sales.ts` — `syncSales`: аналогично, `isReturn` по `saleID.startsWith('R')`
-- `syncPlanDataAction` — оркестратор: mode (today/full/custom) → syncOrders → syncSales последовательно
+- `src/lib/services/sync-orders.ts` — `syncOrders`: decrypt → paginate → createMany skipDuplicates, **инкрементальный синк**
+- `src/lib/services/sync-sales.ts` — `syncSales`: аналогично, `isReturn` по `saleID.startsWith('R')`, **инкрементальный синк**
+- `syncPlanDataAction` — оркестратор: orders+sales → параллельно с funnel
 
-### Что ещё предстоит (подзадачи 4b–7):
-- 4b: WB API аналитика воронки (Prisma model WbFunnelStat, sync-funnel)
-- 5: Калькулятор ежедневных метрик
-- 6: UI daily grid (перевёрнутая таблица: метрики × даты)
-- 7: Excel-экспорт + полировка
+### Подзадача 4b (✅): WB API — аналитика воронки
+- `prisma/schema.prisma` — модель `WbFunnelStat` (unique: `[wbAccountId, nmId, date]`)
+- `src/lib/wb-api/analytics.ts` — `fetchFunnelHistory` (analytics domain, батч nmIds по 20)
+- `src/lib/services/sync-funnel.ts` — `syncFunnel`: upsert в WbFunnelStat
+- `src/types/sales-plan.ts` — WB API типы, `FunnelSyncResult`, расширение `DailyMetrics` и `PlanSyncResult`
+
+### Подзадача 5 (✅): Калькулятор ежедневных метрик
+- `src/lib/services/plan-calculator.ts` — `calculatePlanDetail`: 5 параллельных DB-запросов, индексация по `nmId:date`, 10 метрик, Decimal→string
+- `src/lib/actions/sales-plan.ts` — `getPlanMetricsAction`
+
+### Подзадача 6 (✅): UI daily grid
+- `src/app/(dashboard)/sales-plan/[planId]/article-detail-grid.tsx` — перевёрнутая таблица (метрики × даты), 5 sticky колонок, цветовая индикация
+- `src/app/(dashboard)/sales-plan/[planId]/plan-metrics-rows.ts` — 9 метрик с formatters
+- `plan-detail-client.tsx` — expand/collapse, кнопки «Получить данные»/«Показать метрики», колонки «Факт»/«%»
+
+### Подзадача 7 (✅): Excel-экспорт + полировка
+- `src/lib/actions/sales-plan.ts` — `exportPlanXlsxAction`: 2 листа (Сводка + Детализация), base64
+- `plan-detail-client.tsx` — кнопка «Экспорт Excel», пустые состояния
 
 ### WB API endpoints для Фазы 6:
 - `GET /api/v1/supplier/orders` — statistics domain, пагинация lastChangeDate, стоп на `[]`
@@ -230,7 +243,7 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 
 ---
 
-### Итог сессии 2026-03-30 — Фаза 6: автозаполнение плана + исправление lastSyncAt
+### Итог сессии 2026-03-30 (1) — Фаза 6: автозаполнение плана + исправление lastSyncAt
 
 #### 1. Что сделано
 
@@ -253,22 +266,68 @@ Redis + Bull MQ · Tailwind CSS v4 + shadcn/ui · NextAuth.js · Docker Compose
 **Schema (`WbSale.finishedPrice`):**
 - Добавлено nullable поле `finishedPrice` — фактическая цена покупателя с учётом СПП
 - `sync-sales.ts` теперь сохраняет его при синхронизации
-- `spp-calculator` использует `priceWithDisc` (из-за смены источника на ProductSize, `finishedPrice` в расчётах не участвует, но поле сохраняется для будущих нужд)
 
 #### 2. Что работает
-- Автозаполнение цены, % выкупа и кол-ва продаж при добавлении артикулов в план — значения совпадают с данными финансовых отчётов за тот же период
-- «Продажи, шт.» в таблице плана показывает корректные данные (при условии синхронизации отчётов)
-- «Последняя синхронизация» в отчётах корректно обновляется после каждого синка
+- Автозаполнение цены, % выкупа и кол-ва продаж при добавлении артикулов в план
+- «Продажи, шт.» в таблице плана
+- «Последняя синхронизация» корректно обновляется после каждого синка
 
 #### 3. Что осталось доделать
-- Подзадача 4b: аналитика воронки (WbFunnelStat, sync-funnel)
-- Подзадача 5: калькулятор ежедневных метрик
-- Подзадача 6: UI daily grid
-- Подзадача 7: Excel-экспорт + полировка
+- Подзадачи 4b–7
 
 #### 4. Известные баги
-- Подтверждённых багов нет.
-- `WbSale.finishedPrice` у старых строк = NULL (до пересинхронизации). В `spp-calculator` это не используется (источник — ProductSize), но для будущих расчётов на основе `WbSale` нужен пересинк.
+- `WbSale.finishedPrice` у старых строк = NULL (до пересинхронизации)
+
+---
+
+### Итог сессии 2026-03-30 (2) — Фаза 6: подзадачи 4b–7 + оптимизация синхронизации
+
+#### 1. Что сделано
+
+**Подзадача 4b — аналитика воронки:**
+- Модель `WbFunnelStat` в Prisma schema (unique: `[wbAccountId, nmId, date]`)
+- `fetchFunnelHistory` — WB Analytics API, батч nmIds по 20 штук
+- `syncFunnel` — upsert каждой строки day×nmId
+- Типы: `WbFunnelHistoryRequest`, `WbFunnelHistoryDay`, `WbFunnelHistoryCard`, `WbFunnelHistoryResponse`, `FunnelSyncResult`
+- Интеграция в `syncPlanDataAction`
+
+**Подзадача 5 — калькулятор метрик:**
+- `plan-calculator.ts` — 5 параллельных DB-запросов, индексация `nmId:date`, 10 метрик, Decimal→string
+- `getPlanMetricsAction` — Server Action для UI
+
+**Подзадача 6 — UI daily grid:**
+- `article-detail-grid.tsx` — перевёрнутая таблица: метрики × даты, 5 sticky колонок, цветовая индикация (зелёный/красный/голубой)
+- `plan-metrics-rows.ts` — 9 метрик с formatters (rub, number, percent) и summary accessors
+- Expand/collapse строк артикулов, колонки «Факт»/«%» при загруженных метриках
+- Кнопки «Получить данные» (dropdown: Сегодня/Полная), «Показать метрики» (без синхронизации)
+
+**Подзадача 7 — Excel-экспорт + полировка:**
+- `exportPlanXlsxAction` — 2 листа: Сводка (артикулы + план/факт) и Детализация (per-article, 9 метрик × даты)
+- Кнопка «Экспорт Excel» с индикатором, пустое состояние
+- `stopPropagation` на интерактивных элементах внутри раскрываемых строк
+
+**Оптимизация синхронизации:**
+- **Инкрементальный синк** в `syncOrders` и `syncSales`: перед запросом проверяется `MAX(lastChangeDate)` в БД; если данные уже есть, используется `flag=1` (только новые/изменённые записи) вместо `flag=0` (полная выгрузка)
+- **Параллельная воронка**: funnel (analytics domain, 20s) запускается параллельно с orders+sales (statistics domain, 60s) через `Promise.all`
+
+#### 2. Что работает
+- Полный цикл плана продаж: создание → добавление артикулов → синхронизация → просмотр метрик → экспорт Excel
+- Перевёрнутая таблица с ежедневной детализацией (9 метрик × даты), sticky-колонки
+- Цветовая индикация план/факт, подсветка сегодняшнего дня
+- Аналитика воронки: переходы, корзина, заказы из WB Analytics API
+- Инкрементальный синк: повторная синхронизация загружает только новые данные
+- Excel с двумя листами (Сводка + Детализация)
+
+#### 3. Что осталось доделать
+- Перейти к Фазе 7: рекламные кампании
+- Тестирование на живых данных — возможны баги в расчётах и отображении
+
+#### 4. Известные баги
+- `WbSale.finishedPrice` у старых строк = NULL (до пересинхронизации)
+- `syncFunnel` использует поштучный `upsert` (не batch) — может быть медленным при большом количестве артикулов × дней
+- Цветовая индикация ФАКТ/МЕС и ФАКТ/ДЕНЬ работает только для строки «Выкупили, шт.» (единственная с plan-данными); для остальных метрик plan-данных нет
+- Не реализованы: выбор произвольного периода синхронизации в UI (есть только Сегодня/Полная), отображение «Цена с СПП» (tooltip)
+- Ширины sticky-колонок в `article-detail-grid.tsx` захардкожены (140px + 90px × 4); при масштабировании шрифта могут смещаться
 
 ## Критические особенности Prisma 7
 

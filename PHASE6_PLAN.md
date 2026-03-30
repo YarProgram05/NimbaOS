@@ -100,138 +100,76 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
 
 ---
 
-### Подзадача 4b: WB API — аналитика воронки + sync-сервис + модель Prisma
+### Подзадача 4b: WB API — аналитика воронки + sync-сервис + модель Prisma ✅
 
 **Цель:** Получать данные воронки продаж (переходы, корзина, заказы) из WB Analytics API, хранить в БД.
 
 **Файлы:**
-- `prisma/schema.prisma` — добавить модель `WbFunnelStat`:
-  ```
-  WbFunnelStat {
-    id                    UUID PK
-    wbAccountId           UUID FK → WbAccount
-    nmId                  Int
-    date                  DateTime @db.Date
-    openCount             Int @default(0)          // Переходы (открытия карточки)
-    addToCartCount        Int @default(0)          // Добавлено в корзину
-    addToCartConversion   Decimal @db.Decimal(6,4) // Корзина %
-    cartCount             Int @default(0)          // Корзина, шт.
-    cartToOrderConversion Decimal @db.Decimal(6,4) // Заказ %
-    ordersCount           Int @default(0)          // Заказы из воронки
-    ordersSumRub          Decimal @db.Decimal(12,2)// Сумма заказов
-    fetchedAt             DateTime @default(now())
-
-    @@unique([wbAccountId, nmId, date])
-    @@index([wbAccountId, date])
-    @@map("wb_funnel_stats")
-  }
-  ```
+- `prisma/schema.prisma` — модель `WbFunnelStat` (unique: `[wbAccountId, nmId, date]`)
 - `src/lib/wb-api/analytics.ts` — `fetchFunnelHistory(client, nmIds[], dateFrom, dateTo)`:
   - `POST /api/analytics/v3/sales-funnel/products/history` (analytics domain, 3 req/min)
-  - Принимает массив nmIds (батч если > лимита API)
-  - Возвращает per-nmId per-day аналитику
+  - Батч nmIds по 20 штук, возвращает per-nmId per-day аналитику
 - `src/lib/services/sync-funnel.ts` — `syncFunnel(wbAccountId, nmIds[], dateFrom, dateTo)`:
   - decrypt key → WbApiClient → fetch → upsert в WbFunnelStat
   - Return `FunnelSyncResult { totalRows, upserted, errors, durationMs }`
-- `src/types/sales-plan.ts` — добавить:
-  - `WbFunnelHistoryRow` (WB API response type)
-  - `FunnelSyncResult`
-  - Расширить `DailyMetrics` полями воронки: `visits`, `cartPercent`, `cartQty`, `orderPercent`
-  - Расширить `PlanSyncResult` полем `funnel: FunnelSyncResult`
+- `src/types/sales-plan.ts` — WB API типы (`WbFunnelHistoryRequest`, `WbFunnelHistoryDay`, `WbFunnelHistoryCard`, `WbFunnelHistoryResponse`), `FunnelSyncResult`, расширение `DailyMetrics` и `PlanSyncResult`
 
-**WB API endpoint:**
-- `POST /api/analytics/v3/sales-funnel/products/history` — analytics domain (`seller-analytics-api.wildberries.ru`), rate limit 3 req/min (20s throttle уже в constants.ts)
-
-**Интеграция с syncPlanDataAction:** после sync orders + sales запускается sync funnel для nmIds из плана.
-
-**Проверка:** `npx prisma db:push`, вызвать `syncPlanDataAction`, проверить записи в `wb_funnel_stats` в БД.
+**Статус:** Завершена.
 
 ---
 
-### Подзадача 5: Калькулятор плана — ежедневные метрики
+### Подзадача 5: Калькулятор плана — ежедневные метрики ✅
 
 **Цель:** Чистая функция, которая из сырых данных в БД вычисляет daily breakdown для каждого артикула плана.
 
 **Файлы:**
 - `src/lib/services/plan-calculator.ts` — `calculatePlanDetail(planId, wbAccountId, dateFrom, dateTo)`:
-  1. Параллельно из БД: plan+items, WbOrder за период, WbSale за период, WbFunnelStat за период, avg SPP
-  2. Для каждого item × каждого дня:
-     - `revenueOrders` = Σ finishedPrice (WbOrder, nmId, date, !isCancel)
-     - `ordersCount` = count WbOrder
-     - `revenueSales` = Σ priceWithDisc (WbSale, nmId, date, !isReturn)
-     - `boughtQty` = count WbSale (!isReturn)
-     - `avgPrice` = revenueSales / boughtQty (или 0)
-     - `visits` = WbFunnelStat.openCount
-     - `cartPercent` = WbFunnelStat.addToCartConversion
-     - `cartQty` = WbFunnelStat.cartCount
-     - `orderPercent` = WbFunnelStat.cartToOrderConversion
-     - Реклама = 0 (stub, Phase 7)
-  3. Итоги: ПЛАН/МЕС, ФАКТ/МЕС, ПЛАН/ДЕНЬ, ФАКТ/ДЕНЬ
-  4. Return `ArticleDetailData[]`
+  1. 5 параллельных DB-запросов: plan+items, WbOrder, WbSale, WbFunnelStat, Products
+  2. Индексация по `nmId:date` ключу для быстрого доступа
+  3. 10 ежедневных метрик: revenueOrders, ordersCount, revenueSales, boughtQty, avgPrice, visits, cartPercent, cartQty, orderPercent
+  4. Итоги: ПЛАН/МЕС, ФАКТ/МЕС, ПЛАН/ДЕНЬ, ФАКТ/ДЕНЬ
+  5. Decimal → string для сериализации на клиент
+- `src/lib/actions/sales-plan.ts` — `getPlanMetricsAction(planId)`: вызывает `calculatePlanDetail`
 
-- `src/lib/actions/sales-plan.ts` — добавить:
-  - `getPlanMetricsAction(planId)` — вызывает `calculatePlanDetail`, возвращает данные для UI
-
-**Паттерны:** чистая функция как `report-calculator.ts`; Decimal → string для сериализации
-
-**Проверка:** Синхронизировать данные, вызвать `getPlanMetricsAction`, сверить с данными WB.
+**Статус:** Завершена.
 
 ---
 
-### Подзадача 6: UI ежедневной детализации (daily grid)
+### Подзадача 6: UI ежедневной детализации (daily grid) ✅
 
 **Цель:** Раскрываемая детализация артикула с ежедневными метриками.
 
 **Файлы:**
-- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — расширить:
-  - Кнопка «Получить данные» с dropdown (Сегодня / Полная / Выбрать период)
+- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — расширен:
+  - Кнопка «Получить данные» с dropdown (Сегодня / Полная)
+  - Кнопка «Показать метрики» — загрузка из БД без синхронизации
   - Индикатор синхронизации (spinner, результат)
-  - Каждая строка артикула — раскрываемая (expand/collapse)
-- `src/app/(dashboard)/sales-plan/[planId]/article-detail-grid.tsx` — Client Component:
-  - **Перевёрнутая таблица**: метрики как строки, даты как столбцы
-  - Структура:
-    ```
-    |                  | ПЛАН/МЕС | ФАКТ/МЕС | ПЛАН/ДЕНЬ | ФАКТ/ДЕНЬ | 01.03 | 02.03 | ...
-    | Выр. заказы      |   ...    |   ...     |   ...     |   ...     | 1234  | 2345  |
-    | Кол-во заказов   |   ...    |   ...     |   ...     |   ...     | 12    | 23    |
-    | Выр. продажи     |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Выкупили, шт.    |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Переходы, шт.    |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Корзина, %       |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Корзина, шт.     |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Заказ, %         |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    | Ср. цена         |   ...    |   ...     |   ...     |   ...     | ...   | ...   |
-    ```
-  - Frozen первая колонка (названия метрик) + 4 summary-колонки (sticky)
-  - Горизонтальный скролл для дат
-  - Цветовая индикация: зелёный если факт >= план, красный если отстаёт
-- `src/app/(dashboard)/sales-plan/[planId]/plan-metrics-rows.ts` — определения строк метрик:
-  - label, accessor в DailyMetrics, formatter (rub/number/percent)
-  - ~9 строк: revenueOrders, ordersCount, revenueSales, boughtQty, visits, cartPercent, cartQty, orderPercent, avgPrice
+  - Каждая строка артикула — раскрываемая (chevron, expand/collapse)
+  - Колонки «Факт» и «%» в основной таблице при загруженных метриках
+- `src/app/(dashboard)/sales-plan/[planId]/article-detail-grid.tsx` — перевёрнутая таблица:
+  - 5 sticky колонок: метрика + ПЛАН/МЕС + ФАКТ/МЕС + ПЛАН/ДЕНЬ + ФАКТ/ДЕНЬ
+  - Даты с горизонтальным скроллом
+  - Цветовая индикация: зелёный (факт >= план), красный (отстаёт), голубой (сегодня)
+- `src/app/(dashboard)/sales-plan/[planId]/plan-metrics-rows.ts` — 9 метрик с accessors, formatters, summary accessors
 
-**Паттерны:** HTML table (не TanStack — структура кардинально другая); sticky positioning как в `report-table.tsx`
-
-**Проверка:** Синхронизировать данные, раскрыть артикул, увидеть ежедневную таблицу с корректными цифрами, включая метрики воронки.
+**Статус:** Завершена.
 
 ---
 
-### Подзадача 7: Excel-экспорт + полировка
+### Подзадача 7: Excel-экспорт + полировка ✅
 
 **Цель:** Экспорт плана в xlsx, обработка edge cases, финальные штрихи.
 
 **Файлы:**
-- `src/lib/actions/sales-plan.ts` — добавить:
-  - `exportPlanXlsxAction(planId)` — генерирует xlsx с артикулами + plan/fact + daily breakdown (включая воронку)
-- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx` — кнопка «Экспорт Excel»
+- `src/lib/actions/sales-plan.ts` — `exportPlanXlsxAction(planId)`:
+  - 2 листа: «Сводка» (артикулы + план/факт итоги) и «Детализация» (per-article, 9 метрик × даты)
+  - Возвращает `{ base64, filename }` для скачивания на клиенте
+- `src/app/(dashboard)/sales-plan/[planId]/plan-detail-client.tsx`:
+  - Кнопка «Экспорт Excel» с индикатором загрузки
+  - Пустое состояние: «Нажмите "Получить данные"…»
+  - `stopPropagation` на inputs/links/buttons внутри раскрываемых строк
 
-**Полировка:**
-- Пустые состояния: нет items → «Добавьте артикулы»; нет данных → «Нажмите "Получить данные"»
-- Подтверждение удаления плана (Dialog)
-- Отображение «Цена с СПП» рядом с ценой (tooltip)
-- Инкрементальная синхронизация: при повторном синке подхватываем с lastChangeDate
-- URL: `?account=id` проброшен на все страницы
-
-**Проверка:** Экспорт xlsx, открыть в Excel — данные корректны. Все edge cases обработаны.
+**Статус:** Завершена.
 
 ---
 
@@ -242,10 +180,10 @@ WbFunnelStat: id, wbAccountId, nmId, date, openCount, addToCartCount, addToCartC
   → Подзадача 2 (Plan List UI) ✅
     → Подзадача 3 (Article Management) ✅
       → Подзадача 4a (WB API: Orders + Sales) ✅
-        → Подзадача 4b (WB API: Analytics Funnel)
-          → Подзадача 5 (Calculator + Funnel)
-            → Подзадача 6 (Daily Grid UI + Funnel rows)
-              → Подзадача 7 (Excel + Polish)
+        → Подзадача 4b (WB API: Analytics Funnel) ✅
+          → Подзадача 5 (Calculator + Funnel) ✅
+            → Подзадача 6 (Daily Grid UI + Funnel rows) ✅
+              → Подзадача 7 (Excel + Polish) ✅
 ```
 
 ## Ключевые файлы для переиспользования

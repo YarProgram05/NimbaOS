@@ -68,6 +68,7 @@ model WbAccount {
   salesPlans         SalesPlan[]
   wbOrders           WbOrder[]
   wbSales            WbSale[]
+  wbFunnelStats      WbFunnelStat[]
   costPrices         CostPrice[]
   selfPurchases      SelfPurchase[]
   externalAds        ExternalAd[]
@@ -427,4 +428,27 @@ model WbSale {
   @@index([wbAccountId, date])
   @@index([wbAccountId, lastChangeDate])
   @@map("wb_sales")
+}
+
+// ─── WB Funnel Stats (for Sales Plan analytics) ──────────────
+
+model WbFunnelStat {
+  id                    String   @id @default(uuid())
+  wbAccountId           String
+  nmId                  Int
+  date                  DateTime @db.Date
+  openCount             Int      @default(0)
+  addToCartCount        Int      @default(0)
+  addToCartConversion   Decimal  @db.Decimal(6, 4)
+  cartCount             Int      @default(0)
+  cartToOrderConversion Decimal  @db.Decimal(6, 4)
+  ordersCount           Int      @default(0)
+  ordersSumRub          Decimal  @db.Decimal(12, 2)
+  fetchedAt             DateTime @default(now())
+
+  wbAccount             WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, nmId, date])
+  @@index([wbAccountId, date])
+  @@map("wb_funnel_stats")
 }

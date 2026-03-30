@@ -28,7 +28,16 @@ export async function syncSales(
   })
   const client = new WbApiClient(decrypt(account.apiKey))
 
-  let lastChangeDate: string | undefined = undefined
+  // Incremental sync: if we already have data in this date range,
+  // start from the latest known lastChangeDate (flag=1) instead of full re-fetch (flag=0).
+  const lastKnown = await prisma.wbSale.aggregate({
+    where: { wbAccountId, date: { gte: new Date(dateFrom) } },
+    _max: { lastChangeDate: true },
+  })
+
+  let lastChangeDate: string | undefined = lastKnown._max.lastChangeDate
+    ? lastKnown._max.lastChangeDate.toISOString()
+    : undefined
 
   async function createSales(rows: Awaited<ReturnType<typeof fetchSalesPage>>) {
     const mappedBase = rows.map((row) => ({

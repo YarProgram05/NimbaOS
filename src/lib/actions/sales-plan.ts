@@ -3,10 +3,13 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import * as XLSX from 'xlsx'
 import type { ActionResult } from '@/types'
 import { getAutoFillByNmId } from '@/lib/services/spp-calculator'
 import { syncOrders } from '@/lib/services/sync-orders'
 import { syncSales } from '@/lib/services/sync-sales'
+import { syncFunnel } from '@/lib/services/sync-funnel'
+import { calculatePlanDetail } from '@/lib/services/plan-calculator'
 import type {
   SalesPlanRow,
   SalesPlanDetail,
@@ -16,6 +19,7 @@ import type {
   SalesPlanUpdateInput,
   SalesPlanItemUpdateInput,
   PlanSyncResult,
+  PlanMetricsData,
 } from '@/types/sales-plan'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -425,33 +429,216 @@ export async function syncPlanDataAction(
 
     const plan = await prisma.salesPlan.findUnique({
       where: { id: planId },
-      select: { wbAccountId: true, dateFrom: true, dateTo: true },
+      select: { wbAccountId: true, dateFrom: true, dateTo: true, items: { select: { nmId: true } } },
     })
     if (!plan) return { success: false, error: 'План не найден' }
 
     // Determine sync period
     let dateFrom: string
+    let dateTo: string
     if (mode === 'today') {
       dateFrom = new Date().toISOString().slice(0, 10)
+      dateTo = dateFrom
     } else if (mode === 'custom' && customFrom) {
       dateFrom = customFrom
+      dateTo = customTo ?? plan.dateTo.toISOString().slice(0, 10)
     } else {
-      // full — from plan start
+      // full — from plan start to plan end
       dateFrom = plan.dateFrom.toISOString().slice(0, 10)
+      dateTo = plan.dateTo.toISOString().slice(0, 10)
     }
 
-    // Sequential: orders → sales (both on statistics domain, 1 req/min)
-    const ordersResult = await syncOrders(plan.wbAccountId, dateFrom)
-    const salesResult = await syncSales(plan.wbAccountId, dateFrom)
+    // Orders + Sales: statistics domain (1 req/min), must be sequential (shared throttle)
+    // Funnel: analytics domain (3 req/min), runs in PARALLEL with orders/sales
+    const nmIds = Array.from(new Set(plan.items.map((i) => i.nmId)))
+
+    const [ordersSalesResult, funnelResult] = await Promise.all([
+      (async () => {
+        const orders = await syncOrders(plan.wbAccountId, dateFrom)
+        const sales = await syncSales(plan.wbAccountId, dateFrom)
+        return { orders, sales }
+      })(),
+      syncFunnel(plan.wbAccountId, nmIds, dateFrom, dateTo),
+    ])
 
     return {
       success: true,
       data: {
-        orders: ordersResult,
-        sales: salesResult,
+        orders: ordersSalesResult.orders,
+        sales: ordersSalesResult.sales,
+        funnel: funnelResult,
       },
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации' }
+  }
+}
+
+// ─── Get Plan Metrics (calculated daily breakdown) ──────────────────────────
+
+export async function getPlanMetricsAction(
+  planId: string,
+): Promise<ActionResult<PlanMetricsData>> {
+  try {
+    await requireSession()
+    if (!planId) return { success: false, error: 'План не указан' }
+
+    const plan = await prisma.salesPlan.findUnique({
+      where: { id: planId },
+      select: { wbAccountId: true, dateFrom: true, dateTo: true },
+    })
+    if (!plan) return { success: false, error: 'План не найден' }
+
+    const dateFrom = serializeDate(plan.dateFrom)
+    const dateTo = serializeDate(plan.dateTo)
+
+    const data = await calculatePlanDetail(planId, plan.wbAccountId, dateFrom, dateTo)
+
+    return { success: true, data }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка расчёта метрик' }
+  }
+}
+
+// ─── Export Plan to XLSX ────────────────────────────────────────────────────
+
+const METRIC_LABELS: { key: string; label: string }[] = [
+  { key: 'revenueOrders', label: 'Выр. заказы' },
+  { key: 'ordersCount', label: 'Кол-во заказов' },
+  { key: 'revenueSales', label: 'Выр. продажи' },
+  { key: 'boughtQty', label: 'Выкупили, шт.' },
+  { key: 'visits', label: 'Переходы, шт.' },
+  { key: 'cartPercent', label: 'Корзина, %' },
+  { key: 'cartQty', label: 'Корзина, шт.' },
+  { key: 'orderPercent', label: 'Заказ, %' },
+  { key: 'avgPrice', label: 'Ср. цена' },
+]
+
+export async function exportPlanXlsxAction(
+  planId: string,
+): Promise<ActionResult<{ base64: string; filename: string }>> {
+  try {
+    await requireSession()
+    if (!planId) return { success: false, error: 'План не указан' }
+
+    const plan = await prisma.salesPlan.findUnique({
+      where: { id: planId },
+      select: { name: true, wbAccountId: true, dateFrom: true, dateTo: true, drrPercent: true },
+    })
+    if (!plan) return { success: false, error: 'План не найден' }
+
+    const dateFrom = serializeDate(plan.dateFrom)
+    const dateTo = serializeDate(plan.dateTo)
+    const metrics = await calculatePlanDetail(planId, plan.wbAccountId, dateFrom, dateTo)
+
+    const wb = XLSX.utils.book_new()
+
+    // ── Sheet 1: Сводка ─────────────────────────────────────────────
+    const summaryHeaders = [
+      'Артикул поставщика', 'Арт. ВБ', 'Категория',
+      'План, шт.', 'Цена', 'Выкуп, %',
+      'Факт, шт.', 'Выполнение, %',
+      'Выр. заказы', 'Выр. продажи', 'Кол-во заказов',
+      'План/день', 'Факт/день',
+    ]
+    const summaryRows = metrics.articles.map((a) => [
+      a.vendorCode,
+      a.nmId,
+      a.category ?? '',
+      a.plannedQty,
+      parseFloat(a.price),
+      parseFloat(a.buyoutPercent),
+      a.summary.factMonth,
+      a.plannedQty > 0
+        ? Math.round((a.summary.factMonth / a.plannedQty) * 100)
+        : 0,
+      parseFloat(a.summary.revenueOrdersTotal),
+      parseFloat(a.summary.revenueSalesTotal),
+      a.summary.ordersCountTotal,
+      parseFloat(a.summary.planDay),
+      parseFloat(a.summary.factDay),
+    ])
+
+    const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows])
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка')
+
+    // ── Sheet 2: Детализация ────────────────────────────────────────
+    // Each article gets a block: header row + metric rows × dates
+    const detailData: (string | number)[][] = []
+
+    for (const article of metrics.articles) {
+      // Article header row
+      detailData.push([`${article.vendorCode} (${article.nmId})`])
+
+      // Column headers: Метрика | ПЛАН/МЕС | ФАКТ/МЕС | ПЛАН/ДЕНЬ | ФАКТ/ДЕНЬ | dates...
+      const dates = article.dailyBreakdown.map((d) => d.date)
+      detailData.push([
+        'Метрика', 'ПЛАН/МЕС', 'ФАКТ/МЕС', 'ПЛАН/ДЕНЬ', 'ФАКТ/ДЕНЬ',
+        ...dates,
+      ])
+
+      // Build a date → metrics map
+      const dayMap = new Map(article.dailyBreakdown.map((d) => [d.date, d]))
+
+      for (const metric of METRIC_LABELS) {
+        const row: (string | number)[] = [metric.label]
+
+        // Summary columns
+        const s = article.summary
+        switch (metric.key) {
+          case 'boughtQty':
+            row.push(s.planMonth, s.factMonth, parseFloat(s.planDay), parseFloat(s.factDay))
+            break
+          case 'revenueOrders':
+            row.push('', parseFloat(s.revenueOrdersTotal), '', '')
+            break
+          case 'ordersCount':
+            row.push('', s.ordersCountTotal, '', '')
+            break
+          case 'revenueSales':
+            row.push('', parseFloat(s.revenueSalesTotal), '', '')
+            break
+          default:
+            row.push('', '', '', '')
+        }
+
+        // Daily values
+        for (const date of dates) {
+          const m = dayMap.get(date)
+          if (!m) {
+            row.push('')
+            continue
+          }
+          switch (metric.key) {
+            case 'revenueOrders': row.push(parseFloat(m.revenueOrders)); break
+            case 'ordersCount': row.push(m.ordersCount); break
+            case 'revenueSales': row.push(parseFloat(m.revenueSales)); break
+            case 'boughtQty': row.push(m.boughtQty); break
+            case 'visits': row.push(m.visits); break
+            case 'cartPercent': row.push(parseFloat(m.cartPercent)); break
+            case 'cartQty': row.push(m.cartQty); break
+            case 'orderPercent': row.push(parseFloat(m.orderPercent)); break
+            case 'avgPrice': row.push(parseFloat(m.avgPrice)); break
+            default: row.push('')
+          }
+        }
+
+        detailData.push(row)
+      }
+
+      // Empty row between articles
+      detailData.push([])
+    }
+
+    const wsDetail = XLSX.utils.aoa_to_sheet(detailData)
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Детализация')
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    const base64 = Buffer.from(buf).toString('base64')
+    const filename = `plan_${plan.name.replace(/[^\w\u0400-\u04ff]/gi, '_')}_${dateFrom}_${dateTo}.xlsx`
+
+    return { success: true, data: { base64, filename } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка экспорта' }
   }
 }

@@ -136,6 +136,41 @@ export interface SalesPlanItemUpdateInput {
   buyoutPercent?: number
 }
 
+// ── WB Funnel API types (snake_case as returned by API) ─────────
+
+export interface WbFunnelHistoryRequest {
+  nmIDs: number[]
+  period: {
+    begin: string  // YYYY-MM-DD
+    end: string    // YYYY-MM-DD
+  }
+  timezone: string // e.g. "Europe/Moscow"
+  aggregationLevel: 'day'
+}
+
+export interface WbFunnelHistoryDay {
+  dt: string            // YYYY-MM-DD
+  openCardCount: number // Переходы (открытия карточки)
+  addToCartCount: number
+  addToCartConversion: number  // decimal, e.g. 0.1234
+  cartCount: number
+  cartToOrderConversion: number
+  ordersCount: number
+  ordersSumRub: number
+}
+
+export interface WbFunnelHistoryCard {
+  nmID: number
+  history: WbFunnelHistoryDay[]
+}
+
+export interface WbFunnelHistoryResponse {
+  data: WbFunnelHistoryCard[]
+  error: boolean
+  errorText: string
+  additionalErrors: unknown
+}
+
 // ── Sync results ────────────────────────────────────────────────
 
 export interface OrdersSyncResult {
@@ -154,9 +189,17 @@ export interface SalesSyncResult {
   durationMs: number
 }
 
+export interface FunnelSyncResult {
+  totalRows: number
+  upserted: number
+  errors: number
+  durationMs: number
+}
+
 export interface PlanSyncResult {
   orders: OrdersSyncResult
   sales: SalesSyncResult
+  funnel: FunnelSyncResult
 }
 
 // ── Daily metrics (calculated, for detail grid) ─────────────────
@@ -168,6 +211,11 @@ export interface DailyMetrics {
   revenueSales: string      // Σ priceWithDisc (sales)
   boughtQty: number         // count sales (not returns)
   avgPrice: string          // revenueSales / boughtQty
+  // Funnel metrics (from WbFunnelStat)
+  visits: number            // openCardCount (переходы)
+  cartPercent: string       // addToCartConversion (корзина %)
+  cartQty: number           // cartCount (корзина шт.)
+  orderPercent: string      // cartToOrderConversion (заказ %)
 }
 
 export interface ArticleSummary {
