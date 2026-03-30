@@ -22,6 +22,10 @@ function toNumber(value: number | undefined | null): number {
   return Number(value ?? 0)
 }
 
+function parseDate(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
 /**
  * Syncs aggregated search cluster stats for a campaign and period.
  * WB returns clusters per product card, so we aggregate them at the campaign level.
@@ -118,8 +122,8 @@ export async function syncAdClusters(
     const deleteResult = await prisma.adCampaignCluster.deleteMany({
       where: {
         campaignId,
-        dateFrom: new Date(dateFrom),
-        dateTo: new Date(dateTo),
+        dateFrom: parseDate(dateFrom),
+        dateTo: parseDate(dateTo),
       },
     })
     result.deleted = deleteResult.count
@@ -136,8 +140,8 @@ export async function syncAdClusters(
           cartAdds: value.cartAdds,
           orders: value.orders,
           cpm: value.weight > 0 ? value.weightedCpm / value.weight : 0,
-          dateFrom: new Date(dateFrom),
-          dateTo: new Date(dateTo),
+          dateFrom: parseDate(dateFrom),
+          dateTo: parseDate(dateTo),
         })),
       })
       result.created = createResult.count

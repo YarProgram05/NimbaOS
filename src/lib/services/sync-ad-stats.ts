@@ -11,7 +11,7 @@ import type {
 } from '@/types/advertising'
 
 const SEARCH_APP_TYPE = 1
-const RECOMMENDATION_APP_TYPES = new Set([32, 128])
+const RECOMMENDATION_APP_TYPES = new Set([32, 64, 128])
 
 interface DaySourceMetrics {
   views: number
@@ -24,8 +24,36 @@ interface DaySourceMetrics {
   bid: number | null
 }
 
-function toNumber(value: number | undefined | null): number {
+function toNumber(value: number | string | undefined | null): number {
   return Number(value ?? 0)
+}
+
+function parseDate(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
+function sumMetricPoints(
+  points: WbFullStatsAppType['stats'] | undefined,
+): Pick<DaySourceMetrics, 'views' | 'clicks' | 'cartAdds' | 'orders' | 'spend'> & { bid: number | null } {
+  let views = 0
+  let clicks = 0
+  let cartAdds = 0
+  let orders = 0
+  let spend = 0
+  let bid: number | null = null
+
+  for (const stat of points ?? []) {
+    views += toNumber(stat.views)
+    clicks += toNumber(stat.clicks)
+    cartAdds += toNumber(stat.atbs)
+    orders += toNumber(stat.orders)
+    spend += toNumber(stat.sum ?? stat.spend)
+    if (bid === null && stat.price !== undefined) {
+      bid = toNumber(stat.price)
+    }
+  }
+
+  return { views, clicks, cartAdds, orders, spend, bid }
 }
 
 function normalizeAppStats(
@@ -46,15 +74,22 @@ function normalizeAppStats(
   let bid: number | null = null
 
   for (const item of matched) {
-    for (const stat of item.stats ?? []) {
-      views += toNumber(stat.views)
-      clicks += toNumber(stat.clicks)
-      cartAdds += toNumber(stat.atbs)
-      orders += toNumber(stat.orders)
-      spend += toNumber(stat.sum ?? stat.spend)
-      if (bid === null && stat.price !== undefined) {
-        bid = toNumber(stat.price)
-      }
+    const nestedTotals = sumMetricPoints(item.stats)
+    const itemViews = toNumber(item.views) || nestedTotals.views
+    const itemClicks = toNumber(item.clicks) || nestedTotals.clicks
+    const itemCartAdds = toNumber(item.atbs) || nestedTotals.cartAdds
+    const itemOrders = toNumber(item.orders) || nestedTotals.orders
+    const itemSpend = toNumber(item.sum ?? item.spend) || nestedTotals.spend
+    const itemBid = item.price !== undefined ? toNumber(item.price) : nestedTotals.bid
+
+    views += itemViews
+    clicks += itemClicks
+    cartAdds += itemCartAdds
+    orders += itemOrders
+    spend += itemSpend
+
+    if (bid === null && itemBid !== null) {
+      bid = itemBid
     }
   }
 
@@ -71,7 +106,7 @@ function normalizeAppStats(
 }
 
 function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
-  const appStats = day.app_type_stats ?? day.appTypeStats
+  const appStats = day.apps ?? day.app_type_stats ?? day.appTypeStats
 
   const views = toNumber(day.views)
   const clicks = toNumber(day.clicks)
@@ -114,7 +149,7 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
 
 function getCampaignDays(campaigns: WbFullStatsCampaign[]): WbFullStatsDayItem[] {
   const campaign = campaigns[0]
-  return campaign?.daily_stats ?? []
+  return campaign?.days ?? campaign?.daily_stats ?? []
 }
 
 /**
@@ -153,7 +188,8 @@ export async function syncAdStats(params: {
   const days = getCampaignDays(campaigns)
 
   for (const day of days) {
-    const appStats = day.app_type_stats ?? day.appTypeStats
+    const appStats = day.apps ?? day.app_type_stats ?? day.appTypeStats
+    const dayDate = parseDate(day.date)
     const sourceRows: Array<{ source: AdSource; metrics: DaySourceMetrics }> = [
       { source: 'search', metrics: normalizeAppStats(appStats, 'search') },
       { source: 'recommendations', metrics: normalizeAppStats(appStats, 'recommendations') },
@@ -168,13 +204,13 @@ export async function syncAdStats(params: {
           where: {
             campaignId_date_source: {
               campaignId: params.campaignId,
-              date: new Date(day.date),
+              date: dayDate,
               source: row.source,
             },
           },
           create: {
             campaignId: params.campaignId,
-            date: new Date(day.date),
+            date: dayDate,
             source: row.source,
             views: row.metrics.views,
             clicks: row.metrics.clicks,

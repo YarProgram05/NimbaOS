@@ -52,6 +52,10 @@ async function requireManagerSession() {
   return session
 }
 
+function parseDate(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
 function serializeDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
@@ -330,8 +334,8 @@ export async function getCampaignStatsAction(
       where: {
         campaignId,
         date: {
-          gte: new Date(dateFrom),
-          lte: new Date(dateTo),
+          gte: parseDate(dateFrom),
+          lte: parseDate(dateTo),
         },
       },
       orderBy: [
@@ -386,8 +390,8 @@ export async function getCampaignClustersAction(
     const rows = await prisma.adCampaignCluster.findMany({
       where: {
         campaignId,
-        dateFrom: new Date(dateFrom),
-        dateTo: new Date(dateTo),
+        dateFrom: parseDate(dateFrom),
+        dateTo: parseDate(dateTo),
       },
       orderBy: [
         { clicks: 'desc' },
@@ -660,15 +664,15 @@ export async function exportAdStatsXlsxAction(
       prisma.adCampaignStat.findMany({
         where: {
           campaignId,
-          date: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+          date: { gte: parseDate(dateFrom), lte: parseDate(dateTo) },
         },
         orderBy: [{ date: 'asc' }, { source: 'asc' }],
       }),
       prisma.adCampaignCluster.findMany({
         where: {
           campaignId,
-          dateFrom: new Date(dateFrom),
-          dateTo: new Date(dateTo),
+          dateFrom: parseDate(dateFrom),
+          dateTo: parseDate(dateTo),
         },
         orderBy: [{ clicks: 'desc' }, { views: 'desc' }],
       }),

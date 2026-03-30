@@ -2,9 +2,17 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Megaphone, RefreshCw, Search, CircleSlash } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CircleSlash,
+  Megaphone,
+  RefreshCw,
+  Search,
+} from 'lucide-react'
 import { toast } from 'sonner'
-import { syncCampaignsAction, getCampaignsAction } from '@/lib/actions/advertising'
+import { getCampaignsAction, syncCampaignsAction } from '@/lib/actions/advertising'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,10 +24,15 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { AdCampaignRow } from '@/types/advertising'
-import { AD_STATUS_VARIANT, BID_TYPE_LABELS } from '@/types/advertising'
+import { AD_STATUS_VARIANT, BID_TYPE_LABELS, type AdCampaignRow } from '@/types/advertising'
 
 type FilterTab = 'all' | 'active' | 'paused' | 'completed'
+type SortKey = 'name' | 'status' | 'budget' | 'bidType' | 'paymentType' | 'placement'
+
+interface SortState {
+  key: SortKey
+  direction: 'asc' | 'desc'
+}
 
 interface AdvertisingClientProps {
   initialCampaigns: AdCampaignRow[]
@@ -56,6 +69,22 @@ function matchesFilter(campaign: AdCampaignRow, filter: FilterTab): boolean {
   return campaign.status === 7
 }
 
+function SortIcon({
+  active,
+  direction,
+}: {
+  active: boolean
+  direction: 'asc' | 'desc'
+}) {
+  if (!active) {
+    return <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-40" />
+  }
+
+  return direction === 'asc'
+    ? <ArrowUp className="h-3.5 w-3.5 shrink-0" />
+    : <ArrowDown className="h-3.5 w-3.5 shrink-0" />
+}
+
 export function AdvertisingClient({
   initialCampaigns,
   wbAccountId,
@@ -64,17 +93,77 @@ export function AdvertisingClient({
   const searchParams = useSearchParams()
   const [campaigns, setCampaigns] = useState(initialCampaigns)
   const [filter, setFilter] = useState<FilterTab>('all')
+  const [sort, setSort] = useState<SortState | null>(null)
   const [isSyncing, startSync] = useTransition()
 
   const accountParam = searchParams.get('account') || wbAccountId
 
-  const filteredCampaigns = useMemo(
-    () => campaigns.filter((campaign) => matchesFilter(campaign, filter)),
-    [campaigns, filter],
-  )
+  const filteredCampaigns = useMemo(() => {
+    const visible = campaigns.filter((campaign) => matchesFilter(campaign, filter))
+    if (!sort) return visible
+
+    return [...visible].sort((left, right) => {
+      let comparison = 0
+
+      switch (sort.key) {
+        case 'name':
+          comparison = left.name.localeCompare(right.name, 'ru', { sensitivity: 'base' })
+          if (comparison === 0) comparison = left.advertId - right.advertId
+          break
+        case 'status':
+          comparison = left.status - right.status
+          if (comparison === 0) {
+            comparison = left.statusLabel.localeCompare(right.statusLabel, 'ru', {
+              sensitivity: 'base',
+            })
+          }
+          break
+        case 'budget':
+          comparison = Number(left.budget ?? 0) - Number(right.budget ?? 0)
+          break
+        case 'bidType':
+          comparison = formatBidType(left.bidType).localeCompare(formatBidType(right.bidType), 'ru', {
+            sensitivity: 'base',
+          })
+          break
+        case 'paymentType':
+          comparison = (left.paymentType ?? '').localeCompare(right.paymentType ?? '', 'ru', {
+            sensitivity: 'base',
+          })
+          break
+        case 'placement':
+          comparison = formatPlacement(left).localeCompare(formatPlacement(right), 'ru', {
+            sensitivity: 'base',
+          })
+          break
+      }
+
+      if (comparison === 0) {
+        comparison = left.updatedAt.localeCompare(right.updatedAt)
+      }
+
+      return sort.direction === 'asc' ? comparison : -comparison
+    })
+  }, [campaigns, filter, sort])
 
   function handleRowClick(campaignId: string) {
     router.push(`/advertising/${campaignId}?account=${accountParam}`)
+  }
+
+  function handleSort(key: SortKey) {
+    setSort((current) => {
+      if (current?.key === key) {
+        return {
+          key,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        }
+      }
+
+      return {
+        key,
+        direction: key === 'budget' || key === 'bidType' ? 'desc' : 'asc',
+      }
+    })
   }
 
   function handleSync() {
@@ -105,6 +194,31 @@ export function AdvertisingClient({
     active: campaigns.filter((campaign) => campaign.status === 9).length,
     paused: campaigns.filter((campaign) => campaign.status === 11).length,
     completed: campaigns.filter((campaign) => campaign.status === 7).length,
+  }
+
+  function renderSortableHeader(
+    key: SortKey,
+    label: string,
+    align: 'left' | 'right' = 'left',
+  ) {
+    const isActive = sort?.key === key
+
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={`h-auto px-0 py-0 font-medium text-muted-foreground hover:bg-transparent hover:text-foreground ${
+          align === 'right' ? 'ml-auto flex justify-end' : ''
+        }`}
+        onClick={() => handleSort(key)}
+      >
+        <span className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+          {label}
+          <SortIcon active={isActive} direction={isActive ? sort.direction : 'asc'} />
+        </span>
+      </Button>
+    )
   }
 
   return (
@@ -139,7 +253,7 @@ export function AdvertisingClient({
           <Megaphone className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="text-lg font-semibold">Кампании ещё не загружены</h3>
           <p className="text-muted-foreground mt-1 mb-4 text-sm">
-            Выполните первую синхронизацию, чтобы подтянуть рекламные кампании из WB.
+            Выполните первую синхронизацию, чтобы подтянуть кампании из WB.
           </p>
           <Button onClick={handleSync} variant="outline" className="gap-2" disabled={isSyncing}>
             <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -159,12 +273,12 @@ export function AdvertisingClient({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Название</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Бюджет</TableHead>
-                <TableHead>Тип ставки</TableHead>
-                <TableHead>Оплата</TableHead>
-                <TableHead>Размещение</TableHead>
+                <TableHead>{renderSortableHeader('name', 'Название')}</TableHead>
+                <TableHead>{renderSortableHeader('status', 'Статус')}</TableHead>
+                <TableHead>{renderSortableHeader('budget', 'Бюджет', 'right')}</TableHead>
+                <TableHead>{renderSortableHeader('bidType', 'Тип ставки')}</TableHead>
+                <TableHead>{renderSortableHeader('paymentType', 'Оплата')}</TableHead>
+                <TableHead>{renderSortableHeader('placement', 'Размещение')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -190,7 +304,7 @@ export function AdvertisingClient({
                       {campaign.statusLabel}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatMoney(campaign.budget)}</TableCell>
+                  <TableCell className="text-right">{formatMoney(campaign.budget)}</TableCell>
                   <TableCell>{formatBidType(campaign.bidType)}</TableCell>
                   <TableCell>{campaign.paymentType ?? '—'}</TableCell>
                   <TableCell>{formatPlacement(campaign)}</TableCell>

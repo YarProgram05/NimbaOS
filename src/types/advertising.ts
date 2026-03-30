@@ -97,6 +97,7 @@ export interface WbFullStatsMetricPoint {
   sum?: number
   atbs?: number
   orders?: number
+  canceled?: number
   cr?: number
   price?: number
 }
@@ -104,7 +105,18 @@ export interface WbFullStatsMetricPoint {
 export interface WbFullStatsAppType {
   app_type?: number
   appType?: number
-  stats: WbFullStatsMetricPoint[]
+  views?: number
+  clicks?: number
+  ctr?: number
+  cpc?: number
+  spend?: number
+  sum?: number
+  atbs?: number
+  orders?: number
+  canceled?: number
+  cr?: number
+  price?: number
+  stats?: WbFullStatsMetricPoint[]
 }
 
 export interface WbFullStatsDayItem {
@@ -117,7 +129,9 @@ export interface WbFullStatsDayItem {
   sum?: number
   atbs?: number
   orders?: number
+  canceled?: number
   price?: number
+  apps?: WbFullStatsAppType[]
   app_type_stats?: WbFullStatsAppType[]
   appTypeStats?: WbFullStatsAppType[]
 }
@@ -133,10 +147,12 @@ export interface WbFullStatsCampaign {
   sum?: number
   atbs?: number
   orders?: number
+  canceled?: number
   status?: number
   price?: number
   date_from?: string
   date_to?: string
+  days?: WbFullStatsDayItem[]
   daily_stats?: WbFullStatsDayItem[]
 }
 
