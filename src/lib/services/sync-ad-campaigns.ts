@@ -31,10 +31,10 @@ export async function syncAdCampaigns(
   let adverts
   try {
     adverts = await fetchAdvertList(client)
-  } catch {
+  } catch (error) {
     result.errors++
     result.durationMs = Date.now() - startMs
-    return result
+    throw error
   }
 
   result.totalRows = adverts.length
@@ -46,8 +46,10 @@ export async function syncAdCampaigns(
       try {
         const budgetResponse = await fetchCampaignBudget(client, advert.id)
         budget = budgetResponse.total ?? null
-      } catch {
+      } catch (error) {
         result.errors++
+        result.durationMs = Date.now() - startMs
+        throw error
       }
 
       await prisma.adCampaign.upsert({
@@ -80,8 +82,10 @@ export async function syncAdCampaigns(
       })
 
       result.upserted++
-    } catch {
+    } catch (error) {
       result.errors++
+      result.durationMs = Date.now() - startMs
+      throw error
     }
   }
 

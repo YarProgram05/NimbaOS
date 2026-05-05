@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
-import { ru } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'

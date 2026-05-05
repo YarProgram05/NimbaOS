@@ -1,0 +1,90 @@
+# Bugs and Incidents
+
+## BUG-004: Phase 8 sync jobs still show WB/API and Prisma failures
+
+Status:
+Open
+
+Symptoms:
+`/sync` history can show failed or queued jobs for reports, advertising campaigns and advertising stats. Observed messages include WB API rate-limit errors and `Invalid prisma.adCampaignNmStat...` from advertising stats persistence.
+
+Affected area:
+Background sync worker, BullMQ retry handling, advertising stats write path, WB rate-limit handling.
+
+Investigation:
+Phase 8 moved read-only sync into BullMQ. This exposed two classes of problems: WB domains can return long `429` retry windows, and some sync services previously hid internal failures inside result objects. Worker handling was tightened so internal `errors > 0` no longer becomes a false success.
+
+Fix:
+Partially fixed. Queue now avoids duplicate active jobs and requeues long WB rate-limit failures according to WB retry timing. Remaining work is to inspect the specific `adCampaignNmStat` Prisma failure and verify advertising/report sync with live WB after rate limits clear.
+
+Related files:
+`src/lib/queue/sync-processor.ts`, `src/lib/queue/sync-jobs.ts`, `src/lib/services/sync-ad-stats.ts`, `src/app/(dashboard)/sync`
+
+## BUG-001: WB advert API long 429 retry
+
+Status:
+Investigating
+
+Symptoms:
+Live advertising debug check returns `WbRateLimitError` / HTTP `429` with `x-ratelimit-retry` around 40+ minutes.
+
+Affected area:
+Advertising campaign sync, `fullstats`, clusters, log checks, Phase 7 live verification.
+
+Steps to reproduce:
+Run advertising live-check or request WB advert campaign list while the account is rate-limited.
+
+Investigation:
+WB advert API responded with a long retry window. The WB API client was adjusted in the previous code task to avoid waiting for very long retry windows interactively.
+
+Fix:
+Short retry windows may be retried automatically. Long retry windows should fail fast with a clear rate-limit error. Full live verification must be repeated later.
+
+Related files:
+`src/lib/wb-api/client.ts`, `scripts/debug-advertising.ts`, `docs/CURRENT_TASKS.md`
+
+## BUG-002: `next dev` hangs at Starting
+
+Status:
+Investigating
+
+Symptoms:
+Local `next dev` opened port `3000`, but HTTP requests timed out and log stayed at `Starting...`.
+
+Affected area:
+Local development server verification.
+
+Steps to reproduce:
+Start local dev server and request `http://localhost:3000` or `/advertising`.
+
+Investigation:
+Observed during Phase 7 final check. Process was stopped to avoid leaving a hanging server. No root cause confirmed yet.
+
+Fix:
+Not fixed. On recurrence, inspect dev server logs, running Node processes, port ownership, `.next` cache state, and environment loading without printing secrets.
+
+Related files:
+`docs/COMMANDS.md`, `.next` logs if generated locally
+
+## BUG-003: Legacy docs were too large for startup context
+
+Status:
+Fixed
+
+Symptoms:
+Old `AGENTS.md` and `CLAUDE.md` mixed startup rules, project status, phase history, commands, bugs, WB facts, and implementation notes. Future agents would over-read and duplicate context.
+
+Affected area:
+Codex session startup and project memory.
+
+Steps to reproduce:
+Start a new session and ask the agent to read old `AGENTS.md` and old root `SPECIFICATION.md`; context becomes noisy.
+
+Investigation:
+Documentation was reorganized into short startup files plus task-specific docs.
+
+Fix:
+`docs/AGENTS.md` shortened and moved into `docs`; `docs/DOCS_INDEX.md`, `docs/HANDOFF.md`, and related docs created.
+
+Related files:
+`docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/HANDOFF.md`

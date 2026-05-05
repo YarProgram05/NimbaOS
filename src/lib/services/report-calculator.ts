@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { aggregateReportRows } from '@/lib/reports/aggregate-report-rows'
+import { getSyncCoverage } from '@/lib/sync/coverage'
+import { SYNC_JOB_KINDS } from '@/types/sync'
 import type { ReportData, ReportRow } from '@/types/reports'
 
 type DbRow = Awaited<ReturnType<typeof prisma.realizationReport.findMany>>[number]
@@ -18,7 +20,7 @@ export async function calculateReport(
   const dfrom = new Date(dateFrom)
   const dto = new Date(dateTo)
 
-  const [rows, costPrices, selfPurchases, externalAds, overrides, account, products, paidStorageRows] =
+  const [rows, costPrices, selfPurchases, externalAds, overrides, account, products, paidStorageRows, adNmStatRows, coverage] =
     await Promise.all([
       prisma.realizationReport.findMany({
         where: {
@@ -55,6 +57,15 @@ export async function calculateReport(
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
         select: { nmId: true, cost: true, fetchedAt: true },
       }),
+      prisma.adCampaignNmStat.findMany({
+        where: {
+          date: { gte: dfrom, lte: dto },
+          source: 'total',
+          campaign: { wbAccountId },
+        },
+        select: { nmId: true, spend: true },
+      }),
+      getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, dateFrom, dateTo),
     ])
 
   const costMap = new Map<string, number>()
@@ -104,6 +115,12 @@ export async function calculateReport(
     paidStorageByNm.set(ps.nmId, (paidStorageByNm.get(ps.nmId) ?? 0) + d(ps.cost))
   }
 
+  const adBalanceByNm = new Map<number, number>()
+  for (const row of adNmStatRows) {
+    if (row.nmId === 0) continue
+    adBalanceByNm.set(row.nmId, (adBalanceByNm.get(row.nmId) ?? 0) + d(row.spend))
+  }
+
   let globalStorageTotal = 0
   const outboundPerNm = new Map<number, number>()
   let totalOutbound = 0
@@ -132,6 +149,9 @@ export async function calculateReport(
 
   const reportNmIds = new Set<number>(grouped.keys())
   for (const nmId of Array.from(paidStorageByNm.keys())) {
+    reportNmIds.add(nmId)
+  }
+  for (const nmId of Array.from(adBalanceByNm.keys())) {
     reportNmIds.add(nmId)
   }
   for (const vendorCode of Array.from(extAdMap.keys())) {
@@ -169,6 +189,7 @@ export async function calculateReport(
       productMetaMap,
       extraStorage,
       usePaidStorage,
+      adBalanceByNm.get(nmId) ?? 0,
     )
 
     totalOP += Number(row.operatingProfit)
@@ -194,6 +215,10 @@ export async function calculateReport(
     dateFrom,
     dateTo,
     lastSyncAt,
+    coverage: {
+      isCovered: coverage.isCovered,
+      syncedAt: coverage.syncedAt,
+    },
   }
 }
 
@@ -209,6 +234,7 @@ function calculateGroup(
   productMetaMap: Map<number, { subjectName: string; brandName: string; photoUrl: string | null }>,
   extraStorageFee = 0,
   skipRealizationStorage = false,
+  adBalance = 0,
 ): ReportRow {
   const vendorCodes = new Set<string>()
   const productMeta = nmId > 0 ? productMetaMap.get(nmId) : undefined
@@ -331,12 +357,11 @@ function calculateGroup(
   }
 
   const taxes = Math.max(0, sale * (taxRate / 100))
-  const adBalance = 0
-  const adAll = 0
+  const adAll = adBalance + extAdTotal
 
   const operatingProfit =
     toTransfer
-    - adAll
+    - adBalance
     - extAdTotal
     - totalDelivery
     - costPriceTotal

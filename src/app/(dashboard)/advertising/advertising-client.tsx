@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getCampaignsAction, syncCampaignsAction } from '@/lib/actions/advertising'
+import { syncCampaignsAction } from '@/lib/actions/advertising'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -91,7 +91,7 @@ export function AdvertisingClient({
 }: AdvertisingClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [campaigns, setCampaigns] = useState(initialCampaigns)
+  const [campaigns] = useState(initialCampaigns)
   const [filter, setFilter] = useState<FilterTab>('all')
   const [sort, setSort] = useState<SortState | null>(null)
   const [isSyncing, startSync] = useTransition()
@@ -174,18 +174,7 @@ export function AdvertisingClient({
         return
       }
 
-      toast.success(
-        `Синхронизировано: ${result.data.upserted} кампаний` +
-        (result.data.errors > 0 ? `, ошибок ${result.data.errors}` : '') +
-        ` (${(result.data.durationMs / 1000).toFixed(1)}с)`,
-      )
-
-      const refreshed = await getCampaignsAction(wbAccountId)
-      if (refreshed.success) {
-        setCampaigns(refreshed.data)
-      } else {
-        toast.error(refreshed.error)
-      }
+      toast.success(`Задача синхронизации поставлена в фон: ${result.data.id}`)
     })
   }
 

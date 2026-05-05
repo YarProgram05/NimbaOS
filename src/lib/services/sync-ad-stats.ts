@@ -8,10 +8,12 @@ import type {
   WbFullStatsAppType,
   WbFullStatsCampaign,
   WbFullStatsDayItem,
+  WbFullStatsMetricPoint,
 } from '@/types/advertising'
 
 const SEARCH_APP_TYPE = 1
 const RECOMMENDATION_APP_TYPES = new Set([32, 64, 128])
+const MAX_FULLSTATS_DAYS = 31
 
 interface DaySourceMetrics {
   views: number
@@ -30,6 +32,34 @@ function toNumber(value: number | string | undefined | null): number {
 
 function parseDate(value: string): Date {
   return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function buildDateChunks(dateFrom: string, dateTo: string): Array<{ dateFrom: string; dateTo: string }> {
+  const chunks: Array<{ dateFrom: string; dateTo: string }> = []
+  const end = parseDate(dateTo)
+  let current = parseDate(dateFrom)
+
+  while (current <= end) {
+    const chunkEnd = addDays(current, MAX_FULLSTATS_DAYS - 1)
+    const boundedEnd = chunkEnd < end ? chunkEnd : end
+    chunks.push({
+      dateFrom: formatDate(current),
+      dateTo: formatDate(boundedEnd),
+    })
+    current = addDays(boundedEnd, 1)
+  }
+
+  return chunks
 }
 
 function sumMetricPoints(
@@ -105,6 +135,92 @@ function normalizeAppStats(
   }
 }
 
+function normalizeNmPoint(point: WbFullStatsMetricPoint): DaySourceMetrics {
+  const views = toNumber(point.views)
+  const clicks = toNumber(point.clicks)
+  const cartAdds = toNumber(point.atbs)
+  const orders = toNumber(point.orders)
+  const spend = toNumber(point.sum ?? point.spend ?? point.sum_price)
+
+  return {
+    views,
+    clicks,
+    cartAdds,
+    orders,
+    spend,
+    ctr: toNumber(point.ctr) || (views > 0 ? (clicks / views) * 100 : 0),
+    cpc: toNumber(point.cpc) || (clicks > 0 ? spend / clicks : 0),
+    bid: null,
+  }
+}
+
+function mergeMetrics(target: DaySourceMetrics, incoming: DaySourceMetrics): DaySourceMetrics {
+  const views = target.views + incoming.views
+  const clicks = target.clicks + incoming.clicks
+  const cartAdds = target.cartAdds + incoming.cartAdds
+  const orders = target.orders + incoming.orders
+  const spend = target.spend + incoming.spend
+
+  return {
+    views,
+    clicks,
+    cartAdds,
+    orders,
+    spend,
+    ctr: views > 0 ? (clicks / views) * 100 : 0,
+    cpc: clicks > 0 ? spend / clicks : 0,
+    bid: target.bid ?? incoming.bid,
+  }
+}
+
+function aggregateNmStats(
+  appStats: WbFullStatsAppType[] | undefined,
+  source: Exclude<AdSource, 'total'>,
+): Map<number, DaySourceMetrics> {
+  const byNm = new Map<number, DaySourceMetrics>()
+  const matched = (appStats ?? []).filter((item) => {
+    const appType = item.appType ?? item.app_type ?? 0
+    if (source === 'search') return appType === SEARCH_APP_TYPE
+    return RECOMMENDATION_APP_TYPES.has(appType)
+  })
+
+  for (const item of matched) {
+    for (const point of item.nms ?? []) {
+      const nmId = point.nmId ?? point.nm_id
+      if (!nmId) continue
+
+      const existing = byNm.get(nmId) ?? {
+        views: 0,
+        clicks: 0,
+        cartAdds: 0,
+        orders: 0,
+        spend: 0,
+        ctr: 0,
+        cpc: 0,
+        bid: null,
+      }
+
+      byNm.set(nmId, mergeMetrics(existing, normalizeNmPoint(point)))
+    }
+  }
+
+  return byNm
+}
+
+function mergeNmMaps(
+  left: Map<number, DaySourceMetrics>,
+  right: Map<number, DaySourceMetrics>,
+): Map<number, DaySourceMetrics> {
+  const merged = new Map<number, DaySourceMetrics>(left)
+
+  for (const [nmId, metrics] of Array.from(right.entries())) {
+    const existing = merged.get(nmId)
+    merged.set(nmId, existing ? mergeMetrics(existing, metrics) : metrics)
+  }
+
+  return merged
+}
+
 function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
   const appStats = day.apps ?? day.app_type_stats ?? day.appTypeStats
 
@@ -148,8 +264,95 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
 }
 
 function getCampaignDays(campaigns: WbFullStatsCampaign[]): WbFullStatsDayItem[] {
-  const campaign = campaigns[0]
-  return campaign?.days ?? campaign?.daily_stats ?? []
+  return campaigns.flatMap((campaign) => campaign.days ?? campaign.daily_stats ?? [])
+}
+
+async function syncDaySourceRow(
+  campaignId: string,
+  date: Date,
+  source: AdSource,
+  metrics: DaySourceMetrics,
+): Promise<void> {
+  await prisma.adCampaignStat.upsert({
+    where: {
+      campaignId_date_source: {
+        campaignId,
+        date,
+        source,
+      },
+    },
+    create: {
+      campaignId,
+      date,
+      source,
+      views: metrics.views,
+      clicks: metrics.clicks,
+      ctr: metrics.ctr,
+      cpc: metrics.cpc,
+      spend: metrics.spend,
+      orders: metrics.orders,
+      cartAdds: metrics.cartAdds,
+      bid: metrics.bid,
+    },
+    update: {
+      views: metrics.views,
+      clicks: metrics.clicks,
+      ctr: metrics.ctr,
+      cpc: metrics.cpc,
+      spend: metrics.spend,
+      orders: metrics.orders,
+      cartAdds: metrics.cartAdds,
+      bid: metrics.bid,
+    },
+  })
+}
+
+async function syncDayNmRows(
+  campaignId: string,
+  date: Date,
+  source: AdSource,
+  rows: Map<number, DaySourceMetrics>,
+): Promise<number> {
+  let upserted = 0
+
+  for (const [nmId, metrics] of Array.from(rows.entries())) {
+    await prisma.adCampaignNmStat.upsert({
+      where: {
+        campaignId_date_source_nmId: {
+          campaignId,
+          date,
+          source,
+          nmId,
+        },
+      },
+      create: {
+        campaignId,
+        date,
+        source,
+        nmId,
+        views: metrics.views,
+        clicks: metrics.clicks,
+        ctr: metrics.ctr,
+        cpc: metrics.cpc,
+        spend: metrics.spend,
+        orders: metrics.orders,
+        cartAdds: metrics.cartAdds,
+      },
+      update: {
+        views: metrics.views,
+        clicks: metrics.clicks,
+        ctr: metrics.ctr,
+        cpc: metrics.cpc,
+        spend: metrics.spend,
+        orders: metrics.orders,
+        cartAdds: metrics.cartAdds,
+      },
+    })
+
+    upserted++
+  }
+
+  return upserted
 }
 
 /**
@@ -176,20 +379,24 @@ export async function syncAdStats(params: {
   })
   const client = new WbApiClient(decrypt(account.apiKey))
 
-  let campaigns
-  try {
-    campaigns = await fetchFullStats(client, params.advertId, params.dateFrom, params.dateTo)
-  } catch {
-    result.errors++
-    result.durationMs = Date.now() - startMs
-    return result
+  const days: WbFullStatsDayItem[] = []
+  for (const chunk of buildDateChunks(params.dateFrom, params.dateTo)) {
+    try {
+      const campaigns = await fetchFullStats(client, params.advertId, chunk.dateFrom, chunk.dateTo)
+      days.push(...getCampaignDays(campaigns))
+    } catch (error) {
+      result.errors++
+      result.durationMs = Date.now() - startMs
+      throw error
+    }
   }
-
-  const days = getCampaignDays(campaigns)
 
   for (const day of days) {
     const appStats = day.apps ?? day.app_type_stats ?? day.appTypeStats
     const dayDate = parseDate(day.date)
+    const searchNmRows = aggregateNmStats(appStats, 'search')
+    const recoNmRows = aggregateNmStats(appStats, 'recommendations')
+    const totalNmRows = mergeNmMaps(searchNmRows, recoNmRows)
     const sourceRows: Array<{ source: AdSource; metrics: DaySourceMetrics }> = [
       { source: 'search', metrics: normalizeAppStats(appStats, 'search') },
       { source: 'recommendations', metrics: normalizeAppStats(appStats, 'recommendations') },
@@ -200,42 +407,29 @@ export async function syncAdStats(params: {
       result.totalRows++
 
       try {
-        await prisma.adCampaignStat.upsert({
-          where: {
-            campaignId_date_source: {
-              campaignId: params.campaignId,
-              date: dayDate,
-              source: row.source,
-            },
-          },
-          create: {
-            campaignId: params.campaignId,
-            date: dayDate,
-            source: row.source,
-            views: row.metrics.views,
-            clicks: row.metrics.clicks,
-            ctr: row.metrics.ctr,
-            cpc: row.metrics.cpc,
-            spend: row.metrics.spend,
-            orders: row.metrics.orders,
-            cartAdds: row.metrics.cartAdds,
-            bid: row.metrics.bid,
-          },
-          update: {
-            views: row.metrics.views,
-            clicks: row.metrics.clicks,
-            ctr: row.metrics.ctr,
-            cpc: row.metrics.cpc,
-            spend: row.metrics.spend,
-            orders: row.metrics.orders,
-            cartAdds: row.metrics.cartAdds,
-            bid: row.metrics.bid,
-          },
-        })
+        await syncDaySourceRow(params.campaignId, dayDate, row.source, row.metrics)
 
         result.upserted++
-      } catch {
+      } catch (error) {
         result.errors++
+        result.durationMs = Date.now() - startMs
+        throw error
+      }
+    }
+
+    for (const [source, nmRows] of [
+      ['search', searchNmRows],
+      ['recommendations', recoNmRows],
+      ['total', totalNmRows],
+    ] as Array<[AdSource, Map<number, DaySourceMetrics>]>) {
+      result.totalRows += nmRows.size
+
+      try {
+        result.upserted += await syncDayNmRows(params.campaignId, dayDate, source, nmRows)
+      } catch (error) {
+        result.errors++
+        result.durationMs = Date.now() - startMs
+        throw error
       }
     }
   }

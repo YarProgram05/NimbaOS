@@ -8,6 +8,7 @@ import {
   TrendingUp,
   BookOpen,
   Megaphone,
+  RefreshCw,
   Settings,
   Users,
   ChevronLeft,
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/sales-plan', label: 'План продаж', icon: TrendingUp },
   { href: '/references', label: 'Справочники', icon: BookOpen },
   { href: '/advertising', label: 'Реклама', icon: Megaphone },
+  { href: '/sync', label: 'Синхронизация', icon: RefreshCw },
   { href: '/settings', label: 'Настройки', icon: Settings },
 ]
 

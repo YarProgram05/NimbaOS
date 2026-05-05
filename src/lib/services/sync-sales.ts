@@ -75,9 +75,10 @@ export async function syncSales(
     let rows
     try {
       rows = await fetchSalesPage(client, dateFrom, lastChangeDate)
-    } catch {
+    } catch (error) {
       result.errors++
-      break
+      result.durationMs = Date.now() - startMs
+      throw error
     }
 
     result.pages++
@@ -89,8 +90,10 @@ export async function syncSales(
     try {
       const { count } = await createSales(rows)
       result.upserted += count
-    } catch {
+    } catch (error) {
       result.errors++
+      result.durationMs = Date.now() - startMs
+      throw error
     }
 
     lastChangeDate = rows[rows.length - 1].lastChangeDate

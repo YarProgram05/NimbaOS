@@ -89,17 +89,22 @@ export interface WbAdvertInfoResponse {
 }
 
 export interface WbFullStatsMetricPoint {
+  nmId?: number
+  nm_id?: number
+  name?: string
   views?: number
   clicks?: number
   ctr?: number
   cpc?: number
   spend?: number
   sum?: number
+  sum_price?: number
   atbs?: number
   orders?: number
   canceled?: number
   cr?: number
   price?: number
+  shks?: number
 }
 
 export interface WbFullStatsAppType {
@@ -117,6 +122,7 @@ export interface WbFullStatsAppType {
   cr?: number
   price?: number
   stats?: WbFullStatsMetricPoint[]
+  nms?: WbFullStatsMetricPoint[]
 }
 
 export interface WbFullStatsDayItem {
@@ -131,6 +137,7 @@ export interface WbFullStatsDayItem {
   orders?: number
   canceled?: number
   price?: number
+  nms?: WbFullStatsMetricPoint[]
   apps?: WbFullStatsAppType[]
   app_type_stats?: WbFullStatsAppType[]
   appTypeStats?: WbFullStatsAppType[]

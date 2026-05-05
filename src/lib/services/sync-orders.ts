@@ -43,9 +43,10 @@ export async function syncOrders(
     let rows
     try {
       rows = await fetchOrdersPage(client, dateFrom, lastChangeDate)
-    } catch {
+    } catch (error) {
       result.errors++
-      break
+      result.durationMs = Date.now() - startMs
+      throw error
     }
 
     result.pages++
@@ -72,8 +73,10 @@ export async function syncOrders(
         skipDuplicates: true,
       })
       result.upserted += count
-    } catch {
+    } catch (error) {
       result.errors++
+      result.durationMs = Date.now() - startMs
+      throw error
     }
 
     // Advance cursor: use lastChangeDate of the last row

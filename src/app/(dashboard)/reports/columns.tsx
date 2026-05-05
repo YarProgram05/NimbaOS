@@ -38,7 +38,10 @@ interface ColMeta {
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData, TValue> extends ColMeta {}
+  interface ColumnMeta<TData, TValue> {
+    group: ColMeta['group']
+    tooltip: ColMeta['tooltip']
+  }
 }
 
 // ── Column definitions ────────────────────────────────────────────────────────
@@ -112,7 +115,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 120,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'sales', tooltip: 'Операционная прибыль = Итого к оплате − себестоимость − внешн. реклама − самовыкупы − кэшбек − налоги' },
+    meta: { group: 'sales', tooltip: 'Операционная прибыль = К перечислению − WB-реклама − внешн. реклама − логистика − себестоимость − хранение − комиссии/налоги/самовыкупы' },
   },
   {
     id: 'operatingProfitUnit',
@@ -208,7 +211,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 140,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'advertising', tooltip: 'Расходы на внутреннюю рекламу WB (баланс). Заглушка = 0, будет реализовано в Фазе 7' },
+    meta: { group: 'advertising', tooltip: 'Расходы на внутреннюю рекламу WB из fullstats, распределённые по артикулам WB' },
   },
   {
     id: 'adAll',
@@ -217,7 +220,7 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     size: 130,
     cell: ({ getValue }) => formatRub(getValue<string>()),
     sortingFn: numSort,
-    meta: { group: 'advertising', tooltip: 'Все расходы на рекламу = WB реклама + внешняя реклама. WB-часть = 0 до Фазы 7' },
+    meta: { group: 'advertising', tooltip: 'Все расходы на рекламу = WB реклама + внешняя реклама' },
   },
   {
     id: 'drr',

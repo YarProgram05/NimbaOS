@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   depositBudgetAction,
   getCampaignDetailAction,
+  pauseCampaignAction,
   setBidAction,
   startCampaignAction,
   stopCampaignAction,
@@ -125,6 +126,19 @@ export function CampaignDetailClient({
     })
   }
 
+  function handlePause() {
+    startStatusChange(async () => {
+      const result = await pauseCampaignAction(campaign.id)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success('Кампания поставлена на паузу')
+      await refreshCampaign()
+    })
+  }
+
   function handleStop() {
     startStatusChange(async () => {
       const result = await stopCampaignAction(campaign.id)
@@ -139,7 +153,8 @@ export function CampaignDetailClient({
   }
 
   const canStart = campaign.status === 4 || campaign.status === 11
-  const canStop = campaign.status === 9
+  const canPause = campaign.status === 9
+  const canStop = campaign.status === 9 || campaign.status === 11
   const bidLabel = campaign.paymentType === 'cpc' ? 'Ставка CPC' : 'Ставка CPM'
 
   return (
@@ -257,13 +272,18 @@ export function CampaignDetailClient({
                     {isChangingStatus ? 'Запуск...' : 'Возобновить'}
                   </Button>
                 )}
-                {canStop && (
-                  <Button variant="outline" onClick={handleStop} disabled={isChangingStatus}>
+                {canPause && (
+                  <Button variant="outline" onClick={handlePause} disabled={isChangingStatus}>
                     <PauseCircle className="mr-2 h-4 w-4" />
+                    {isChangingStatus ? 'Пауза...' : 'Пауза'}
+                  </Button>
+                )}
+                {canStop && (
+                  <Button variant="destructive" onClick={handleStop} disabled={isChangingStatus}>
                     {isChangingStatus ? 'Завершение...' : 'Завершить'}
                   </Button>
                 )}
-                {!canStart && !canStop && (
+                {!canStart && !canPause && !canStop && (
                   <div className="text-sm text-muted-foreground">
                     Для текущего статуса действий нет.
                   </div>

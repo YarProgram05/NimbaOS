@@ -55,10 +55,10 @@ export async function syncAdClusters(
   let campaignInfo
   try {
     campaignInfo = await fetchAdvertInfoByIds(client, [advertId])
-  } catch {
+  } catch (error) {
     result.errors++
     result.durationMs = Date.now() - startMs
-    return result
+    throw error
   }
 
   const nmIds = Array.from(
@@ -73,10 +73,10 @@ export async function syncAdClusters(
   let statsGroups
   try {
     statsGroups = await fetchClusterStats(client, advertId, nmIds, dateFrom, dateTo)
-  } catch {
+  } catch (error) {
     result.errors++
     result.durationMs = Date.now() - startMs
-    return result
+    throw error
   }
 
   const aggregated = new Map<string, ClusterAccumulator>()
@@ -146,8 +146,10 @@ export async function syncAdClusters(
       })
       result.created = createResult.count
     }
-  } catch {
+  } catch (error) {
     result.errors++
+    result.durationMs = Date.now() - startMs
+    throw error
   }
 
   result.durationMs = Date.now() - startMs

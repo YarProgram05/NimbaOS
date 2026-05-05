@@ -26,6 +26,8 @@ export class WbRateLimitError extends WbApiError {
 }
 
 const lastRequestTime: Partial<Record<WbApiDomain, number>> = {}
+const REQUEST_TIMEOUT_MS = 60_000
+const MAX_AUTO_RETRY_AFTER_SEC = 30
 
 async function throttle(domain: WbApiDomain): Promise<void> {
   const limit = RATE_LIMITS[domain]
@@ -58,14 +60,32 @@ export class WbApiClient {
     await throttle(domain)
 
     const url = `${WB_API_DOMAINS[domain]}${path}`
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: this.apiKey,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let response: Response
+
+    try {
+      response = await fetch(url, {
+        ...options,
+        signal: options.signal ?? controller.signal,
+        headers: {
+          Authorization: this.apiKey,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      })
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new WbApiError(
+          `WB API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
+          408,
+          domain,
+        )
+      }
+      throw err
+    } finally {
+      clearTimeout(timeout)
+    }
 
     if (response.status === 204) {
       return null as T
@@ -75,6 +95,9 @@ export class WbApiClient {
       const retryAfter = response.headers.get('X-Ratelimit-Retry')
       const retryAfterSec = retryAfter ? Number(retryAfter) : undefined
       if (retries <= 0) {
+        throw new WbRateLimitError(domain, retryAfterSec)
+      }
+      if (retryAfterSec && retryAfterSec > MAX_AUTO_RETRY_AFTER_SEC) {
         throw new WbRateLimitError(domain, retryAfterSec)
       }
       await sleep(retryAfterSec ? retryAfterSec * 1000 : 5000)

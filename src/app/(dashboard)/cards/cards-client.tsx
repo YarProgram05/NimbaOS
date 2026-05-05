@@ -16,7 +16,7 @@ import {
 import { DataTable } from '@/components/shared/data-table'
 import { getProductColumns } from './columns'
 import { syncProductsAction } from '@/lib/actions/products'
-import type { PaginatedProducts, SyncResult } from '@/types/products'
+import type { PaginatedProducts } from '@/types/products'
 import type { SortingState } from '@tanstack/react-table'
 
 interface CardsClientProps {
@@ -110,13 +110,7 @@ export function CardsClient({
     startSync(async () => {
       const result = await syncProductsAction(wbAccountId)
       if (result.success) {
-        const r = result.data as SyncResult
-        toast.success(
-          `Синхронизировано: +${r.created} новых, обновлено ${r.updated}, ` +
-          `цен ${r.priceRows}` +
-          (r.errors > 0 ? `, ошибок ${r.errors}` : '') +
-          ` (${(r.durationMs / 1000).toFixed(1)}с)`,
-        )
+        toast.success(`Задача синхронизации поставлена в фон: ${result.data.id}`)
         router.refresh()
       } else {
         toast.error(result.error)

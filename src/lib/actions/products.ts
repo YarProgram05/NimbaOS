@@ -6,11 +6,11 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
-import { syncProducts } from '@/lib/services/sync-products'
+import { enqueueProductsSyncAction } from '@/lib/actions/sync'
 import { uploadPriceTask, fetchPricesByNmId } from '@/lib/wb-api/products'
 import type { ActionResult } from '@/types'
+import type { EnqueuedSyncJob } from '@/types/sync'
 import type {
-  SyncResult,
   GetProductsOptions,
   PaginatedProducts,
   ProductRow,
@@ -26,23 +26,8 @@ async function requireSession() {
 
 export async function syncProductsAction(
   wbAccountId: string,
-): Promise<ActionResult<SyncResult>> {
-  try {
-    await requireSession()
-
-    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
-
-    await prisma.wbAccount.findUniqueOrThrow({
-      where: { id: wbAccountId },
-      select: { id: true },
-    })
-
-    const result = await syncProducts(wbAccountId)
-    return { success: true, data: result }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Ошибка синхронизации'
-    return { success: false, error: msg }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueueProductsSyncAction(wbAccountId)
 }
 
 // ── getProducts ─────────────────────────────────────────────────────────────────

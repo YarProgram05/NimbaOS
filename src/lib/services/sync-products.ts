@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
-import { fetchCardsList, fetchPrices, type CardsCursor } from '@/lib/wb-api/products'
+import { fetchCardsList, fetchPricesByNmIds, type CardsCursor } from '@/lib/wb-api/products'
 import type { WbCard, WbGoodsItem, SyncResult } from '@/types/products'
 
 /**
@@ -24,6 +24,7 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
   // 2. Paginate through all product cards (cursor-based)
   let cursor: CardsCursor | undefined = undefined
   let hasMore = true
+  const syncedNmIds = new Set<number>()
 
   while (hasMore) {
     let page
@@ -45,26 +46,19 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
     for (const card of page.cards) {
       try {
         await upsertCard(wbAccountId, card, result)
+        syncedNmIds.add(card.nmID)
       } catch {
         result.errors++
       }
     }
   }
 
-  // 3. Fetch all prices and update sizes (offset-based)
-  let offset = 0
-
-  while (true) {
-    let goods: WbGoodsItem[]
-    try {
-      goods = await fetchPrices(client, offset)
-    } catch {
-      result.errors++
-      break
-    }
-
-    if (goods.length === 0) break
-
+  // 3. Fetch prices for exactly the local catalogue.
+  // WB's full price-list pagination can skip cards in some seller cabinets;
+  // the nmList endpoint is deterministic for the cards we just synced.
+  const nmIds = Array.from(syncedNmIds)
+  for (let index = 0; index < nmIds.length; index += 1000) {
+    const goods = await fetchPricesByNmIds(client, nmIds.slice(index, index + 1000))
     for (const good of goods) {
       try {
         await updatePrices(wbAccountId, good, result)
@@ -72,9 +66,6 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
         result.errors++
       }
     }
-
-    offset += goods.length
-    if (goods.length < 1000) break
   }
 
   // 4. Stamp lastSyncAt
@@ -188,16 +179,43 @@ async function updatePrices(
 
   if (!product) return  // Card not yet in DB (edge case)
 
+  const normalizeSize = (value: string | null | undefined) =>
+    (value ?? '').trim().toLowerCase()
+  const fallbackSingleSize = product.sizes.length === 1 ? product.sizes[0] : null
+  const singleApiPrice = good.sizes.length === 1 ? good.sizes[0] : null
+
+  if (singleApiPrice) {
+    await prisma.productSize.updateMany({
+      where: { productId: product.id },
+      data: {
+        price: singleApiPrice.price > 0 ? singleApiPrice.price : null,
+        discount: good.discount ?? null,
+        spp: singleApiPrice.discountedPrice && singleApiPrice.discountedPrice > 0
+          ? singleApiPrice.discountedPrice
+          : null,
+      },
+    })
+    result.priceRows += product.sizes.length
+    return
+  }
+
   for (const sizePrice of good.sizes) {
-    const dbSize = product.sizes.find((s) => s.techSize === sizePrice.techSizeName)
+    const apiSizeName = normalizeSize(sizePrice.techSizeName)
+    const dbSize =
+      product.sizes.find((s) => normalizeSize(s.techSize) === apiSizeName) ??
+      product.sizes.find((s) => normalizeSize(s.techSize) === '0' && apiSizeName === '') ??
+      fallbackSingleSize
+
     if (!dbSize) continue
 
     await prisma.productSize.update({
       where: { id: dbSize.id },
       data: {
-        price:    sizePrice.price,               // base price in roubles (before seller discount)
+        price:    sizePrice.price > 0 ? sizePrice.price : null,
         discount: good.discount ?? null,
-        spp:      sizePrice.discountedPrice ?? null, // seller's actual selling price (after discount)
+        spp:      sizePrice.discountedPrice && sizePrice.discountedPrice > 0
+          ? sizePrice.discountedPrice
+          : null,
       },
     })
     result.priceRows++

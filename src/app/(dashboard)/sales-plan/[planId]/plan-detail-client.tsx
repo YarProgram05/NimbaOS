@@ -59,7 +59,7 @@ type SortCol = 'vendorCode' | 'nmId' | 'category' | 'plannedQty' | 'price' | 'bu
 export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetailClientProps) {
   const router = useRouter()
   const [plan, setPlan] = useState(initialPlan)
-  const [isRefreshing, startRefresh] = useTransition()
+  const [, startRefresh] = useTransition()
 
   // Header inline edit
   const [editingHeader, setEditingHeader] = useState(false)
@@ -218,21 +218,8 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
     const syncResult = await syncPlanDataAction(plan.id, mode)
 
     if (syncResult.success) {
-      const { orders, sales, funnel } = syncResult.data
-      setSyncMessage(
-        `Заказы: ${orders.upserted} | Продажи: ${sales.upserted} | Воронка: ${funnel.upserted} строк`
-      )
-      toast.success('Данные синхронизированы')
-
-      // Load metrics after sync
-      setIsLoadingMetrics(true)
-      const metricsResult = await getPlanMetricsAction(plan.id)
-      if (metricsResult.success) {
-        setMetricsData(metricsResult.data)
-      } else {
-        toast.error(metricsResult.error)
-      }
-      setIsLoadingMetrics(false)
+      setSyncMessage(`Фоновая задача: ${syncResult.data.id}`)
+      toast.success('Задача синхронизации поставлена в фон')
     } else {
       setSyncMessage(null)
       toast.error(syncResult.error)
@@ -621,7 +608,10 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                           />
                           {/* Save checkmark */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); isDirty && !isSaving && handleSaveItem(item) }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (isDirty && !isSaving) void handleSaveItem(item)
+                            }}
                             disabled={isSaving || !isDirty}
                             title={isDirty ? 'Сохранить' : ''}
                             className={`flex items-center justify-center h-9 w-9 rounded transition-colors ${

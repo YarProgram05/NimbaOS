@@ -25,6 +25,7 @@ const LOCAL_ACTION_LABELS: Record<string, string> = {
   bid_change: 'Изменение ставки',
   deposit: 'Пополнение бюджета',
   start: 'Запуск кампании',
+  pause: 'Пауза кампании',
   stop: 'Завершение кампании',
 }
 

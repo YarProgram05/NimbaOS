@@ -1,7 +1,147 @@
-# docs/DECISIONS.md — Архив архитектурных решений
+# Decisions
 
-Полный лог всех отклонений от спецификации, реализованных в каждой фазе,
-и проблем, с которыми столкнулись. Для текущей работы — см. CLAUDE.md.
+Канонический журнал продуктовых и архитектурных решений NimbaOS. Старые решения не удалять: если решение устарело, пометить его как `Superseded` и добавить новое решение выше.
+
+Формат новых записей:
+
+```md
+## YYYY-MM-DD — Decision title
+
+Status:
+Active / Superseded / Rejected
+
+Decision:
+Какое решение принято.
+
+Reason:
+Почему.
+
+Consequences:
+Что это меняет.
+
+Related files:
+Связанные файлы.
+```
+
+---
+
+## 2026-05-05 — Markdown-документация как система памяти Codex
+
+Status:
+Active
+
+Decision:
+Новая сессия читает только `docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/HANDOFF.md` и `docs/CURRENT_TASKS.md`. Остальные документы открываются только по типу задачи через `docs/DOCS_INDEX.md`.
+
+Reason:
+Проект накопил много истории, и чтение всех `.md` в начале сессии раздувает контекст и повышает риск противоречий.
+
+Consequences:
+Оперативный контекст хранится в `docs/HANDOFF.md` и `docs/CURRENT_TASKS.md`; история работы — в `docs/DEV_LOG.md`; состояние — в `docs/PROJECT_STATE.md`; решения — только здесь.
+
+Related files:
+`docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/HANDOFF.md`, `docs/CURRENT_TASKS.md`, `docs/SESSION_PROTOCOL.md`
+
+---
+
+## 2026-05-05 — Product specification lives in docs/SPECIFICATION.md
+
+Status:
+Active
+
+Decision:
+Хранить стабильную продуктовую спецификацию в `docs/SPECIFICATION.md`, а не в корне проекта.
+
+Reason:
+Спецификация является важным документом разработки и частью памяти агента. Ей логично находиться рядом с `docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/HANDOFF.md` и остальными рабочими документами.
+
+Consequences:
+Задачи про продукт, MVP и бизнес-логику должны ссылаться на `docs/SPECIFICATION.md`. Корневой `README.md` остаётся в корне как стандартный human-facing entrypoint.
+
+Related files:
+`docs/SPECIFICATION.md`, `docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `README.md`
+
+---
+
+## 2026-05-05 — Agent instructions live in docs/AGENTS.md
+
+Status:
+Active
+
+Decision:
+Хранить главный файл правил агента в `docs/AGENTS.md`, а не в корне проекта.
+
+Reason:
+Пользователь хочет держать все инструкции для агента разработки в одной папке `docs`, рядом с handoff, протоколом, индексом и остальной памятью проекта.
+
+Consequences:
+Стартовый протокол, README, documentation index и будущие ссылки должны использовать путь `docs/AGENTS.md`. Корневой `AGENTS.md` не восстанавливать без явного запроса.
+
+Related files:
+`docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/SESSION_PROTOCOL.md`, `README.md`
+
+---
+
+## 2026-05-05 — Канонический журнал решений находится в docs/DECISIONS.md
+
+Status:
+Active
+
+Decision:
+Использовать `docs/DECISIONS.md` как единственный канонический файл решений. Корневой `DECISIONS.md` не создавать, если пользователь отдельно не попросит.
+
+Reason:
+В проекте уже существовал `docs/DECISIONS.md` с историей решений; перенос в новый корневой файл создал бы дублирование.
+
+Consequences:
+Все новые архитектурные и продуктовые решения добавлять сверху в `docs/DECISIONS.md`. `docs/AGENTS.md` и `docs/DOCS_INDEX.md` должны ссылаться именно на этот файл.
+
+Related files:
+`docs/DECISIONS.md`, `docs/AGENTS.md`, `docs/DOCS_INDEX.md`
+
+---
+
+## 2026-05-05 — БД является источником истины для аналитики
+
+Status:
+Active
+
+Decision:
+Аналитика и отчёты читают данные из БД. WB API используется для обновления БД, а не как основной источник каждого отчёта.
+
+Reason:
+Повторные API-запросы медленные, нестабильные и подвержены rate limit. Исторические данные должны быть воспроизводимыми.
+
+Consequences:
+Перед аналитикой проверять кабинет, период, покрытие периода в БД, дату последней синхронизации и пропущенные даты. Повторная историческая синхронизация требует подтверждения.
+
+Related files:
+`docs/DATA_FRESHNESS_POLICY.md`, `docs/DATABASE_ACCESS_GUIDE.md`, `docs/SAFETY_RULES.md`
+
+---
+
+## 2026-05-05 — CLAUDE.md заменён docs/AGENTS.md и docs memory system
+
+Status:
+Active
+
+Decision:
+Удалить `CLAUDE.md` после переноса уникального смысла в `docs/AGENTS.md` и `docs/*.md`.
+
+Reason:
+`CLAUDE.md` дублировал старый большой агентский контекст, смешивал правила, состояние, историю и детали фаз. Для Codex нужна короткая маршрутизируемая память.
+
+Consequences:
+Новые сессии используют `docs/AGENTS.md` как главный стартовый файл. Старый исторический контекст сохранён в тематических документах и legacy-блоках этого файла.
+
+Related files:
+`docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/PROJECT_STATE.md`, `docs/DEV_LOG.md`
+
+---
+
+## Legacy archive
+
+Ниже сохранён старый архив решений и фазовой истории. Его не читать в начале новой сессии целиком; открывать только при расследовании старых архитектурных решений.
 
 ---
 
@@ -236,3 +376,13 @@ WB Analytics API принимает массив nmIds. Разбиваем на 
   Для больших объёмов нужна серверная пагинация (Фаза 9).
 - **Bull MQ не используется** — фоновая синхронизация запланирована в Фазе 8.
   Сейчас синхронизация блокирующая (в Server Action).
+## Phase 8 — Background Sync
+
+**Decision 41: Read-only WB sync через Bull MQ**
+Все read-only WB sync jobs ставятся в Bull MQ queue `sync`: products, reports + paid storage, sales plan orders/sales/funnel, advertising campaigns/stats/clusters. Server Actions больше не ждут длинные WB-запросы, а создают `SyncJobRun` и возвращают id фоновой задачи.
+
+**Decision 42: WB-changing actions не автоматизируются**
+Цены, карточки WB, рекламные ставки, бюджеты и статусы остаются прямыми пользовательскими действиями с явным намерением. Phase 8 scheduler запускает только read-only jobs.
+
+**Decision 43: Осторожное дневное расписание**
+`scripts/schedule-sync.ts` создаёт BullMQ Job Schedulers для активных кабинетов в `Europe/Moscow`: карточки ночью, отчёты/хранение rolling 7 days, план продаж rolling 7 days, advertising campaigns и advertising stats. Advertising clusters manual-only by default.

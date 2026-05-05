@@ -157,18 +157,7 @@ export function ClustersTab({ campaignId }: ClustersTabProps) {
         return
       }
 
-      const dataResult = await getCampaignClustersAction(campaignId, dateFrom, dateTo)
-      if (!dataResult.success) {
-        toast.error(dataResult.error)
-        return
-      }
-
-      setRows(dataResult.data)
-      toast.success(
-        `Кластеры синхронизированы: ${syncResult.data.created} строк` +
-        (syncResult.data.errors > 0 ? `, ошибок ${syncResult.data.errors}` : '') +
-        ` (${(syncResult.data.durationMs / 1000).toFixed(1)}с)`,
-      )
+      toast.success(`Задача синхронизации поставлена в фон: ${syncResult.data.id}`)
     })
   }
 

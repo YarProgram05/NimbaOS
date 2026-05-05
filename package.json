@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "worker:sync": "tsx scripts/sync-worker.ts",
+    "sync:schedule": "tsx scripts/schedule-sync.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",

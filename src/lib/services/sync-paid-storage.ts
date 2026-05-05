@@ -46,10 +46,10 @@ export async function syncPaidStorage(
       downloadedRows.push(...rows)
       result.totalRows += rows.length
       result.pages++
-    } catch {
+    } catch (error) {
       result.errors++
       result.durationMs = Date.now() - startMs
-      return result
+      throw error
     }
   }
 

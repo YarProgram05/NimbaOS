@@ -6,10 +6,9 @@ import { prisma } from '@/lib/db'
 import * as XLSX from 'xlsx'
 import type { ActionResult } from '@/types'
 import { getAutoFillByNmId } from '@/lib/services/spp-calculator'
-import { syncOrders } from '@/lib/services/sync-orders'
-import { syncSales } from '@/lib/services/sync-sales'
-import { syncFunnel } from '@/lib/services/sync-funnel'
+import { enqueuePlanSyncAction } from '@/lib/actions/sync'
 import { calculatePlanDetail } from '@/lib/services/plan-calculator'
+import type { EnqueuedSyncJob } from '@/types/sync'
 import type {
   SalesPlanRow,
   SalesPlanDetail,
@@ -18,7 +17,6 @@ import type {
   SalesPlanItemInput,
   SalesPlanUpdateInput,
   SalesPlanItemUpdateInput,
-  PlanSyncResult,
   PlanMetricsData,
 } from '@/types/sales-plan'
 
@@ -422,56 +420,8 @@ export async function syncPlanDataAction(
   mode: 'today' | 'full' | 'custom',
   customFrom?: string,
   customTo?: string,
-): Promise<ActionResult<PlanSyncResult>> {
-  try {
-    await requireSession()
-    if (!planId) return { success: false, error: 'План не указан' }
-
-    const plan = await prisma.salesPlan.findUnique({
-      where: { id: planId },
-      select: { wbAccountId: true, dateFrom: true, dateTo: true, items: { select: { nmId: true } } },
-    })
-    if (!plan) return { success: false, error: 'План не найден' }
-
-    // Determine sync period
-    let dateFrom: string
-    let dateTo: string
-    if (mode === 'today') {
-      dateFrom = new Date().toISOString().slice(0, 10)
-      dateTo = dateFrom
-    } else if (mode === 'custom' && customFrom) {
-      dateFrom = customFrom
-      dateTo = customTo ?? plan.dateTo.toISOString().slice(0, 10)
-    } else {
-      // full — from plan start to plan end
-      dateFrom = plan.dateFrom.toISOString().slice(0, 10)
-      dateTo = plan.dateTo.toISOString().slice(0, 10)
-    }
-
-    // Orders + Sales: statistics domain (1 req/min), must be sequential (shared throttle)
-    // Funnel: analytics domain (3 req/min), runs in PARALLEL with orders/sales
-    const nmIds = Array.from(new Set(plan.items.map((i) => i.nmId)))
-
-    const [ordersSalesResult, funnelResult] = await Promise.all([
-      (async () => {
-        const orders = await syncOrders(plan.wbAccountId, dateFrom)
-        const sales = await syncSales(plan.wbAccountId, dateFrom)
-        return { orders, sales }
-      })(),
-      syncFunnel(plan.wbAccountId, nmIds, dateFrom, dateTo),
-    ])
-
-    return {
-      success: true,
-      data: {
-        orders: ordersSalesResult.orders,
-        sales: ordersSalesResult.sales,
-        funnel: funnelResult,
-      },
-    }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации' }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueuePlanSyncAction(planId, mode, customFrom, customTo)
 }
 
 // ─── Get Plan Metrics (calculated daily breakdown) ──────────────────────────

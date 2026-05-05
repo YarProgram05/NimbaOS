@@ -37,10 +37,10 @@ export async function syncFunnel(
   let cards
   try {
     cards = await fetchFunnelHistory(client, nmIds, dateFrom, dateTo)
-  } catch {
+  } catch (error) {
     result.errors++
     result.durationMs = Date.now() - startMs
-    return result
+    throw error
   }
 
   // Flatten cards → individual day rows and upsert
@@ -80,8 +80,10 @@ export async function syncFunnel(
           },
         })
         result.upserted++
-      } catch {
+      } catch (error) {
         result.errors++
+        result.durationMs = Date.now() - startMs
+        throw error
       }
     }
   }

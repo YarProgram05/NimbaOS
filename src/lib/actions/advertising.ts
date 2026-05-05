@@ -12,15 +12,19 @@ import {
   fetchAdvertInfoByIds,
   fetchUpdHistory,
   depositBudget,
+  pauseCampaign,
   setBid,
   startCampaign,
   stopCampaign,
 } from '@/lib/wb-api/advertising'
 import { WbApiClient } from '@/lib/wb-api/client'
-import { syncAdCampaigns } from '@/lib/services/sync-ad-campaigns'
-import { syncAdStats } from '@/lib/services/sync-ad-stats'
-import { syncAdClusters } from '@/lib/services/sync-ad-clusters'
+import {
+  enqueueAdCampaignsSyncAction,
+  enqueueAdStatsSyncAction,
+  enqueueAdClustersSyncAction,
+} from '@/lib/actions/sync'
 import type { ActionResult } from '@/types'
+import type { EnqueuedSyncJob } from '@/types/sync'
 import {
   AD_STATUS_LABELS,
 } from '@/types/advertising'
@@ -29,12 +33,9 @@ import type {
   AdCampaignDetail,
   AdCampaignRow,
   AdClusterRow,
-  AdClusterSyncResult,
   AdSource,
   AdStatRow,
-  AdStatsSyncResult,
   AdStatus,
-  AdSyncResult,
   WbAdvertInfoItem,
   WbCampaignBudgetDepositRequest,
   WbPaymentType,
@@ -260,18 +261,8 @@ export async function getCampaignsAction(
 
 export async function syncCampaignsAction(
   wbAccountId: string,
-): Promise<ActionResult<AdSyncResult>> {
-  try {
-    await requireManagerSession()
-    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
-
-    const result = await syncAdCampaigns(wbAccountId)
-    revalidatePath('/advertising')
-
-    return { success: true, data: result }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации кампаний' }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueueAdCampaignsSyncAction(wbAccountId)
 }
 
 export async function getCampaignDetailAction(
@@ -354,27 +345,8 @@ export async function syncCampaignStatsAction(
   campaignId: string,
   dateFrom: string,
   dateTo: string,
-): Promise<ActionResult<AdStatsSyncResult>> {
-  try {
-    await requireManagerSession()
-    if (!campaignId) return { success: false, error: 'Кампания не указана' }
-    if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
-
-    const campaign = await getCampaignWithAccount(campaignId)
-
-    const result = await syncAdStats({
-      wbAccountId: campaign.wbAccountId,
-      campaignId: campaign.id,
-      advertId: campaign.advertId,
-      dateFrom,
-      dateTo,
-    })
-
-    revalidatePath(`/advertising/${campaignId}`)
-    return { success: true, data: result }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации статистики' }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueueAdStatsSyncAction(campaignId, dateFrom, dateTo)
 }
 
 export async function getCampaignClustersAction(
@@ -409,26 +381,8 @@ export async function syncCampaignClustersAction(
   campaignId: string,
   dateFrom: string,
   dateTo: string,
-): Promise<ActionResult<AdClusterSyncResult>> {
-  try {
-    await requireManagerSession()
-    if (!campaignId) return { success: false, error: 'Кампания не указана' }
-    if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
-
-    const campaign = await getCampaignWithAccount(campaignId)
-    const result = await syncAdClusters(
-      campaign.wbAccountId,
-      campaign.id,
-      campaign.advertId,
-      dateFrom,
-      dateTo,
-    )
-
-    revalidatePath(`/advertising/${campaignId}`)
-    return { success: true, data: result }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации кластеров' }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueueAdClustersSyncAction(campaignId, dateFrom, dateTo)
 }
 
 export async function setBidAction(
@@ -564,6 +518,39 @@ export async function startCampaignAction(
     return { success: true, data: undefined }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка запуска кампании' }
+  }
+}
+
+export async function pauseCampaignAction(
+  campaignId: string,
+): Promise<ActionResult<void>> {
+  try {
+    await requireManagerSession()
+    if (!campaignId) return { success: false, error: 'Кампания не указана' }
+
+    const campaign = await getCampaignWithAccount(campaignId)
+    const client = new WbApiClient(decrypt(campaign.wbAccount.apiKey))
+
+    await pauseCampaign(client, campaign.advertId)
+
+    await prisma.$transaction([
+      prisma.adActionLog.create({
+        data: {
+          campaignId,
+          action: 'pause',
+          note: 'Campaign paused',
+        },
+      }),
+      prisma.adCampaign.update({
+        where: { id: campaignId },
+        data: { status: 11 },
+      }),
+    ])
+
+    revalidatePath(`/advertising/${campaignId}`)
+    return { success: true, data: undefined }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка паузы кампании' }
   }
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
@@ -17,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { syncReportsAction, getReportData, exportReportXlsx } from '@/lib/actions/reports'
+import { syncReportsAction, exportReportXlsx } from '@/lib/actions/reports'
 import { aggregateReportRows } from '@/lib/reports/aggregate-report-rows'
 import type { ReportData, ReportRow } from '@/types/reports'
 import { columnGroups } from './columns'
@@ -44,7 +45,10 @@ export function ReportsClient({
   initialDateFrom,
   initialDateTo,
 }: ReportsClientProps) {
-  const [data, setData] = useState<ReportData | null>(initialData)
+  const data = initialData
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(initialDateFrom),
     to: new Date(initialDateTo),
@@ -62,6 +66,13 @@ export function ReportsClient({
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
   const [groupBy, setGroupBy] = useState<GroupBy>('')
+
+  useEffect(() => {
+    setDateRange({
+      from: new Date(initialDateFrom),
+      to: new Date(initialDateTo),
+    })
+  }, [initialDateFrom, initialDateTo])
 
   const { brands, categories, tags } = useMemo(() => {
     const rows = data?.rows ?? []
@@ -125,6 +136,16 @@ export function ReportsClient({
   const dateFrom = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : initialDateFrom
   const dateTo = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : initialDateTo
 
+  function handleDateRangeChange(range: DateRange) {
+    setDateRange(range)
+    if (!range.from) return
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('dateFrom', format(range.from, 'yyyy-MM-dd'))
+    params.set('dateTo', format(range.to ?? range.from, 'yyyy-MM-dd'))
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
   function handleSync() {
     startSync(async () => {
       const syncResult = await syncReportsAction(wbAccountId, dateFrom, dateTo)
@@ -133,20 +154,7 @@ export function ReportsClient({
         return
       }
 
-      const { totalRows, upserted, pages, durationMs, storageUpserted, storageErrors } = syncResult.data
-      const storageInfo = storageErrors > 0
-        ? ' | Хранение: ошибка API'
-        : storageUpserted > 0
-          ? ` | Хранение: ${storageUpserted} стр.`
-          : ' | Хранение: нет данных'
-
-      toast.success(
-        `Реализация: ${upserted}/${totalRows} строк (${pages} стр., ${Math.round(durationMs / 1000)}с)${storageInfo}`,
-      )
-
-      const dataResult = await getReportData(wbAccountId, dateFrom, dateTo)
-      if (dataResult.success) setData(dataResult.data)
-      else toast.error(dataResult.error)
+      toast.success(`Задача синхронизации поставлена в фон: ${syncResult.data.id}`)
     })
   }
 
@@ -179,7 +187,7 @@ export function ReportsClient({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
 
         <Button onClick={handleSync} disabled={isSyncing} className="gap-2">
           <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -300,6 +308,20 @@ export function ReportsClient({
           Последняя синхронизация:{' '}
           {format(new Date(data.lastSyncAt), 'd MMM yyyy HH:mm', { locale: ru })}
         </p>
+      )}
+
+      {data && (
+        <div
+          className={`rounded-md border px-3 py-2 text-sm ${
+            data.coverage.isCovered
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          {data.coverage.isCovered
+            ? `Период ${data.dateFrom} — ${data.dateTo} сохранён в базе. Данные открываются локально без повторного запроса WB.`
+            : `Период ${data.dateFrom} — ${data.dateTo} ещё не отмечен как полностью синхронизированный. Нажмите «Синхронизировать», чтобы загрузить его в фон.`}
+        </div>
       )}
 
       {data ? (

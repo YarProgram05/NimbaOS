@@ -3,11 +3,11 @@
 import { getServerSession } from 'next-auth'
 import * as XLSX from 'xlsx'
 import { authOptions } from '@/lib/auth'
-import { syncRealizationReport } from '@/lib/services/sync-reports'
-import { syncPaidStorage } from '@/lib/services/sync-paid-storage'
+import { enqueueReportsSyncAction } from '@/lib/actions/sync'
 import { calculateReport } from '@/lib/services/report-calculator'
 import type { ActionResult } from '@/types'
-import type { ReportSyncResult, ReportData, ReportRow } from '@/types/reports'
+import type { EnqueuedSyncJob } from '@/types/sync'
+import type { ReportData, ReportRow } from '@/types/reports'
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -21,36 +21,8 @@ export async function syncReportsAction(
   wbAccountId: string,
   dateFrom: string,
   dateTo: string,
-): Promise<ActionResult<ReportSyncResult>> {
-  try {
-    await requireSession()
-    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
-    if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
-
-    // Run realization report and paid-storage syncs sequentially to respect
-    // per-domain throttle (statistics: 1 req/min, analytics: 3 req/min).
-    const result = await syncRealizationReport(wbAccountId, dateFrom, dateTo)
-    const storageResult = await syncPaidStorage(wbAccountId, dateFrom, dateTo)
-
-    // Stamp lastSyncAt so the UI always shows the actual sync time,
-    // not max(fetchedAt) which doesn't update for existing rows (skipDuplicates).
-    const { prisma } = await import('@/lib/db')
-    await prisma.wbAccount.update({
-      where: { id: wbAccountId },
-      data: { lastSyncAt: new Date() },
-    })
-
-    return {
-      success: true,
-      data: {
-        ...result,
-        storageUpserted: storageResult.upserted,
-        storageErrors: storageResult.errors,
-      },
-    }
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Ошибка синхронизации' }
-  }
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  return enqueueReportsSyncAction(wbAccountId, dateFrom, dateTo)
 }
 
 // ── getReportData ─────────────────────────────────────────────────────────────

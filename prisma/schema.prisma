@@ -14,6 +14,22 @@ enum Role {
   VIEWER
 }
 
+enum SyncJobKind {
+  PRODUCTS_REFRESH
+  REPORTS_PERIOD
+  SALES_PLAN_PERIOD
+  ADVERTISING_CAMPAIGNS
+  ADVERTISING_STATS
+  ADVERTISING_CLUSTERS
+}
+
+enum SyncJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 // ─── Auth ──────────────────────────────────────────────────────
 
 model User {
@@ -73,11 +89,74 @@ model WbAccount {
   selfPurchases      SelfPurchase[]
   externalAds        ExternalAd[]
   articleOverrides   ArticleOverride[]
+  syncJobRuns        SyncJobRun[]
+  syncSchedules      SyncScheduleSetting[]
+  syncCoverages      SyncDataCoverage[]
 
   @@map("wb_accounts")
 }
 
+model SyncJobRun {
+  id          String        @id @default(uuid())
+  kind        SyncJobKind
+  status      SyncJobStatus @default(QUEUED)
+  wbAccountId String?
+  payload     Json
+  bullJobId   String?
+  result      Json?
+  error       String?
+  attempts    Int           @default(0)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  wbAccount   WbAccount?    @relation(fields: [wbAccountId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([kind, createdAt])
+  @@index([wbAccountId, createdAt])
+  @@index([bullJobId])
+  @@map("sync_job_runs")
+}
+
+model SyncScheduleSetting {
+  id            String      @id @default(uuid())
+  wbAccountId   String
+  kind          SyncJobKind
+  enabled       Boolean     @default(true)
+  timeOfDay     String
+  rollingDays   Int         @default(7)
+  timezone      String      @default("Europe/Moscow")
+  lastAppliedAt DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  wbAccount     WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([wbAccountId, kind])
+  @@index([wbAccountId])
+  @@index([kind])
+  @@map("sync_schedule_settings")
+}
+
 // ─── Products ──────────────────────────────────────────────────
+
+model SyncDataCoverage {
+  id          String      @id @default(uuid())
+  wbAccountId String
+  kind        SyncJobKind
+  dateFrom    DateTime    @db.Date
+  dateTo      DateTime    @db.Date
+  syncedAt    DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  wbAccount   WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@index([wbAccountId, kind, dateFrom, dateTo])
+  @@map("sync_data_coverages")
+}
 
 model Product {
   id               String   @id @default(uuid())
@@ -295,6 +374,7 @@ model AdCampaign {
 
   wbAccount        WbAccount          @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
   stats            AdCampaignStat[]
+  nmStats          AdCampaignNmStat[]
   clusters         AdCampaignCluster[]
   actionLogs       AdActionLog[]
 
@@ -324,6 +404,29 @@ model AdCampaignStat {
   @@index([campaignId])
   @@index([date])
   @@map("ad_campaign_stats")
+}
+
+model AdCampaignNmStat {
+  id         String   @id @default(uuid())
+  campaignId String
+  date       DateTime @db.Date
+  source     String   // "search" | "recommendations" | "total"
+  nmId       Int
+  views      Int      @default(0)
+  clicks     Int      @default(0)
+  ctr        Decimal  @default(0) @db.Decimal(6, 4)
+  cpc        Decimal  @default(0) @db.Decimal(10, 2)
+  spend      Decimal  @default(0) @db.Decimal(10, 2)
+  orders     Int      @default(0)
+  cartAdds   Int      @default(0)
+
+  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date, source, nmId])
+  @@index([campaignId])
+  @@index([nmId])
+  @@index([date])
+  @@map("ad_campaign_nm_stats")
 }
 
 model AdCampaignCluster {

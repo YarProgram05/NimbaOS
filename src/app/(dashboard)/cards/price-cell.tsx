@@ -42,6 +42,7 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
   const [refreshing, startRefresh] = useTransition()
 
   // ── Derived prices ───────────────────────────────────────────────────────────
+  const hasBasePrice = basePriceInput.trim() !== ''
   const baseNum      = parseFloat(basePriceInput) || 0
   const discountNum  = Math.min(95, Math.max(0, parseFloat(discountInput) || 0))
   const sellerPrice  = baseNum * (1 - discountNum / 100)
@@ -105,7 +106,7 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
   }
 
   // ── Display price (synced seller price, or calculated if not yet synced) ─────
-  const displayPrice = syncedSellerPrice ?? sellerPrice
+  const displayPrice = syncedSellerPrice ?? (hasBasePrice ? sellerPrice : null)
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -116,7 +117,9 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
             <PopoverTrigger asChild>
               <button className="inline-flex hover:opacity-80 transition-opacity cursor-pointer">
                 <div className="flex flex-col items-end gap-0.5 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded-lg">
-                  <div className="text-base font-semibold text-foreground">{formatRub(displayPrice)}</div>
+                  <div className="text-base font-semibold text-foreground">
+                    {displayPrice !== null ? formatRub(displayPrice) : '—'}
+                  </div>
                   {(row.discount ?? 0) > 0 && (
                     <div className="text-xs text-muted-foreground">−{row.discount}%</div>
                   )}

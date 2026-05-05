@@ -94,6 +94,26 @@ export async function fetchPricesByNmId(
 }
 
 /**
+ * Fetches price data for up to 1000 WB articles in one request.
+ * POST /api/v2/list/goods/filter is more reliable for a known local catalogue
+ * than walking the whole seller price list with offset pagination.
+ */
+export async function fetchPricesByNmIds(
+  client: WbApiClient,
+  nmIds: number[],
+): Promise<WbGoodsItem[]> {
+  if (nmIds.length === 0) return []
+
+  const resp = await client.post<WbPricesResponse>(
+    'prices',
+    '/api/v2/list/goods/filter',
+    { nmList: nmIds },
+  )
+
+  return resp?.data?.listGoods ?? []
+}
+
+/**
  * Creates a price-update task on WB.
  * POST /api/v2/upload/task — prices domain.
  * WB processes the update asynchronously; typical lag is a few seconds.

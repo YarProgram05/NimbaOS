@@ -182,6 +182,10 @@ export interface ReportData {
   dateFrom: string
   dateTo: string
   lastSyncAt: string | null
+  coverage: {
+    isCovered: boolean
+    syncedAt: string | null
+  }
 }
 
 // ── Column group definitions for show/hide ───────────────────────────────────

@@ -74,18 +74,7 @@ export function StatsTab({ campaignId }: StatsTabProps) {
         return
       }
 
-      const dataResult = await getCampaignStatsAction(campaignId, dateFrom, dateTo)
-      if (!dataResult.success) {
-        toast.error(dataResult.error)
-        return
-      }
-
-      setRows(dataResult.data)
-      toast.success(
-        `Статистика синхронизирована: ${syncResult.data.upserted} строк` +
-        (syncResult.data.errors > 0 ? `, ошибок ${syncResult.data.errors}` : '') +
-        ` (${(syncResult.data.durationMs / 1000).toFixed(1)}с)`,
-      )
+      toast.success(`Задача синхронизации поставлена в фон: ${syncResult.data.id}`)
     })
   }
 
