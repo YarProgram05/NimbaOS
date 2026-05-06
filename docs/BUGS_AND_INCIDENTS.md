@@ -3,7 +3,7 @@
 ## BUG-004: Phase 8 sync jobs still show WB/API and Prisma failures
 
 Status:
-Open
+Partially fixed
 
 Symptoms:
 `/sync` history can show failed or queued jobs for reports, advertising campaigns and advertising stats. Observed messages include WB API rate-limit errors and `Invalid prisma.adCampaignNmStat...` from advertising stats persistence.
@@ -12,10 +12,10 @@ Affected area:
 Background sync worker, BullMQ retry handling, advertising stats write path, WB rate-limit handling.
 
 Investigation:
-Phase 8 moved read-only sync into BullMQ. This exposed two classes of problems: WB domains can return long `429` retry windows, and some sync services previously hid internal failures inside result objects. Worker handling was tightened so internal `errors > 0` no longer becomes a false success.
+Phase 8 moved read-only sync into BullMQ. This exposed two classes of problems: WB domains can return long `429` retry windows, and some sync services previously hid internal failures inside result objects. Worker handling was tightened so internal `errors > 0` no longer becomes a false success. `WB API rate limit exceeded on domain ...` means WB temporarily throttled requests for that API domain; it is expected during heavy sync bursts and should be retried after the WB-provided retry window.
 
 Fix:
-Partially fixed. Queue now avoids duplicate active jobs and requeues long WB rate-limit failures according to WB retry timing. Remaining work is to inspect the specific `adCampaignNmStat` Prisma failure and verify advertising/report sync with live WB after rate limits clear.
+Partially fixed. Queue now avoids duplicate active jobs and requeues long WB rate-limit failures according to WB retry timing. On 2026-05-05 the `adCampaignNmStat` numeric overflow was fixed at code level by normalizing non-finite, over-precision, and out-of-range advertising metrics before Prisma upserts. The `/sync` screen can delete non-running queue/history items. Remaining work is live read-only verification after WB rate limits clear.
 
 Related files:
 `src/lib/queue/sync-processor.ts`, `src/lib/queue/sync-jobs.ts`, `src/lib/services/sync-ad-stats.ts`, `src/app/(dashboard)/sync`
@@ -46,7 +46,7 @@ Related files:
 ## BUG-002: `next dev` hangs at Starting
 
 Status:
-Investigating
+Monitoring
 
 Symptoms:
 Local `next dev` opened port `3000`, but HTTP requests timed out and log stayed at `Starting...`.
@@ -58,10 +58,10 @@ Steps to reproduce:
 Start local dev server and request `http://localhost:3000` or `/advertising`.
 
 Investigation:
-Observed during Phase 7 final check. Process was stopped to avoid leaving a hanging server. No root cause confirmed yet.
+Observed during Phase 7 final check. Process was stopped to avoid leaving a hanging server. On 2026-05-05 a fresh `next dev` check on port 3010 reached `Ready` in about 3 seconds and `/login` returned HTTP 200, so the hang was not reproduced.
 
 Fix:
-Not fixed. On recurrence, inspect dev server logs, running Node processes, port ownership, `.next` cache state, and environment loading without printing secrets.
+No code fix needed in this pass because the issue did not reproduce. On recurrence, inspect dev server logs, running Node processes, port ownership, `.next` cache state, and environment loading without printing secrets.
 
 Related files:
 `docs/COMMANDS.md`, `.next` logs if generated locally

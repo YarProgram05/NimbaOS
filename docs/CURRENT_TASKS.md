@@ -6,9 +6,9 @@
 
 Status: Open  
 Priority: High  
-Description: Phase 8 background sync still has live-run errors in `/sync`: WB API long rate limits for some domains and an advertising stats Prisma persistence error (`adCampaignNmStat`).  
-Next step: After WB retry windows clear, run one read-only smoke per failing job type; inspect and fix the advertising stats Prisma write path before declaring Phase 8 live-verified.  
-Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/app/(dashboard)/sync`  
+Description: Phase 8 background sync still needs live verification after WB API long rate limits. The known advertising stats Prisma numeric overflow in `adCampaignNmStat` was fixed at code level on 2026-05-05 by normalizing DB-bound metrics. `/sync` now supports deleting non-running queue/history items.  
+Next step: After WB retry windows clear, run one read-only smoke per failing job type before declaring Phase 8 live-verified.  
+Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/sync/job-runs.ts`, `src/app/(dashboard)/sync`  
 Risks: Do not spam WB sync buttons while a same-kind job is queued/running; respect retry windows.
 
 Нет активных незаблокированных задач.

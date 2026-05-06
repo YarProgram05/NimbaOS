@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { checkRole } from '@/lib/auth/check-role'
 import { prisma } from '@/lib/db'
 import { enqueueSyncJob } from '@/lib/queue/sync-jobs'
-import { listSyncJobRuns } from '@/lib/sync/job-runs'
+import { deleteSyncJobRun, listSyncJobRuns } from '@/lib/sync/job-runs'
 import { listSyncSchedules, updateSyncSchedule } from '@/lib/sync/schedules'
 import type { ActionResult } from '@/types'
 import {
@@ -49,6 +49,18 @@ export async function getSyncJobRunsAction(): Promise<ActionResult<SyncJobRunRow
     return { success: true, data: await listSyncJobRuns() }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки задач' }
+  }
+}
+
+export async function deleteSyncJobRunAction(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requireManagerSession()
+    if (!id) return { success: false, error: 'Задача не указана' }
+
+    await deleteSyncJobRun(id)
+    return { success: true, data: { id } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка удаления задачи' }
   }
 }
 

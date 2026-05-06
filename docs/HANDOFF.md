@@ -4,6 +4,15 @@
 
 NimbaOS находится после Phase 8 background sync на уровне кода. Поддерживать документацию как систему памяти и дальше двигаться к Phase 9 polish или к live verification по явному запросу.
 
+## Latest session summary
+
+Known bug pass on 2026-05-05:
+- fixed the `adCampaignNmStat` numeric overflow at code level by sanitizing advertising metrics before Prisma upserts;
+- added deletion for non-running `/sync` queue/history items; deletion removes the BullMQ job when it is still present in Redis and then deletes the `SyncJobRun` row;
+- verified `npm run type-check`, `npx prisma validate`, and `npm run build`;
+- checked `next dev` on port 3010: it reached `Ready`, `/login` returned HTTP 200, and the temporary server was stopped;
+- did not run live WB sync, production commands, DB pushes, or migrations.
+
 ## Last session summary
 
 Phase 8 реализована поверх существующего dirty worktree без откатов Phase 7/docs изменений:

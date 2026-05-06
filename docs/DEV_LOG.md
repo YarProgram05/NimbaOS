@@ -1,5 +1,27 @@
 # Development Log
 
+## 2026-05-05 - Known bug pass
+
+### Summary
+
+Fixed the known advertising stats persistence failure where `prisma.adCampaignNmStat.upsert()` could crash with a numeric field overflow. The sync code now sanitizes WB advertising metrics before DB writes: non-finite values become zero, integer counters are bounded to PostgreSQL int range, and decimal metrics are rounded/clamped to the existing Prisma decimal columns. Added deletion for non-running `/sync` queue/history items.
+
+### Files changed
+
+`src/lib/services/sync-ad-stats.ts`, `src/lib/sync/job-runs.ts`, `src/lib/actions/sync.ts`, `src/app/(dashboard)/sync/sync-client.tsx`, `docs/CURRENT_TASKS.md`, `docs/HANDOFF.md`, `docs/BUGS_AND_INCIDENTS.md`, `docs/DEV_LOG.md`.
+
+### Commands run
+
+`npm run type-check`, `npx prisma validate`, `npm run build`, temporary `next dev` smoke on port 3010 with `/login` HTTP 200.
+
+### Result
+
+Code-level checks pass. The previous `next dev` hang was not reproduced on port 3010; the temporary dev server was stopped. No live WB sync, DB push, migration, production command, or WB-changing action was run.
+
+### Issues
+
+Live read-only WB verification is still pending because it depends on WB rate-limit windows and an explicit safe smoke run.
+
 ## 2026-05-05 — Phase 8 background sync
 
 ### Summary

@@ -14,6 +14,9 @@ import type {
 const SEARCH_APP_TYPE = 1
 const RECOMMENDATION_APP_TYPES = new Set([32, 64, 128])
 const MAX_FULLSTATS_DAYS = 31
+const MAX_INT = 2_147_483_647
+const MAX_PERCENT = 99.9999
+const MAX_MONEY = 99_999_999.99
 
 interface DaySourceMetrics {
   views: number
@@ -27,7 +30,46 @@ interface DaySourceMetrics {
 }
 
 function toNumber(value: number | string | undefined | null): number {
-  return Number(value ?? 0)
+  const numberValue = Number(value ?? 0)
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function roundToScale(value: number, scale: number): number {
+  const factor = 10 ** scale
+  return Math.round(value * factor) / factor
+}
+
+function toDbInt(value: number): number {
+  return Math.trunc(clampNumber(toNumber(value), 0, MAX_INT))
+}
+
+function toDbPercent(value: number): number {
+  return roundToScale(clampNumber(toNumber(value), 0, MAX_PERCENT), 4)
+}
+
+function toDbMoney(value: number): number {
+  return roundToScale(clampNumber(toNumber(value), 0, MAX_MONEY), 2)
+}
+
+function toDbNullableMoney(value: number | null): number | null {
+  return value === null ? null : toDbMoney(value)
+}
+
+function toDbMetrics(metrics: DaySourceMetrics): DaySourceMetrics {
+  return {
+    views: toDbInt(metrics.views),
+    clicks: toDbInt(metrics.clicks),
+    cartAdds: toDbInt(metrics.cartAdds),
+    orders: toDbInt(metrics.orders),
+    spend: toDbMoney(metrics.spend),
+    ctr: toDbPercent(metrics.ctr),
+    cpc: toDbMoney(metrics.cpc),
+    bid: toDbNullableMoney(metrics.bid),
+  }
 }
 
 function parseDate(value: string): Date {
@@ -273,6 +315,8 @@ async function syncDaySourceRow(
   source: AdSource,
   metrics: DaySourceMetrics,
 ): Promise<void> {
+  const dbMetrics = toDbMetrics(metrics)
+
   await prisma.adCampaignStat.upsert({
     where: {
       campaignId_date_source: {
@@ -285,24 +329,24 @@ async function syncDaySourceRow(
       campaignId,
       date,
       source,
-      views: metrics.views,
-      clicks: metrics.clicks,
-      ctr: metrics.ctr,
-      cpc: metrics.cpc,
-      spend: metrics.spend,
-      orders: metrics.orders,
-      cartAdds: metrics.cartAdds,
-      bid: metrics.bid,
+      views: dbMetrics.views,
+      clicks: dbMetrics.clicks,
+      ctr: dbMetrics.ctr,
+      cpc: dbMetrics.cpc,
+      spend: dbMetrics.spend,
+      orders: dbMetrics.orders,
+      cartAdds: dbMetrics.cartAdds,
+      bid: dbMetrics.bid,
     },
     update: {
-      views: metrics.views,
-      clicks: metrics.clicks,
-      ctr: metrics.ctr,
-      cpc: metrics.cpc,
-      spend: metrics.spend,
-      orders: metrics.orders,
-      cartAdds: metrics.cartAdds,
-      bid: metrics.bid,
+      views: dbMetrics.views,
+      clicks: dbMetrics.clicks,
+      ctr: dbMetrics.ctr,
+      cpc: dbMetrics.cpc,
+      spend: dbMetrics.spend,
+      orders: dbMetrics.orders,
+      cartAdds: dbMetrics.cartAdds,
+      bid: dbMetrics.bid,
     },
   })
 }
@@ -316,6 +360,8 @@ async function syncDayNmRows(
   let upserted = 0
 
   for (const [nmId, metrics] of Array.from(rows.entries())) {
+    const dbMetrics = toDbMetrics(metrics)
+
     await prisma.adCampaignNmStat.upsert({
       where: {
         campaignId_date_source_nmId: {
@@ -330,22 +376,22 @@ async function syncDayNmRows(
         date,
         source,
         nmId,
-        views: metrics.views,
-        clicks: metrics.clicks,
-        ctr: metrics.ctr,
-        cpc: metrics.cpc,
-        spend: metrics.spend,
-        orders: metrics.orders,
-        cartAdds: metrics.cartAdds,
+        views: dbMetrics.views,
+        clicks: dbMetrics.clicks,
+        ctr: dbMetrics.ctr,
+        cpc: dbMetrics.cpc,
+        spend: dbMetrics.spend,
+        orders: dbMetrics.orders,
+        cartAdds: dbMetrics.cartAdds,
       },
       update: {
-        views: metrics.views,
-        clicks: metrics.clicks,
-        ctr: metrics.ctr,
-        cpc: metrics.cpc,
-        spend: metrics.spend,
-        orders: metrics.orders,
-        cartAdds: metrics.cartAdds,
+        views: dbMetrics.views,
+        clicks: dbMetrics.clicks,
+        ctr: dbMetrics.ctr,
+        cpc: dbMetrics.cpc,
+        spend: dbMetrics.spend,
+        orders: dbMetrics.orders,
+        cartAdds: dbMetrics.cartAdds,
       },
     })
 

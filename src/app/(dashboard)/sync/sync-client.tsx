@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { RefreshCw, RotateCw } from 'lucide-react'
+import { RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  deleteSyncJobRunAction,
   enqueueManualSyncAction,
   getSyncJobRunsAction,
   getSyncSchedulesAction,
@@ -112,6 +113,7 @@ export function SyncClient({
   const [schedules, setSchedules] = useState(initialSchedules)
   const [pendingKind, setPendingKind] = useState<SyncJobKind | null>(null)
   const [savingSchedule, setSavingSchedule] = useState<SyncJobKind | null>(null)
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null)
   const [isRefreshing, startRefresh] = useTransition()
   const hasActiveJobs = jobs.some((job) => job.status === 'QUEUED' || job.status === 'RUNNING')
 
@@ -172,6 +174,28 @@ export function SyncClient({
 
     toast.success(`Задача поставлена в фон: ${result.data.id}`)
     refreshJobs()
+  }
+
+  async function deleteJob(job: SyncJobRunRow) {
+    if (job.status === 'RUNNING') {
+      toast.error('Нельзя удалить задачу, которая выполняется прямо сейчас')
+      return
+    }
+
+    const confirmed = window.confirm('Удалить задачу из очереди и истории синхронизации?')
+    if (!confirmed) return
+
+    setDeletingJobId(job.id)
+    const result = await deleteSyncJobRunAction(job.id)
+    setDeletingJobId(null)
+
+    if (!result.success) {
+      toast.error(result.error)
+      return
+    }
+
+    setJobs((current) => current.filter((item) => item.id !== job.id))
+    toast.success('Задача удалена')
   }
 
   function patchSchedule(kind: SyncJobKind, patch: Partial<SyncScheduleRow>) {
@@ -380,6 +404,7 @@ export function SyncClient({
                   <TableHead>Длительность</TableHead>
                   <TableHead>Попытки</TableHead>
                   <TableHead>Ошибка</TableHead>
+                  <TableHead className="text-right">Действие</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,11 +422,24 @@ export function SyncClient({
                     <TableCell className="max-w-[280px] truncate text-destructive">
                       {job.error ?? '—'}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {canEnqueue && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={job.status === 'RUNNING' || deletingJobId === job.id}
+                          onClick={() => deleteJob(job)}
+                          title={job.status === 'RUNNING' ? 'Задача сейчас выполняется' : 'Удалить задачу'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {jobs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                       Задач пока нет.
                     </TableCell>
                   </TableRow>

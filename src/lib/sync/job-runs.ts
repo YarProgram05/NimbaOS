@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { getSyncQueue } from '@/lib/queue'
 import {
   SYNC_JOB_KINDS,
   type SyncJobKind,
@@ -83,4 +84,36 @@ export async function listSyncJobRuns(limit = 50): Promise<SyncJobRunRow[]> {
       ? row.finishedAt.getTime() - row.startedAt.getTime()
       : null,
   }))
+}
+
+export async function deleteSyncJobRun(id: string): Promise<void> {
+  const run = await prisma.syncJobRun.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      bullJobId: true,
+    },
+  })
+
+  if (!run) {
+    throw new Error('Задача не найдена')
+  }
+
+  if (run.status === 'RUNNING') {
+    throw new Error('Нельзя удалить задачу, которая выполняется прямо сейчас')
+  }
+
+  if (run.bullJobId) {
+    const queue = await getSyncQueue()
+    const job = await queue.getJob(run.bullJobId)
+
+    if (job) {
+      await job.remove()
+    }
+  }
+
+  await prisma.syncJobRun.delete({
+    where: { id: run.id },
+  })
 }
