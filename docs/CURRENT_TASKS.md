@@ -11,6 +11,15 @@ Next step: After WB retry windows clear, run one read-only smoke per failing job
 Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/sync/job-runs.ts`, `src/app/(dashboard)/sync`  
 Risks: Do not spam WB sync buttons while a same-kind job is queued/running; respect retry windows.
 
+### TASK-PRODUCT-PRICE-VERIFY
+
+Status: Waiting on WB prices rate limit  
+Priority: High  
+Description: Product price sync was fixed at code level to preserve old prices and retry correctly when WB `prices` domain is rate-limited. Live run on 2026-05-06 hit `WB API rate limit exceeded on domain "prices"` with retry around 34 minutes, so blank prices cannot be fully backfilled until WB allows price requests again.  
+Next step: After the retry window clears, run one products refresh for `WB Galioni (WB_2)` and verify `/cards` price coverage.  
+Related files: `src/lib/services/sync-products.ts`, `docs/BUGS_AND_INCIDENTS.md`  
+Risks: Repeated manual retries before the WB retry window clears will extend/noise the rate-limit problem.
+
 Нет активных незаблокированных задач.
 
 ## Next

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
-import { WbApiClient } from '@/lib/wb-api/client'
-import { fetchCardsList, fetchPricesByNmIds, type CardsCursor } from '@/lib/wb-api/products'
+import { WbApiClient, WbRateLimitError } from '@/lib/wb-api/client'
+import { fetchCardsList, fetchPricesByNmId, fetchPricesByNmIds, type CardsCursor } from '@/lib/wb-api/products'
 import type { WbCard, WbGoodsItem, SyncResult } from '@/types/products'
 
 /**
@@ -30,7 +30,8 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
     let page
     try {
       page = await fetchCardsList(client, cursor)
-    } catch {
+    } catch (error) {
+      if (error instanceof WbRateLimitError) throw error
       result.errors++
       break
     }
@@ -57,14 +58,40 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
   // WB's full price-list pagination can skip cards in some seller cabinets;
   // the nmList endpoint is deterministic for the cards we just synced.
   const nmIds = Array.from(syncedNmIds)
+  const pricedNmIds = new Set<number>()
   for (let index = 0; index < nmIds.length; index += 1000) {
-    const goods = await fetchPricesByNmIds(client, nmIds.slice(index, index + 1000))
+    let goods: WbGoodsItem[] = []
+    try {
+      goods = await fetchPricesByNmIds(client, nmIds.slice(index, index + 1000))
+    } catch (error) {
+      if (error instanceof WbRateLimitError) throw error
+      result.errors++
+    }
+
     for (const good of goods) {
       try {
         await updatePrices(wbAccountId, good, result)
+        pricedNmIds.add(good.nmID)
       } catch {
         result.errors++
       }
+    }
+  }
+
+  // WB can omit some articles from the batch price response even though cards exist.
+  // Fetch missing prices one-by-one so visible card prices are not left blank.
+  for (const nmId of nmIds) {
+    if (pricedNmIds.has(nmId)) continue
+
+    try {
+      const good = await fetchPricesByNmId(client, nmId)
+      if (!good) continue
+
+      await updatePrices(wbAccountId, good, result)
+      pricedNmIds.add(good.nmID)
+    } catch (error) {
+      if (error instanceof WbRateLimitError) throw error
+      result.errors++
     }
   }
 
@@ -96,7 +123,19 @@ async function upsertCard(
   await prisma.$transaction(async (tx) => {
     const existing = await tx.product.findUnique({
       where: { wbAccountId_nmId: { wbAccountId, nmId: card.nmID } },
-      select: { id: true },
+      select: {
+        id: true,
+        sizes: {
+          select: {
+            barcode: true,
+            techSize: true,
+            wbSize: true,
+            price: true,
+            discount: true,
+            spp: true,
+          },
+        },
+      },
     })
 
     let productId: string
@@ -132,20 +171,48 @@ async function upsertCard(
       result.created++
     }
 
-    // Replace sizes atomically (delete + recreate handles added/removed sizes between syncs)
+    const existingPricesByBarcode = new Map(
+      (existing?.sizes ?? []).map((size) => [
+        size.barcode,
+        {
+          price: size.price?.toString() ?? null,
+          discount: size.discount,
+          spp: size.spp?.toString() ?? null,
+        },
+      ]),
+    )
+    const existingPricesBySize = new Map(
+      (existing?.sizes ?? []).map((size) => [
+        `${size.techSize.trim().toLowerCase()}|${(size.wbSize ?? '').trim().toLowerCase()}`,
+        {
+          price: size.price?.toString() ?? null,
+          discount: size.discount,
+          spp: size.spp?.toString() ?? null,
+        },
+      ]),
+    )
+
+    // Replace sizes atomically, but preserve previous prices until the price API refreshes them.
     await tx.productSize.deleteMany({ where: { productId } })
     if (card.sizes.length > 0) {
       const sizeData = card.sizes.flatMap((s) =>
-        s.skus.map((barcode) => ({
-          productId,
-          techSize: s.techSize,
-          wbSize:   s.wbSize || null,
-          barcode,
-          // WB cards API price is in kopecks; convert to roubles
-          price:    s.price ? s.price / 100 : null,
-          discount: null as null,
-          spp:      null as null,
-        })),
+        s.skus.map((barcode) => {
+          const preserved =
+            existingPricesByBarcode.get(barcode) ??
+            existingPricesBySize.get(`${s.techSize.trim().toLowerCase()}|${(s.wbSize || '').trim().toLowerCase()}`)
+
+          return {
+            productId,
+            techSize: s.techSize,
+            wbSize:   s.wbSize || null,
+            barcode,
+            // WB cards API price is in kopecks; convert to roubles.
+            // If the cards response has no price, keep the last known price.
+            price:    s.price ? s.price / 100 : preserved?.price ?? null,
+            discount: preserved?.discount ?? null,
+            spp:      preserved?.spp ?? null,
+          }
+        }),
       )
       await tx.productSize.createMany({ data: sizeData })
     }
@@ -173,7 +240,7 @@ async function updatePrices(
     where: { wbAccountId_nmId: { wbAccountId, nmId: good.nmID } },
     select: {
       id: true,
-      sizes: { select: { id: true, techSize: true } },
+      sizes: { select: { id: true, techSize: true, wbSize: true } },
     },
   })
 
@@ -203,6 +270,7 @@ async function updatePrices(
     const apiSizeName = normalizeSize(sizePrice.techSizeName)
     const dbSize =
       product.sizes.find((s) => normalizeSize(s.techSize) === apiSizeName) ??
+      product.sizes.find((s) => normalizeSize(s.wbSize) === apiSizeName) ??
       product.sizes.find((s) => normalizeSize(s.techSize) === '0' && apiSizeName === '') ??
       fallbackSingleSize
 

@@ -20,6 +20,26 @@ Partially fixed. Queue now avoids duplicate active jobs and requeues long WB rat
 Related files:
 `src/lib/queue/sync-processor.ts`, `src/lib/queue/sync-jobs.ts`, `src/lib/services/sync-ad-stats.ts`, `src/app/(dashboard)/sync`
 
+## BUG-005: Product card sync can leave prices blank after WB price rate limits
+
+Status:
+Fixed at code level
+
+Symptoms:
+The `/cards` table shows products, but many rows have `—` in the price column. In the database these rows have `product_sizes.price = null`.
+
+Affected area:
+Product sync, WB prices domain, `/cards` price display.
+
+Investigation:
+Cards and prices are fetched from different WB domains. Cards can sync successfully while the `prices` domain returns `WB API rate limit exceeded on domain "prices"` with a long retry window. The previous product sync also replaced size rows before the price refresh, so a card refresh could erase previously known prices if the price endpoint was unavailable or omitted a product from the batch response.
+
+Fix:
+Product sync now preserves existing size prices while refreshing card sizes, falls back from batch price loading to single-article price loading for missing articles, and rethrows WB price rate limits so the queue can delay/retry the job instead of turning the rate limit into a partial internal error.
+
+Related files:
+`src/lib/services/sync-products.ts`, `src/lib/wb-api/products.ts`, `src/app/(dashboard)/cards`
+
 ## BUG-001: WB advert API long 429 retry
 
 Status:

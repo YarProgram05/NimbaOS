@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-06 - Product price sync hardening
+
+### Summary
+
+Investigated blank prices in `/cards` for `WB Galioni (WB_2)`. The DB had product cards and sizes, but most `product_sizes.price` values were null. A live price check returned `WB API rate limit exceeded on domain "prices"` with a retry window around 34 minutes. Product sync was hardened so card refreshes preserve existing prices, missing batch price results are retried one-by-one, and WB price rate limits are rethrown for queue-level delayed retry.
+
+### Files changed
+
+`src/lib/services/sync-products.ts`, `docs/BUGS_AND_INCIDENTS.md`, `docs/CURRENT_TASKS.md`, `docs/HANDOFF.md`, `docs/DEV_LOG.md`.
+
+### Commands run
+
+`npm run type-check`, `npx prisma validate`, DB inspection queries, live read-only WB price check for two nmIDs.
+
+### Result
+
+Code-level checks pass. Current blank prices cannot be fully backfilled until the WB `prices` domain retry window clears.
+
 ## 2026-05-05 - Known bug pass
 
 ### Summary

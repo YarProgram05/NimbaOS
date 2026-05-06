@@ -13,6 +13,12 @@ Known bug pass on 2026-05-05:
 - checked `next dev` on port 3010: it reached `Ready`, `/login` returned HTTP 200, and the temporary server was stopped;
 - did not run live WB sync, production commands, DB pushes, or migrations.
 
+Product price follow-up on 2026-05-06:
+- investigated blank prices on `/cards` for `WB Galioni (WB_2)`;
+- confirmed DB has 58 of 59 products without `product_sizes.price`;
+- confirmed WB `prices` domain currently returns rate limit with retry around 34 minutes;
+- fixed product sync at code level to preserve existing prices during card-size refresh, fallback to single-article price fetches when batch price response omits items, and requeue on WB price rate limits instead of treating them as partial internal errors.
+
 ## Last session summary
 
 Phase 8 реализована поверх существующего dirty worktree без откатов Phase 7/docs изменений:
