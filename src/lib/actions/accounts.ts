@@ -21,6 +21,18 @@ export interface WbAccountSummary {
   createdAt: Date
 }
 
+const WB_ACCOUNT_SUMMARY_SELECT = {
+  id: true,
+  name: true,
+  sellerName: true,
+  sellerId: true,
+  tradeMark: true,
+  taxRate: true,
+  isActive: true,
+  lastSyncAt: true,
+  createdAt: true,
+} as const
+
 async function requireSession() {
   const session = await getServerSession(authOptions)
   if (!session?.user) throw new Error('Не авторизован')
@@ -32,17 +44,7 @@ export async function getWbAccounts(): Promise<WbAccountSummary[]> {
 
   const accounts = await prisma.wbAccount.findMany({
     where: { isActive: true },
-    select: {
-      id: true,
-      name: true,
-      sellerName: true,
-      sellerId: true,
-      tradeMark: true,
-      taxRate: true,
-      isActive: true,
-      lastSyncAt: true,
-      createdAt: true,
-    },
+    select: WB_ACCOUNT_SUMMARY_SELECT,
     orderBy: { createdAt: 'asc' },
   })
 
@@ -73,6 +75,65 @@ export async function addWbAccount(data: {
   }
 
   const encryptedKey = encrypt(data.apiKey)
+  const existingAccounts = await prisma.wbAccount.findMany({
+    where: { sellerId: sellerInfo.sellerId },
+    select: {
+      id: true,
+      createdAt: true,
+      _count: {
+        select: {
+          products: true,
+          realizationReports: true,
+          paidStorage: true,
+          adCampaigns: true,
+          salesPlans: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (existingAccounts.length > 0) {
+    const accountScore = (account: (typeof existingAccounts)[number]) =>
+      account._count.products
+      + account._count.realizationReports
+      + account._count.paidStorage
+      + account._count.adCampaigns
+      + account._count.salesPlans
+
+    const target = existingAccounts.reduce((best, account) => {
+      const diff = accountScore(account) - accountScore(best)
+      if (diff !== 0) return diff > 0 ? account : best
+      return account.createdAt < best.createdAt ? account : best
+    })
+
+    const account = await prisma.$transaction(async (tx) => {
+      await tx.wbAccount.updateMany({
+        where: {
+          sellerId: sellerInfo.sellerId,
+          id: { not: target.id },
+        },
+        data: { isActive: false },
+      })
+
+      return tx.wbAccount.update({
+        where: { id: target.id },
+        data: {
+          name: data.name.trim(),
+          apiKey: encryptedKey,
+          taxRate: data.taxRate ?? 0,
+          sellerName: sellerInfo.sellerName,
+          sellerId: sellerInfo.sellerId,
+          tradeMark: sellerInfo.tradeMark ?? null,
+          isActive: true,
+        },
+        select: WB_ACCOUNT_SUMMARY_SELECT,
+      })
+    })
+
+    revalidatePath('/settings')
+    return { success: true, data: { ...account, taxRate: account.taxRate.toString() } }
+  }
 
   const account = await prisma.wbAccount.create({
     data: {
@@ -83,17 +144,7 @@ export async function addWbAccount(data: {
       sellerId: sellerInfo.sellerId,
       tradeMark: sellerInfo.tradeMark ?? null,
     },
-    select: {
-      id: true,
-      name: true,
-      sellerName: true,
-      sellerId: true,
-      tradeMark: true,
-      taxRate: true,
-      isActive: true,
-      lastSyncAt: true,
-      createdAt: true,
-    },
+    select: WB_ACCOUNT_SUMMARY_SELECT,
   })
 
   revalidatePath('/settings')

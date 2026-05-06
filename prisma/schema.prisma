@@ -286,7 +286,7 @@ model ArticleOverride {
 model RealizationReport {
   id                    String   @id @default(uuid())
   wbAccountId           String
-  rrdId                 BigInt   @unique
+  rrdId                 BigInt
   realizationReportId   Int
   dateFrom              DateTime @db.Date
   dateTo                DateTime @db.Date
@@ -322,6 +322,7 @@ model RealizationReport {
 
   wbAccount             WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
+  @@unique([wbAccountId, rrdId])
   @@index([wbAccountId])
   @@index([nmId])
   @@index([vendorCode])
