@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 8 background sync is implemented at code level. Phase 7 is also implemented at code level but still needs live verification after WB advert API rate-limit. Next major phase: Phase 9 production/responsive/Excel polish.
+Phase 9 production/responsive/Excel polish is implemented at code level. Phase 7 and Phase 8 still need live WB verification after API rate-limit windows.
 
 ## Implemented
 
@@ -15,17 +15,17 @@ Phase 8 background sync is implemented at code level. Phase 7 is also implemente
 - Phase 6: sales plan CRUD, article management, orders/sales/funnel sync, daily grid, Excel export.
 - Phase 7: advertising campaigns UI/API/services/actions, stats, clusters, breakdown, logs, Excel export, pause/start/stop/deposit/bid actions, per-nm ad spend for reports.
 - Phase 8: Bull MQ background sync for read-only WB syncs, `SyncJobRun` history, worker, scheduler, `/sync` mini-screen, manual enqueue actions.
+- Phase 9: VPS Docker production artifacts, public healthcheck, Prisma baseline migration, responsive table polish, shared XLSX export helper.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
 ## Partially implemented
 
 - Phase 7 live verification: code is in place, but WB advert API returned long `429`; full live test still pending.
 - Phase 8 live verification: code and type checks pass, but the new Prisma schema has not been applied to dev DB in this session and no live WB job was run.
-- Production deployment polish: basic Docker dev exists; production hardening remains Phase 9.
+- Production live rollout: artifacts exist, but real VPS deploy/migrate/runbook execution still requires explicit confirmation.
 
 ## Not implemented yet
 
-- Production deployment documentation and final Docker/Nginx polish.
 - Full monitoring/alerting beyond the `/sync` mini-screen and `SyncJobRun` error history.
 - Product tags in financial reports if still required by future scope.
 
@@ -42,6 +42,7 @@ Phase 8 background sync is implemented at code level. Phase 7 is also implemente
 - WB API layer: `src/lib/wb-api`.
 - Sync services: `src/lib/services`.
 - Background sync: `src/lib/queue`, `src/lib/actions/sync.ts`, `scripts/sync-worker.ts`, `scripts/schedule-sync.ts`, `src/app/(dashboard)/sync`.
+- Production deploy: `Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/nimbaos.conf`, `src/app/api/health/route.ts`.
 - Server Actions: `src/lib/actions`.
 - Financial reports: `src/app/(dashboard)/reports`, `src/lib/services/report-calculator.ts`.
 - Sales plan: `src/app/(dashboard)/sales-plan`, `src/lib/services/plan-calculator.ts`.

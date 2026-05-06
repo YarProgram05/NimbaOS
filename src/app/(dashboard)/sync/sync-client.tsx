@@ -241,9 +241,9 @@ export function SyncClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Select value={selectedAccountId ?? ''} onValueChange={handleAccountChange}>
-            <SelectTrigger className="w-64">
+            <SelectTrigger className="w-full sm:w-64">
               <SelectValue placeholder="Выберите кабинет" />
             </SelectTrigger>
             <SelectContent>
@@ -299,7 +299,7 @@ export function SyncClient({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <Table>
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Тип</TableHead>
@@ -393,7 +393,7 @@ export function SyncClient({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-md border">
-            <Table>
+            <Table className="min-w-[1100px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Тип</TableHead>

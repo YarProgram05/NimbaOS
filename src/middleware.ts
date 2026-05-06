@@ -15,10 +15,10 @@ export const config = {
     /*
      * Match all paths except:
      * - /login, /register (auth pages)
-     * - /api/auth/* (NextAuth endpoints)
+     * - /api/auth/* (NextAuth endpoints), /api/health (public healthcheck)
      * - /_next/static, /_next/image (Next.js internals)
      * - /favicon.ico
      */
-    '/((?!login|register|api/auth|_next/static|_next/image|favicon\\.ico).*)',
+    '/((?!login|register|api/auth|api/health|_next/static|_next/image|favicon\\.ico).*)',
   ],
 }

@@ -27,7 +27,7 @@ export function Header({ user, onMobileMenuOpen }: HeaderProps) {
     .toUpperCase()
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-3 sm:px-4">
       {/* Mobile hamburger */}
       <Button
         variant="ghost"
@@ -45,7 +45,7 @@ export function Header({ user, onMobileMenuOpen }: HeaderProps) {
       {/* User menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="flex items-center gap-2 px-2">
+          <Button variant="ghost" className="flex min-w-0 items-center gap-2 px-2">
             <Avatar className="h-7 w-7">
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>

@@ -333,10 +333,10 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       </Button>
 
       {/* Plan header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 lg:flex-row">
         <div className="space-y-1">
           {editingHeader ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 value={headerName}
                 onChange={(e) => setHeaderName(e.target.value)}
@@ -374,7 +374,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
               >
                 {plan.name}
               </h1>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 <span>{dateLabel}</span>
                 <span>ДРР {plan.drrPercent}%</span>
                 <span>{plan.items.length} артикулов</span>
@@ -385,7 +385,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       </div>
 
       {/* Actions bar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="gap-2" disabled={isAddingFromStock}>
@@ -498,8 +498,8 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
           </Button>
         </div>
       ) : (
-        <div className="rounded-md border overflow-hidden">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-md border">
+          <table className="min-w-[980px] w-full">
             <thead className="bg-muted/50 border-b">
               <tr>
                 {/* Expand column */}

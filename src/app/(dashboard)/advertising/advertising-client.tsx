@@ -213,8 +213,8 @@ export function AdvertisingClient({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={filter} onValueChange={(value) => setFilter(value as FilterTab)}>
-          <TabsList>
+        <Tabs value={filter} onValueChange={(value) => setFilter(value as FilterTab)} className="min-w-0 max-w-full">
+          <TabsList className="max-w-full overflow-x-auto">
             <TabsTrigger value="all">Все ({counts.all})</TabsTrigger>
             <TabsTrigger value="active">Активные ({counts.active})</TabsTrigger>
             <TabsTrigger value="paused">Пауза ({counts.paused})</TabsTrigger>
@@ -222,7 +222,7 @@ export function AdvertisingClient({
           </TabsList>
         </Tabs>
 
-        <div className="ml-auto">
+        <div className="w-full sm:ml-auto sm:w-auto">
           <Button onClick={handleSync} disabled={isSyncing} size="sm">
             <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Синхронизация...' : 'Синхронизировать'}
@@ -258,8 +258,8 @@ export function AdvertisingClient({
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
+        <div className="overflow-hidden rounded-lg border">
+          <Table className="min-w-[860px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{renderSortableHeader('name', 'Название')}</TableHead>

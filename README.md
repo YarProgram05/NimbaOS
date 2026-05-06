@@ -1,6 +1,6 @@
 # NimbaOS
 
-NimbaOS is a private web platform for digitizing Wildberries seller cabinets: products, references, financial reports, sales planning, advertising campaigns, and future background sync.
+NimbaOS is a private web platform for digitizing Wildberries seller cabinets: products, references, financial reports, sales planning, advertising campaigns, and background sync.
 
 This README is a short human entrypoint. It is not the agent memory system.
 
@@ -28,6 +28,16 @@ Core documents:
 - NextAuth.js
 - Docker Compose
 
+## Production VPS
+
+Production target is a VPS with Docker Compose. Copy `.env.production.example` to `.env.production`, fill real secrets on the server, then validate the compose file before running anything:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml config
+```
+
+The production stack contains PostgreSQL, Redis, the Next.js standalone app, BullMQ worker, optional one-shot Prisma migration service, and optional scheduler service. Nginx reverse-proxy example lives in `deploy/nginx/nimbaos.conf`.
+
 ## Safe Local Commands
 
 See `docs/COMMANDS.md` for the full command policy.
@@ -54,6 +64,6 @@ Require explicit confirmation:
 
 ## Current Status
 
-Phases 0-6 are complete. Phase 7 advertising is implemented at code level and still needs live verification after WB advert API rate-limit windows. Phases 8-9 are next.
+Phases 0-9 are implemented at code level. Phase 7/8 live WB verification and real production rollout remain explicit follow-up tasks.
 
 For fresh status, read `docs/HANDOFF.md`, then `docs/CURRENT_TASKS.md`.

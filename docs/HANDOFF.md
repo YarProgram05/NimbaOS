@@ -6,6 +6,16 @@ NimbaOS находится после Phase 8 background sync на уровне 
 
 ## Latest session summary
 
+Phase 9 code-level implementation on 2026-05-06:
+- added VPS production artifacts: `Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/nimbaos.conf`;
+- enabled Next.js standalone output and added public `/api/health`;
+- added Prisma baseline migration under `prisma/migrations` for future `prisma migrate deploy`;
+- refactored XLSX export creation into `src/lib/xlsx/export.ts` and polished report/plan workbook metadata;
+- improved responsive behavior for dashboard shell, action bars and wide tables;
+- updated project docs and closed the production target open question as VPS Docker Compose.
+
+No live WB sync, WB-changing action, DB push or production migration was run.
+
 Known bug pass on 2026-05-05:
 - fixed the `adCampaignNmStat` numeric overflow at code level by sanitizing advertising metrics before Prisma upserts;
 - added deletion for non-running `/sync` queue/history items; deletion removes the BullMQ job when it is still present in Redis and then deletes the `SyncJobRun` row;

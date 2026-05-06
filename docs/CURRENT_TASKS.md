@@ -24,14 +24,7 @@ Risks: Repeated manual retries before the WB retry window clears will extend/noi
 
 ## Next
 
-### TASK-P9-POLISH
-
-Status: Planned  
-Priority: Medium  
-Description: Phase 9 — финальная доработка: Excel, responsive, Docker/prod polish.  
-Next step: Уточнить приоритеты после Phase 8 или отдельного запроса пользователя.  
-Related files: `README.md`, `docker-compose.dev.yml`, app UI modules  
-Risks: Production commands and migrations require explicit confirmation.
+Нет запланированных незаблокированных задач.
 
 ## Blocked
 
@@ -45,6 +38,15 @@ Related files: `src/lib/wb-api/advertising.ts`, `src/lib/services/sync-ad-stats.
 Risks: Не ждать долгий retry в интерактивном UI; не запускать управляющие рекламные действия без подтверждения.
 
 ## Done recently
+
+### TASK-P9-POLISH
+
+Status: Done at code level  
+Priority: Medium  
+Description: Phase 9 реализована: VPS Docker production artifacts, public `/api/health`, Prisma baseline migration, responsive table polish, shared XLSX export helper and updated deployment docs.  
+Next step: Real VPS rollout and production migration only after explicit confirmation.  
+Related files: `Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/nimbaos.conf`, `src/lib/xlsx/export.ts`, app UI modules, docs  
+Risks: Do not run production migrations or live WB jobs as part of code-level verification.
 
 ### TASK-P8-BACKGROUND-SYNC
 

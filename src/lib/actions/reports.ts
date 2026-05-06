@@ -1,10 +1,16 @@
 'use server'
 
 import { getServerSession } from 'next-auth'
-import * as XLSX from 'xlsx'
 import { authOptions } from '@/lib/auth'
 import { enqueueReportsSyncAction } from '@/lib/actions/sync'
 import { calculateReport } from '@/lib/services/report-calculator'
+import {
+  appendAoaSheet,
+  createWorkbook,
+  safeXlsxFilename,
+  toExcelNumber,
+  workbookToBase64,
+} from '@/lib/xlsx/export'
 import type { ActionResult } from '@/types'
 import type { EnqueuedSyncJob } from '@/types/sync'
 import type { ReportData, ReportRow } from '@/types/reports'
@@ -14,6 +20,14 @@ async function requireSession() {
   if (!session?.user) throw new Error('Не авторизован')
   return session
 }
+
+const REPORT_TEXT_FIELDS = new Set<keyof ReportRow>([
+  'subjectName',
+  'vendorCode',
+  'brandName',
+  'tags',
+  'photoUrl',
+])
 
 // ── syncReportsAction ─────────────────────────────────────────────────────────
 
@@ -96,16 +110,24 @@ export async function exportReportXlsx(
 
     const wsData = [
       headers.map((h) => headerLabels[h]),
-      ...allRows.map((row) => headers.map((h) => row[h])),
+      ...allRows.map((row) =>
+        headers.map((h) => (REPORT_TEXT_FIELDS.has(h) ? row[h] ?? '' : toExcelNumber(row[h]))),
+      ),
     ]
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Отчёт')
+    const columnFormats: Record<number, string> = {}
+    headers.forEach((h, idx) => {
+      if (!REPORT_TEXT_FIELDS.has(h)) columnFormats[idx] = h === 'nmId' ? '0' : '#,##0.00'
+    })
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-    const base64 = Buffer.from(buf).toString('base64')
-    const filename = `report_${dateFrom}_${dateTo}.xlsx`
+    const wb = createWorkbook()
+    appendAoaSheet(wb, 'Отчёт', wsData, {
+      widths: headers.map((h) => Math.min(Math.max(headerLabels[h].length + 2, 12), 28)),
+      columnFormats,
+    })
+
+    const base64 = workbookToBase64(wb)
+    const filename = safeXlsxFilename('report', dateFrom, dateTo)
 
     return { success: true, data: { base64, filename } }
   } catch (err) {

@@ -3,11 +3,16 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import * as XLSX from 'xlsx'
 import type { ActionResult } from '@/types'
 import { getAutoFillByNmId } from '@/lib/services/spp-calculator'
 import { enqueuePlanSyncAction } from '@/lib/actions/sync'
 import { calculatePlanDetail } from '@/lib/services/plan-calculator'
+import {
+  appendAoaSheet,
+  createWorkbook,
+  safeXlsxFilename,
+  workbookToBase64,
+} from '@/lib/xlsx/export'
 import type { EnqueuedSyncJob } from '@/types/sync'
 import type {
   SalesPlanRow,
@@ -481,7 +486,7 @@ export async function exportPlanXlsxAction(
     const dateTo = serializeDate(plan.dateTo)
     const metrics = await calculatePlanDetail(planId, plan.wbAccountId, dateFrom, dateTo)
 
-    const wb = XLSX.utils.book_new()
+    const wb = createWorkbook()
 
     // ── Sheet 1: Сводка ─────────────────────────────────────────────
     const summaryHeaders = [
@@ -509,8 +514,22 @@ export async function exportPlanXlsxAction(
       parseFloat(a.summary.factDay),
     ])
 
-    const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows])
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка')
+    appendAoaSheet(wb, 'Сводка', [summaryHeaders, ...summaryRows], {
+      widths: [24, 12, 18, 12, 12, 12, 12, 16, 16, 16, 16, 12, 12],
+      columnFormats: {
+        1: '0',
+        3: '0',
+        4: '#,##0.00',
+        5: '#,##0.00',
+        6: '0',
+        7: '#,##0.00',
+        8: '#,##0.00',
+        9: '#,##0.00',
+        10: '0',
+        11: '#,##0.00',
+        12: '#,##0.00',
+      },
+    })
 
     // ── Sheet 2: Детализация ────────────────────────────────────────
     // Each article gets a block: header row + metric rows × dates
@@ -580,12 +599,18 @@ export async function exportPlanXlsxAction(
       detailData.push([])
     }
 
-    const wsDetail = XLSX.utils.aoa_to_sheet(detailData)
-    XLSX.utils.book_append_sheet(wb, wsDetail, 'Детализация')
+    const detailColumnCount = Math.max(...detailData.map((row) => row.length), 1)
+    const detailFormats: Record<number, string> = {}
+    for (let c = 1; c < detailColumnCount; c += 1) detailFormats[c] = '#,##0.00'
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-    const base64 = Buffer.from(buf).toString('base64')
-    const filename = `plan_${plan.name.replace(/[^\w\u0400-\u04ff]/gi, '_')}_${dateFrom}_${dateTo}.xlsx`
+    appendAoaSheet(wb, 'Детализация', detailData, {
+      widths: [28, 14, 14, 14, 14, ...Array(Math.max(detailColumnCount - 5, 0)).fill(12)],
+      columnFormats: detailFormats,
+      numericFromRow: 1,
+    })
+
+    const base64 = workbookToBase64(wb)
+    const filename = safeXlsxFilename('plan', plan.name, dateFrom, dateTo)
 
     return { success: true, data: { base64, filename } }
   } catch (err) {

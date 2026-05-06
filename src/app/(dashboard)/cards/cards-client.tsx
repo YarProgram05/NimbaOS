@@ -122,14 +122,14 @@ export function CardsClient({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <form onSubmit={handleSearchSubmit} className="flex gap-2">
-          <div className="relative">
+        <form onSubmit={handleSearchSubmit} className="flex w-full flex-wrap gap-2 lg:w-auto">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Артикул или название..."
-              className="pl-8 w-64"
+              className="w-full pl-8 sm:w-64"
             />
           </div>
           <Button type="submit" variant="outline" size="sm">
@@ -148,7 +148,7 @@ export function CardsClient({
         </form>
 
         <Select value={currentBrand || '__all__'} onValueChange={handleBrandChange}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Бренд" />
           </SelectTrigger>
           <SelectContent>
@@ -162,7 +162,7 @@ export function CardsClient({
         </Select>
 
         <Select value={currentCategory || '__all__'} onValueChange={handleCategoryChange}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Категория" />
           </SelectTrigger>
           <SelectContent>
@@ -175,7 +175,7 @@ export function CardsClient({
           </SelectContent>
         </Select>
 
-        <div className="ml-auto">
+        <div className="w-full sm:ml-auto sm:w-auto">
           <Button onClick={handleSync} disabled={syncing} size="sm">
             <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Синхронизация...' : 'Синхронизировать'}

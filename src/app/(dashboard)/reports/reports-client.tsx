@@ -206,7 +206,7 @@ export function ReportsClient({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto gap-2">
+            <Button variant="outline" className="w-full gap-2 sm:ml-auto sm:w-auto">
               <Columns3 className="h-4 w-4" />
               Столбцы
             </Button>
@@ -269,7 +269,7 @@ export function ReportsClient({
             </Button>
           )}
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
             <div className="rounded-md border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
               Артикулов:{' '}
               <span className="font-medium text-foreground">{visibleArticles}</span>

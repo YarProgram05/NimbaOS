@@ -15,10 +15,10 @@ Closed in: Phase 8 implementation, 2026-05-05.
 
 ## OQ-003: Phase 9 production target
 
-Status: Open  
+Status: Closed  
 Question: Какой production target считать основным: VPS Docker Compose only или Vercel-compatible deployment тоже нужен?  
 Context: Specification historically mentions VPS Docker Compose.  
-Needed decision: Уточнить перед production docs/polish.
+Decision: VPS Docker Compose is the primary Phase 9 production target. Vercel-compatible deployment is out of Phase 9 unless requested separately.
 
 ## OQ-004: Deleted legacy plan files
 

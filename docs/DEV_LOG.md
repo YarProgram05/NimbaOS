@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-06 - Phase 9 production/responsive/Excel polish
+
+### Summary
+
+Implemented Phase 9 at code level: VPS production artifacts, public healthcheck, Prisma baseline migration, responsive table/action-bar polish, and shared XLSX export helper.
+
+### Files changed
+
+`Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/nimbaos.conf`, `src/app/api/health/route.ts`, `src/lib/xlsx/export.ts`, report/sales-plan export actions, dashboard UI modules, and project docs.
+
+### Commands run
+
+`npx prisma validate`, `npm run type-check`, `docker compose -f docker-compose.prod.yml config`, `docker compose -f docker-compose.prod.yml --profile migrate --profile scheduler config --services`, `npm run build`, XLSX helper smoke, HTTP smoke for `/login` and `/api/health`.
+
+### Result
+
+Code-level checks pass. Docker image build was attempted but did not complete within the local timeout. No WB live sync, DB push or production migration was run; real VPS rollout remains an explicit follow-up.
+
 ## 2026-05-06 - Product price sync hardening
 
 ### Summary

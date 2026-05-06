@@ -16,6 +16,15 @@
 - `npm run docker:dev` — поднять local PostgreSQL + Redis. Требует понимания текущего окружения.
 - `npm run docker:dev:down` — остановить local Docker dev services.
 
+## Production VPS artifacts
+
+- `docker compose --env-file .env.production -f docker-compose.prod.yml config` — проверить production compose без запуска контейнеров.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml build app worker` — собрать production image локально/на VPS без запуска WB sync.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml --profile migrate run --rm migrate` — применить Prisma migrations через `migrate deploy`; запускать только при явном production rollout.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml up -d app worker` — поднять приложение и worker после миграций.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml --profile scheduler run --rm scheduler` — вручную применить BullMQ расписание для активных кабинетов.
+- `GET /api/health` — public healthcheck, не раскрывает секреты.
+
 ## Database commands
 
 - `npx prisma generate` — обновить Prisma Client. Не запускать без необходимости; может менять generated files under dependencies/cache.

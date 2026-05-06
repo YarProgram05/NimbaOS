@@ -57,12 +57,14 @@ export function ReferencesClient({
       </div>
 
       <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="min-w-max">
           <TabsTrigger value="cost-price">Себестоимость</TabsTrigger>
           <TabsTrigger value="self-purchases">Самовыкупы</TabsTrigger>
           <TabsTrigger value="external-ads">Внешняя реклама</TabsTrigger>
           <TabsTrigger value="overrides">Переименования</TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="cost-price" className="mt-4">
           <CostPriceTab

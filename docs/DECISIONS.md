@@ -386,3 +386,17 @@ WB Analytics API принимает массив nmIds. Разбиваем на 
 
 **Decision 43: Осторожное дневное расписание**
 `scripts/schedule-sync.ts` создаёт BullMQ Job Schedulers для активных кабинетов в `Europe/Moscow`: карточки ночью, отчёты/хранение rolling 7 days, план продаж rolling 7 days, advertising campaigns и advertising stats. Advertising clusters manual-only by default.
+
+## Phase 9 — Production / Responsive / Excel polish
+
+**Decision 44: Основной production target — VPS Docker Compose**
+Phase 9 готовит self-hosted VPS path: `Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, Nginx reverse proxy example and public `/api/health`. Vercel-compatible deployment is not part of Phase 9 unless requested separately.
+
+**Decision 45: Production schema changes go through Prisma migrations**
+Current schema baseline is stored under `prisma/migrations`. Production rollout must use `prisma migrate deploy`; `db push` remains a local/dev command and is not the production path.
+
+**Decision 46: Mobile tables stay dense and scroll horizontally**
+Analytics tables remain tables, not mobile cards. Phase 9 adds stable minimum widths, responsive action bars and horizontal scroll so finance, sales plan, advertising and sync screens stay readable on mobile/tablet without redesigning the data model.
+
+**Decision 47: XLSX exports share a server-side helper**
+Financial reports and sales plan exports keep the existing `{ base64, filename }` Server Action contract, but workbook creation, safe filenames, sheet names, widths, autofilters and numeric formats live in `src/lib/xlsx/export.ts`.
