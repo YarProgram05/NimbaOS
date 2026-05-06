@@ -139,9 +139,9 @@ export interface SalesPlanItemUpdateInput {
 // ── WB Funnel API types (snake_case as returned by API) ─────────
 
 export interface WbFunnelHistoryRequest {
-  nmIDs: number[]
-  period: {
-    begin: string  // YYYY-MM-DD
+  nmIds: number[]
+  selectedPeriod: {
+    start: string  // YYYY-MM-DD
     end: string    // YYYY-MM-DD
   }
   timezone: string // e.g. "Europe/Moscow"

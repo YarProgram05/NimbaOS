@@ -44,6 +44,14 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function isNetworkFetchError(err: unknown): err is Error {
+  return err instanceof Error && (
+    err.name === 'TypeError' ||
+    err.message.toLowerCase().includes('fetch failed') ||
+    err.message.toLowerCase().includes('network')
+  )
+}
+
 export class WbApiClient {
   private apiKey: string
 
@@ -76,12 +84,30 @@ export class WbApiClient {
       })
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
+        if (retries > 0) {
+          await sleep(2 ** (3 - retries) * 1000)
+          return this.request<T>(domain, path, options, retries - 1)
+        }
         throw new WbApiError(
           `WB API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
           408,
           domain,
         )
       }
+
+      if (isNetworkFetchError(err) && retries > 0) {
+        await sleep(2 ** (3 - retries) * 1000)
+        return this.request<T>(domain, path, options, retries - 1)
+      }
+
+      if (isNetworkFetchError(err)) {
+        throw new WbApiError(
+          `WB API network error on ${domain}: ${err.message}`,
+          503,
+          domain,
+        )
+      }
+
       throw err
     } finally {
       clearTimeout(timeout)

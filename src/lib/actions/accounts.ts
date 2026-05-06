@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { encrypt } from '@/lib/encryption'
+import { removeAllSyncSchedulesForAccount } from '@/lib/sync/schedules'
 import { validateAndFetchSellerInfo } from '@/lib/wb-api/accounts'
 import { WbApiError } from '@/lib/wb-api/client'
 import type { ActionResult } from '@/types'
@@ -131,6 +132,12 @@ export async function addWbAccount(data: {
       })
     })
 
+    await Promise.all(
+      existingAccounts
+        .filter((existing) => existing.id !== target.id)
+        .map((existing) => removeAllSyncSchedulesForAccount(existing.id)),
+    )
+
     revalidatePath('/settings')
     return { success: true, data: { ...account, taxRate: account.taxRate.toString() } }
   }
@@ -179,6 +186,9 @@ export async function toggleAccountActive(id: string): Promise<ActionResult> {
   if (!account) return { success: false, error: 'Кабинет не найден' }
 
   await prisma.wbAccount.update({ where: { id }, data: { isActive: !account.isActive } })
+  if (account.isActive) {
+    await removeAllSyncSchedulesForAccount(id)
+  }
   revalidatePath('/settings')
   return { success: true, data: undefined }
 }

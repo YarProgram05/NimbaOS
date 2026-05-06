@@ -20,7 +20,7 @@ export async function fetchRealizationReportPage(
   dateTo: string,
   rrdid?: number,
 ): Promise<RealizationReportPage> {
-  const params: Record<string, string> = { dateFrom, dateTo }
+  const params: Record<string, string> = { dateFrom, dateTo, period: 'daily' }
   if (rrdid !== undefined) {
     params.rrdid = String(rrdid)
   }

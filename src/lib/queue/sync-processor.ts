@@ -64,12 +64,14 @@ async function runReportsJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_
   const { dateFrom, dateTo } = resolvePeriod(data)
   const report = await syncRealizationReport(data.wbAccountId, dateFrom, dateTo)
   const storage = await syncPaidStorage(data.wbAccountId, dateFrom, dateTo)
-  await markSyncCoverage(
-    data.wbAccountId,
-    SYNC_JOB_KINDS.REPORTS_PERIOD,
-    dateFrom,
-    dateTo,
-  )
+  if (report.maxReportDate && report.maxReportDate >= dateFrom) {
+    await markSyncCoverage(
+      data.wbAccountId,
+      SYNC_JOB_KINDS.REPORTS_PERIOD,
+      dateFrom,
+      report.maxReportDate < dateTo ? report.maxReportDate : dateTo,
+    )
+  }
 
   await prisma.wbAccount.update({
     where: { id: data.wbAccountId },
@@ -253,6 +255,7 @@ export async function processSyncJob(job: Job<SyncJobData>) {
           bullJobId: String(job.id ?? ''),
           attempts: job.attemptsMade + 1,
           startedAt: new Date(),
+          finishedAt: null,
           error: null,
         },
       })
@@ -265,6 +268,7 @@ export async function processSyncJob(job: Job<SyncJobData>) {
         status: 'RUNNING',
         attempts: job.attemptsMade + 1,
         startedAt: new Date(),
+        finishedAt: null,
       },
     })
   }

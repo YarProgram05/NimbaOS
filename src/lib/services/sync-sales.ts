@@ -96,7 +96,11 @@ export async function syncSales(
       throw error
     }
 
-    lastChangeDate = rows[rows.length - 1].lastChangeDate
+    const nextLastChangeDate = rows[rows.length - 1].lastChangeDate
+    if (lastChangeDate && new Date(nextLastChangeDate) <= new Date(lastChangeDate)) {
+      break
+    }
+    lastChangeDate = nextLastChangeDate
   }
 
   result.durationMs = Date.now() - startMs

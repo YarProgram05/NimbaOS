@@ -147,20 +147,23 @@ export async function calculateReport(
     grouped.set(row.nmId, arr)
   }
 
+  const hasRealizationRows = rows.some((row) => row.nmId !== 0)
   const reportNmIds = new Set<number>(grouped.keys())
-  for (const nmId of Array.from(paidStorageByNm.keys())) {
-    reportNmIds.add(nmId)
-  }
-  for (const nmId of Array.from(adBalanceByNm.keys())) {
-    reportNmIds.add(nmId)
-  }
-  for (const vendorCode of Array.from(extAdMap.keys())) {
-    const nmId = vendorNmMap.get(vendorCode)
-    if (nmId) reportNmIds.add(nmId)
-  }
-  for (const vendorCode of Array.from(spMap.keys())) {
-    const nmId = vendorNmMap.get(vendorCode)
-    if (nmId) reportNmIds.add(nmId)
+  if (hasRealizationRows) {
+    for (const nmId of Array.from(paidStorageByNm.keys())) {
+      reportNmIds.add(nmId)
+    }
+    for (const nmId of Array.from(adBalanceByNm.keys())) {
+      reportNmIds.add(nmId)
+    }
+    for (const vendorCode of Array.from(extAdMap.keys())) {
+      const nmId = vendorNmMap.get(vendorCode)
+      if (nmId) reportNmIds.add(nmId)
+    }
+    for (const vendorCode of Array.from(spMap.keys())) {
+      const nmId = vendorNmMap.get(vendorCode)
+      if (nmId) reportNmIds.add(nmId)
+    }
   }
 
   const reportRows: ReportRow[] = []

@@ -23,6 +23,7 @@ export async function syncRealizationReport(
     durationMs: 0,
     storageUpserted: 0,
     storageErrors: 0,
+    maxReportDate: null,
   }
 
   // 1. Fetch and decrypt the API key
@@ -51,6 +52,12 @@ export async function syncRealizationReport(
     if (page.done || page.rows.length === 0) break
 
     result.totalRows += page.rows.length
+    for (const row of page.rows) {
+      const reportDate = getReportDate(row)
+      if (reportDate && (!result.maxReportDate || reportDate > result.maxReportDate)) {
+        result.maxReportDate = reportDate
+      }
+    }
 
     // 3. Map snake_case API rows → camelCase Prisma fields and bulk insert
     try {
@@ -77,11 +84,16 @@ export async function syncRealizationReport(
 
 // ── Internal helper ──────────────────────────────────────────────────────────
 
+function getReportDate(row: WbRealizationRow): string | null {
+  const value = row.rr_dt ?? row.sale_dt ?? row.date_to ?? row.date_from
+  return value ? value.slice(0, 10) : null
+}
+
 function mapRowToPrisma(wbAccountId: string, row: WbRealizationRow) {
   return {
     wbAccountId,
     rrdId:                BigInt(row.rrd_id),
-    realizationReportId:  row.realizationreport_id,
+    realizationReportId:  BigInt(row.realizationreport_id),
     dateFrom:             new Date(row.date_from),
     dateTo:               new Date(row.date_to),
     nmId:                 row.nm_id,

@@ -187,6 +187,14 @@ export async function applySyncSchedule(
   }
 }
 
+export async function removeAllSyncSchedulesForAccount(wbAccountId: string): Promise<void> {
+  const queue = await getSyncQueue()
+  for (const kind of SCHEDULED_SYNC_KINDS) {
+    await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
+    await queue.removeJobScheduler(legacySchedulerId(wbAccountId, kind)).catch(() => false)
+  }
+}
+
 export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promise<SyncScheduleRow> {
   if (!SCHEDULED_SYNC_KINDS.includes(input.kind)) {
     throw new Error('Этот тип синхронизации не запускается по расписанию')
@@ -223,6 +231,15 @@ export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promis
 }
 
 export async function applyAllSyncSchedules() {
+  const inactiveAccounts = await prisma.wbAccount.findMany({
+    where: { isActive: false },
+    select: { id: true },
+  })
+
+  for (const account of inactiveAccounts) {
+    await removeAllSyncSchedulesForAccount(account.id)
+  }
+
   const accounts = await prisma.wbAccount.findMany({
     where: { isActive: true },
     select: { id: true },

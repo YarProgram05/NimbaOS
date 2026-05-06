@@ -287,7 +287,7 @@ model RealizationReport {
   id                    String   @id @default(uuid())
   wbAccountId           String
   rrdId                 BigInt
-  realizationReportId   Int
+  realizationReportId   BigInt
   dateFrom              DateTime @db.Date
   dateTo                DateTime @db.Date
   nmId                  Int

@@ -94,6 +94,7 @@ export interface ReportSyncResult {
   durationMs: number
   storageUpserted: number
   storageErrors: number
+  maxReportDate: string | null
 }
 
 // ── Calculated report row (52 columns) ───────────────────────────────────────

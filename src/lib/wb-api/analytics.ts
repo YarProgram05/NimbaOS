@@ -33,9 +33,9 @@ export async function fetchFunnelHistory(
     const batch = nmIds.slice(i, i + BATCH_SIZE)
 
     const body: WbFunnelHistoryRequest = {
-      nmIDs: batch,
-      period: {
-        begin: dateFrom,
+      nmIds: batch,
+      selectedPeriod: {
+        start: dateFrom,
         end: dateTo,
       },
       timezone: 'Europe/Moscow',

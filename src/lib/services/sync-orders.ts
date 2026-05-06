@@ -79,8 +79,13 @@ export async function syncOrders(
       throw error
     }
 
-    // Advance cursor: use lastChangeDate of the last row
-    lastChangeDate = rows[rows.length - 1].lastChangeDate
+    // Advance cursor: use lastChangeDate of the last row.
+    // If WB returns the cursor row again, stop to avoid an endless retry loop.
+    const nextLastChangeDate = rows[rows.length - 1].lastChangeDate
+    if (lastChangeDate && new Date(nextLastChangeDate) <= new Date(lastChangeDate)) {
+      break
+    }
+    lastChangeDate = nextLastChangeDate
   }
 
   result.durationMs = Date.now() - startMs
