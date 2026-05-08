@@ -185,8 +185,9 @@ export function ReportsClient({
   const visibleArticles = filteredRows.length
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="old-money-panel shrink-0 rounded-md p-3">
+        <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
 
         <Button onClick={handleSync} disabled={isSyncing} className="gap-2">
@@ -229,7 +230,7 @@ export function ReportsClient({
       </div>
 
       {data && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <FilterDropdown
             label="Бренд"
             value={selectedBrand}
@@ -304,15 +305,16 @@ export function ReportsClient({
       )}
 
       {data?.lastSyncAt && (
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-3 text-xs text-muted-foreground">
           Последняя синхронизация:{' '}
           {format(new Date(data.lastSyncAt), 'd MMM yyyy HH:mm', { locale: ru })}
         </p>
       )}
+      </div>
 
       {data && (
         <div
-          className={`rounded-md border px-3 py-2 text-sm ${
+          className={`shrink-0 rounded-md border px-3 py-2 text-sm ${
             data.coverage.isCovered
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : 'border-amber-200 bg-amber-50 text-amber-800'
@@ -325,15 +327,17 @@ export function ReportsClient({
       )}
 
       {data ? (
-        <ReportTable
-          rows={displayRows}
-          summary={tableSummary}
-          columnVisibility={columnVisibility}
-          groupBy={groupBy}
-          groupSummaries={groupSummaries}
-        />
+        <div className="min-h-0 flex-1">
+          <ReportTable
+            rows={displayRows}
+            summary={tableSummary}
+            columnVisibility={columnVisibility}
+            groupBy={groupBy}
+            groupSummaries={groupSummaries}
+          />
+        </div>
       ) : (
-        <div className="rounded-md border py-16 text-center text-sm text-muted-foreground">
+        <div className="old-money-panel flex min-h-0 flex-1 items-center justify-center rounded-md text-center text-sm text-muted-foreground">
           Нет данных за выбранный период. Нажмите «Синхронизировать».
         </div>
       )}

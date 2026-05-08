@@ -1,5 +1,25 @@
 # Bugs and Incidents
 
+## BUG-006: Advertising stats/clusters failed in worker for null stats and >30-day cluster periods
+
+Status:
+Fixed at code level
+
+Symptoms:
+`/sync` history showed failed advertising jobs. Observed messages included `Cannot read properties of null (reading 'flatMap')` for advertising stats and WB API 400 `date range must not exceed 30 days` for advertising clusters.
+
+Affected area:
+Background sync worker, advertising stats service, advertising clusters service, WB advert API wrapper.
+
+Investigation:
+The worker was running and processing jobs. Failures came from service-level assumptions: WB may return `null` for fullstats with no data, and the cluster endpoint rejects periods longer than 30 days.
+
+Fix:
+Fullstats `null` is normalized to an empty dataset. Cluster sync now chunks long selected periods into <=30-day WB API requests, aggregates the responses, and persists the aggregate under the selected period.
+
+Related files:
+`src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/wb-api/advertising.ts`, `src/lib/services/report-calculator.ts`
+
 ## BUG-004: Phase 8 sync jobs still show WB/API and Prisma failures
 
 Status:

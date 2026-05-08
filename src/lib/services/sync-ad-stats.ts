@@ -305,8 +305,10 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
   }
 }
 
-function getCampaignDays(campaigns: WbFullStatsCampaign[]): WbFullStatsDayItem[] {
-  return campaigns.flatMap((campaign) => campaign.days ?? campaign.daily_stats ?? [])
+function getCampaignDays(
+  campaigns: WbFullStatsCampaign[] | null | undefined,
+): WbFullStatsDayItem[] {
+  return (campaigns ?? []).flatMap((campaign) => campaign.days ?? campaign.daily_stats ?? [])
 }
 
 async function syncDaySourceRow(

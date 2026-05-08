@@ -1,7 +1,7 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
-import { Menu, LogOut } from 'lucide-react'
+import { Menu, LogOut, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -16,9 +16,10 @@ import type { SessionUser } from '@/types'
 interface HeaderProps {
   user: SessionUser
   onMobileMenuOpen: () => void
+  onSidebarCollapse: () => void
 }
 
-export function Header({ user, onMobileMenuOpen }: HeaderProps) {
+export function Header({ user, onMobileMenuOpen, onSidebarCollapse }: HeaderProps) {
   const initials = user.name
     .split(' ')
     .map((n) => n[0])
@@ -27,29 +28,45 @@ export function Header({ user, onMobileMenuOpen }: HeaderProps) {
     .toUpperCase()
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-3 sm:px-4">
-      {/* Mobile hamburger */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="md:hidden"
-        onClick={onMobileMenuOpen}
-        aria-label="Открыть меню"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
-
-      {/* Spacer for desktop (hamburger absent) */}
-      <div className="hidden md:block" />
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b bg-card/80 px-3 backdrop-blur sm:px-5">
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 md:hidden"
+          onClick={onMobileMenuOpen}
+          aria-label="Открыть меню"
+          title="Открыть меню"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden shrink-0 md:inline-flex"
+          onClick={onSidebarCollapse}
+          aria-label="Свернуть или развернуть меню"
+          title="Свернуть или развернуть меню"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span className="font-medium text-foreground">Операционный кабинет</span>
+          <span className="hidden lg:inline">· Wildberries аналитика и планирование</span>
+        </div>
+      </div>
 
       {/* User menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="flex min-w-0 items-center gap-2 px-2">
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          <Button variant="ghost" className="flex min-w-0 items-center gap-2 px-2 hover:bg-secondary">
+            <Avatar className="h-7 w-7 border border-border">
+              <AvatarFallback className="bg-secondary text-xs font-semibold text-secondary-foreground">
+                {initials}
+              </AvatarFallback>
             </Avatar>
-            <span className="hidden sm:inline text-sm font-medium">{user.name}</span>
+            <span className="hidden text-sm font-medium sm:inline">{user.name}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">

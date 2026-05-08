@@ -13,6 +13,7 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  Landmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -68,13 +69,13 @@ function NavLink({
       href={href}
       title={isCollapsed ? item.label : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-        'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
+        'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+        'text-sidebar-foreground/78 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm',
         isCollapsed && 'justify-center px-2'
       )}
     >
-      <Icon className="h-5 w-5 shrink-0" />
+      <Icon className={cn('h-5 w-5 shrink-0', isActive && 'text-sidebar-primary')} />
       {!isCollapsed && <span>{item.label}</span>}
     </Link>
   )
@@ -114,12 +115,15 @@ export function Sidebar({
   isMobileOpen,
   onMobileClose,
 }: SidebarProps) {
+  const { selectedId } = useAccount()
+  const homeHref = selectedId ? `/?account=${selectedId}` : '/'
+
   return (
     <>
       {/* Desktop Sidebar */}
       <aside
         className={cn(
-          'hidden md:flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out shrink-0',
+          'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out md:flex',
           isCollapsed ? 'w-16' : 'w-64'
         )}
       >
@@ -130,11 +134,28 @@ export function Sidebar({
             isCollapsed ? 'justify-center' : 'gap-2 px-4'
           )}
         >
-          {!isCollapsed && (
-            <span className="text-sm font-semibold text-sidebar-foreground truncate">
-              NimbaOS
+          <Link
+            href={homeHref}
+            title="На главный экран"
+            className={cn(
+              'flex min-w-0 items-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              isCollapsed ? 'justify-center' : 'gap-2'
+            )}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent text-sidebar-primary">
+              <Landmark className="h-4 w-4" />
             </span>
-          )}
+            {!isCollapsed && (
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
+                  NimbaOS
+                </span>
+                <span className="block truncate text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground/50">
+                  commerce suite
+                </span>
+              </span>
+            )}
+          </Link>
         </div>
 
         {/* Account Selector */}
@@ -158,7 +179,7 @@ export function Sidebar({
             size="icon"
             onClick={onCollapse}
             className={cn(
-              'w-full text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+              'w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
               isCollapsed ? 'justify-center' : 'justify-end'
             )}
             title={isCollapsed ? 'Развернуть' : 'Свернуть'}
@@ -174,12 +195,19 @@ export function Sidebar({
 
       {/* Mobile Sheet */}
       <Sheet open={isMobileOpen} onOpenChange={onMobileClose}>
-        <SheetContent side="left" className="w-64 p-0 bg-sidebar border-sidebar-border">
+        <SheetContent side="left" className="w-64 border-sidebar-border bg-sidebar p-0">
           <SheetTitle className="sr-only">Навигация</SheetTitle>
           <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-            <span className="text-sm font-semibold text-sidebar-foreground">
-              NimbaOS
-            </span>
+            <Link
+              href={homeHref}
+              onClick={onMobileClose}
+              className="flex min-w-0 items-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <span className="mr-2 flex h-8 w-8 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent text-sidebar-primary">
+                <Landmark className="h-4 w-4" />
+              </span>
+              <span className="text-sm font-semibold text-sidebar-foreground">NimbaOS</span>
+            </Link>
           </div>
           <div className="px-3 py-3">
             <AccountSelector />

@@ -108,8 +108,8 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
 
   return (
     <div
-      className="rounded-md border"
-      style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}
+      className="h-full min-h-0 rounded-md border bg-card"
+      style={{ overflowX: 'auto', overflowY: 'auto' }}
     >
       {/* border-separate + border-spacing-0 required for sticky columns */}
       <table
@@ -138,10 +138,10 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                     onDragOver={(e) => handleDragOver(e, header.column.id, idx)}
                     onDragEnd={handleDragEnd}
                     className={[
-                      'relative whitespace-nowrap px-3 py-2 text-left font-medium text-muted-foreground',
-                      'border-b border-r bg-muted select-none',
+                      'relative whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground',
+                      'border-b border-r bg-secondary select-none',
                       isFrozen ? 'sticky z-30' : '',
-                      canSort ? 'cursor-pointer hover:bg-muted/80' : '',
+                      canSort ? 'cursor-pointer hover:bg-accent/70' : '',
                     ].join(' ')}
                     style={{
                       width: header.getSize(),
@@ -216,8 +216,8 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                   key={row.id}
                   className={
                     isGroupRow
-                      ? 'bg-muted/60 font-semibold'
-                      : 'hover:bg-muted/30 transition-colors'
+                      ? 'bg-secondary font-semibold'
+                      : 'transition-colors hover:bg-secondary/55'
                   }
                 >
                   {row.getVisibleCells().map((cell, idx) => {
@@ -228,8 +228,8 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                         className={[
                           'whitespace-nowrap px-3 py-1.5',
                           isFrozen
-                            ? `${frozenBorder} sticky z-10 ${isGroupRow ? 'bg-muted/60' : 'bg-card'}`
-                            : `border-b border-r ${isGroupRow ? 'bg-muted/40' : 'bg-background'}`,
+                            ? `${frozenBorder} sticky z-10 ${isGroupRow ? 'bg-secondary' : 'bg-card'}`
+                            : `border-b border-r ${isGroupRow ? 'bg-secondary/80' : 'bg-card'}`,
                         ].join(' ')}
                         style={{
                           width: cell.column.getSize(),
@@ -265,7 +265,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                       key={col.id}
                       className={[
                         'whitespace-nowrap px-3 py-2 border-t border-r font-semibold',
-                        isFrozen ? 'sticky z-30 bg-muted' : 'bg-muted',
+                        isFrozen ? 'sticky z-30 bg-secondary' : 'bg-secondary',
                       ].join(' ')}
                       style={{
                         width: col.getSize(),
@@ -294,7 +294,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                     key={col.id}
                     className={[
                       'whitespace-nowrap px-3 py-2 border-t border-r font-semibold',
-                      isFrozen ? 'sticky z-30 bg-muted' : 'bg-muted',
+                      isFrozen ? 'sticky z-30 bg-secondary' : 'bg-secondary',
                     ].join(' ')}
                     style={{
                       width: col.getSize(),

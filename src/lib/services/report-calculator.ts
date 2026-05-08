@@ -646,7 +646,9 @@ async function buildAdSpendByNm(params: {
 
     let weights = new Map<number, Map<number, number>>()
     try {
-      weights = buildNmSpendWeights(await fetchFullStats(client, advertIds, params.dateFrom, params.dateTo))
+      weights = buildNmSpendWeights(
+        (await fetchFullStats(client, advertIds, params.dateFrom, params.dateTo)) ?? [],
+      )
     } catch {
       weights = buildPersistedNmSpendWeights(params.adCampaigns, params.adNmStatRows)
     }

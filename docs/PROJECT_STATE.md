@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 9 production/responsive/Excel polish is implemented at code level. Phase 7 and Phase 8 still need live WB verification after API rate-limit windows.
+Phase 9 production/responsive/Excel polish is implemented at code level. Post-Phase-9 UI redesign and advertising sync hardening are implemented locally. Phase 7/8 still need broader live WB verification after API rate-limit windows.
 
 ## Implemented
 
@@ -16,12 +16,14 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Phase 7
 - Phase 7: advertising campaigns UI/API/services/actions, stats, clusters, breakdown, logs, Excel export, pause/start/stop/deposit/bid actions, per-nm ad spend for reports.
 - Phase 8: Bull MQ background sync for read-only WB syncs, `SyncJobRun` history, worker, scheduler, `/sync` mini-screen, manual enqueue actions.
 - Phase 9: VPS Docker production artifacts, public healthcheck, Prisma baseline migration, responsive table polish, shared XLSX export helper.
+- Post-Phase-9 UI refresh: dashboard shell redesigned in a restrained old-money business style; desktop sidebar/menu toggle restored; NimbaOS mark links to home while preserving `?account`; home dashboard reads the selected account from URL.
+- Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
 ## Partially implemented
 
 - Phase 7 live verification: code is in place, but WB advert API returned long `429`; full live test still pending.
-- Phase 8 live verification: code and type checks pass, but the new Prisma schema has not been applied to dev DB in this session and no live WB job was run.
+- Phase 8 live verification: local worker has been run and specific advertising jobs were diagnosed/fixed, but a full safe smoke matrix across all read-only job types is still pending.
 - Production live rollout: artifacts exist, but real VPS deploy/migrate/runbook execution still requires explicit confirmation.
 
 ## Not implemented yet
@@ -46,7 +48,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Phase 7
 - Server Actions: `src/lib/actions`.
 - Financial reports: `src/app/(dashboard)/reports`, `src/lib/services/report-calculator.ts`.
 - Sales plan: `src/app/(dashboard)/sales-plan`, `src/lib/services/plan-calculator.ts`.
-- Advertising: `src/app/(dashboard)/advertising`, `src/lib/services/sync-ad-stats.ts`, `src/lib/wb-api/advertising.ts`.
+- Advertising: `src/app/(dashboard)/advertising`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/wb-api/advertising.ts`.
 - Prisma schema: `prisma/schema.prisma`.
 
 ## Data / sync / reports status
@@ -55,6 +57,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Phase 7
 - WB realization reports and paid storage are cached locally.
 - Sales plan reads orders/sales/funnel from local DB after sync.
 - Advertising stats are cached by campaign/date/source and by campaign/date/source/nmId where WB returns article-level stats.
+- Advertising cluster sync stores one aggregate row set per selected period, while WB requests are chunked internally to satisfy the API's 30-day limit.
 - `WbAccount.lastSyncAt` is used as authoritative report sync timestamp where relevant.
 - `SyncJobRun` stores background sync status, payload, result, attempts and errors.
 - Historical re-syncs require explicit confirmation.

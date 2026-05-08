@@ -97,10 +97,10 @@ export async function fetchFullStats(
   advertId: number | number[],
   dateFrom: string,
   dateTo: string,
-): Promise<WbFullStatsResponse> {
+): Promise<WbFullStatsResponse | null> {
   const ids = Array.isArray(advertId) ? advertId.join(',') : String(advertId)
 
-  return client.get<WbFullStatsResponse>(
+  return client.get<WbFullStatsResponse | null>(
     'advert',
     '/adv/v3/fullstats',
     {
@@ -127,7 +127,7 @@ export async function fetchClusterStats(
   const allStats: WbClusterStatsResponse['stats'] = []
 
   for (const nmIdsChunk of chunk(nmIds, MAX_CLUSTER_ITEMS)) {
-    const response = await client.post<WbClusterStatsResponse>(
+    const response = await client.post<WbClusterStatsResponse | null>(
       'advert',
       '/adv/v0/normquery/stats',
       {
@@ -140,7 +140,7 @@ export async function fetchClusterStats(
       },
     )
 
-    allStats.push(...(response.stats ?? []))
+    allStats.push(...(response?.stats ?? []))
   }
 
   return allStats

@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-08 - UI refresh and advertising worker hardening
+
+### Summary
+
+Redesigned the dashboard UI into a restrained old-money business style, restored desktop navigation controls, and fixed advertising worker failures observed in `/sync` history.
+
+### Files changed
+
+Dashboard shell/home/cards/reports/sales-plan UI modules, `src/app/globals.css`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/wb-api/advertising.ts`, `src/lib/services/report-calculator.ts`, and project memory docs.
+
+### Commands run
+
+`npm run type-check`, `npm run lint`, `npm run build`, local HTTP smoke checks, worker process inspection and worker restart.
+
+### Result
+
+Code-level checks pass. Worker is running locally. Advertising stats now tolerate null fullstats responses, and advertising clusters split long selected periods into WB-compatible chunks before local aggregation.
+
 ## 2026-05-06 - Phase 9 production/responsive/Excel polish
 
 ### Summary

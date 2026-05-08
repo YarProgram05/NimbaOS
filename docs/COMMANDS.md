@@ -64,6 +64,7 @@ Examples requiring confirmation:
 ## Phase 8 background sync
 
 - `npm run worker:sync` — starts the Bull MQ worker for read-only WB sync jobs. Requires Redis, PostgreSQL and the Phase 8 DB schema to be applied.
+- After changing worker/service code locally, restart `npm run worker:sync`; the running process does not hot-reload service modules.
 - `npm run sync:schedule` — upserts the default daily `Europe/Moscow` BullMQ Job Schedulers for active WB accounts.
 - `/sync` — dashboard screen for recent `SyncJobRun` records and safe manual current-period job enqueue.
 - Do not use these commands to run historical/full sync without explicit confirmation.

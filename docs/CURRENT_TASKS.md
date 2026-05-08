@@ -4,11 +4,11 @@
 
 ### TASK-P8-SYNC-ERRORS
 
-Status: Open  
+Status: Partially fixed; live smoke pending  
 Priority: High  
-Description: Phase 8 background sync still needs live verification after WB API long rate limits. The known advertising stats Prisma numeric overflow in `adCampaignNmStat` was fixed at code level on 2026-05-05 by normalizing DB-bound metrics. `/sync` now supports deleting non-running queue/history items.  
-Next step: After WB retry windows clear, run one read-only smoke per failing job type before declaring Phase 8 live-verified.  
-Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/sync/job-runs.ts`, `src/app/(dashboard)/sync`  
+Description: Phase 8 background sync still needs live verification after WB API long rate limits. Fixed code-level issues seen in worker: ad stats numeric overflow, null `fullstats` responses, and advertising cluster periods above WB's 30-day limit. `/sync` supports deleting non-running queue/history items.  
+Next step: Run one read-only smoke per job type after WB retry windows clear; old failed history rows can remain as audit history.  
+Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/sync/job-runs.ts`, `src/app/(dashboard)/sync`  
 Risks: Do not spam WB sync buttons while a same-kind job is queued/running; respect retry windows.
 
 ### TASK-PRODUCT-PRICE-VERIFY
@@ -38,6 +38,15 @@ Related files: `src/lib/wb-api/advertising.ts`, `src/lib/services/sync-ad-stats.
 Risks: Не ждать долгий retry в интерактивном UI; не запускать управляющие рекламные действия без подтверждения.
 
 ## Done recently
+
+### TASK-UI-OLD-MONEY-REDESIGN
+
+Status: Done at code level  
+Priority: Medium  
+Description: Dashboard shell, sidebar/header, home, cards, reports and sales-plan screens were restyled into a restrained old-money business UI. Desktop hamburger/sidebar toggle and NimbaOS home link are restored; home dashboard is account-aware through `?account`.  
+Next step: Optional visual refinement for desktop home empty areas; concept mockup requested before implementation.  
+Related files: `src/app/(dashboard)/page.tsx`, `src/components/layout/*`, `src/app/globals.css`  
+Risks: Keep future home additions operational and data-driven, not decorative.
 
 ### TASK-P9-POLISH
 

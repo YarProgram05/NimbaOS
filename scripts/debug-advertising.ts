@@ -117,7 +117,7 @@ async function main() {
   const dateFrom = formatDate(daysAgo(6))
   const dateTo = formatDate(new Date())
   console.log(`Checking fullstats ${dateFrom}..${dateTo}...`)
-  const stats = await fetchFullStats(client, advertId, dateFrom, dateTo)
+  const stats = (await fetchFullStats(client, advertId, dateFrom, dateTo)) ?? []
   const days = stats.flatMap((campaign) => campaign.days ?? campaign.daily_stats ?? [])
   const nmRows = days.flatMap((day) =>
     (day.apps ?? day.app_type_stats ?? day.appTypeStats ?? [])

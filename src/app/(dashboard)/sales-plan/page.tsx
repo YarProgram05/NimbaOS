@@ -32,8 +32,8 @@ export default async function SalesPlanPage({ searchParams }: SalesPlanPageProps
 
   if (!wbAccountId) {
     return (
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">План продаж</h1>
+      <div className="dashboard-page">
+        <h1 className="text-2xl font-semibold tracking-tight">План продаж</h1>
         <p className="text-muted-foreground">
           Добавьте кабинет WB в{' '}
           <Link href="/settings" className="underline underline-offset-4 hover:text-foreground">
@@ -50,10 +50,11 @@ export default async function SalesPlanPage({ searchParams }: SalesPlanPageProps
   const initialPlans = result.success ? result.data : []
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">План продаж</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
+    <div className="dashboard-page">
+      <div className="shrink-0">
+        <p className="metric-label">Планирование</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">План продаж</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Планирование и контроль продаж по артикулам
         </p>
       </div>

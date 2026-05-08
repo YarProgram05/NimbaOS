@@ -25,6 +25,44 @@ Related files:
 
 ---
 
+## 2026-05-08 — Desktop dashboard uses selected account and compact business layout
+
+Status:
+Active
+
+Decision:
+Dashboard home must read the selected WB account from `?account` and keep navigation account-aware. The NimbaOS mark links back to home with the selected account, and the desktop hamburger toggles the left sidebar rather than being mobile-only.
+
+Reason:
+The dashboard is the operational entry point; switching accounts must immediately change the visible account summary and quick links. Desktop users also need an obvious navigation control when the sidebar is collapsed.
+
+Consequences:
+Dashboard links preserve account context. Sidebar visibility and top menu controls are part of the desktop UX contract. Future home-screen additions should fill empty desktop space with useful operational context, not decorative filler.
+
+Related files:
+`src/app/(dashboard)/page.tsx`, `src/components/layout/header.tsx`, `src/components/layout/sidebar.tsx`, `src/components/layout/dashboard-shell.tsx`
+
+---
+
+## 2026-05-08 — Advertising sync tolerates WB empty responses and cluster period limits
+
+Status:
+Active
+
+Decision:
+Treat null WB advertising fullstats responses as empty datasets. For advertising clusters, split long selected periods into WB-compatible chunks of at most 30 days, aggregate the chunks locally, and store results under the originally selected period.
+
+Reason:
+Live worker runs showed `Cannot read properties of null (reading 'flatMap')` for stats and WB API 400 errors for cluster periods above 30 days. These are expected response/limit conditions, not reasons for the whole sync UX to stay broken.
+
+Consequences:
+Manual cluster sync can accept longer UI periods while respecting WB API limits internally. Empty stats responses become successful zero-row syncs instead of crashes. Full live verification is still required for rate-limit behavior.
+
+Related files:
+`src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/wb-api/advertising.ts`, `src/lib/services/report-calculator.ts`
+
+---
+
 ## 2026-05-05 — Markdown-документация как система памяти Codex
 
 Status:

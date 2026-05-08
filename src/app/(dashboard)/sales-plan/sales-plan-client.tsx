@@ -70,8 +70,8 @@ export function SalesPlanClient({ initialPlans, wbAccountId }: SalesPlanClientPr
   }
 
   return (
-    <>
-      <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 items-center justify-between">
         <div />
         <Button onClick={() => setDialogOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -80,7 +80,7 @@ export function SalesPlanClient({ initialPlans, wbAccountId }: SalesPlanClientPr
       </div>
 
       {plans.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
+        <div className="old-money-panel flex min-h-0 flex-1 flex-col items-center justify-center rounded-md border-dashed p-12 text-center">
           <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-semibold">Нет планов</h3>
           <p className="text-muted-foreground text-sm mt-1 mb-4">
@@ -92,11 +92,11 @@ export function SalesPlanClient({ initialPlans, wbAccountId }: SalesPlanClientPr
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="dashboard-scroll grid content-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
             <Card
               key={plan.id}
-              className="group cursor-pointer transition-colors hover:bg-accent/50 relative"
+              className="group relative cursor-pointer transition-colors hover:bg-secondary/60"
               onClick={() => handleCardClick(plan.id)}
             >
               <button
@@ -171,6 +171,6 @@ export function SalesPlanClient({ initialPlans, wbAccountId }: SalesPlanClientPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   )
 }

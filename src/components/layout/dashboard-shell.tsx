@@ -40,8 +40,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           onMobileClose={() => setIsMobileOpen(false)}
         />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <Header user={user} onMobileMenuOpen={() => setIsMobileOpen(true)} />
-          <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+          <Header
+            user={user}
+            onMobileMenuOpen={() => setIsMobileOpen(true)}
+            onSidebarCollapse={() => setIsCollapsed((v) => !v)}
+          />
+          <main className="min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5 lg:p-6">
+            {children}
+          </main>
         </div>
       </div>
     </AccountProvider>

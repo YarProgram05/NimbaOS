@@ -119,9 +119,9 @@ export function CardsClient({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="old-money-panel flex shrink-0 flex-wrap items-center gap-3 rounded-md p-3">
         <form onSubmit={handleSearchSubmit} className="flex w-full flex-wrap gap-2 lg:w-auto">
           <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -184,7 +184,7 @@ export function CardsClient({
       </div>
 
       {/* Row count */}
-      <p className="text-sm text-muted-foreground">
+      <p className="shrink-0 text-sm text-muted-foreground">
         Всего:{' '}
         <span className="font-medium text-foreground">
           {data.total.toLocaleString('ru-RU')}
@@ -193,16 +193,18 @@ export function CardsClient({
       </p>
 
       {/* Table */}
-      <DataTable
-        columns={getProductColumns(wbAccountId, data.lastSyncAt)}
-        data={data.rows}
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
-      />
+      <div className="min-h-0 flex-1 overflow-auto rounded-md">
+        <DataTable
+          columns={getProductColumns(wbAccountId, data.lastSyncAt)}
+          data={data.rows}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+        />
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex shrink-0 items-center justify-center gap-2">
           <Button
             variant="outline"
             size="sm"

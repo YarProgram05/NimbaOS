@@ -6,6 +6,13 @@ NimbaOS находится после Phase 8 background sync на уровне 
 
 ## Latest session summary
 
+Post-Phase-9 UI and sync hardening on 2026-05-08:
+- redesigned the dashboard shell/home/cards/reports/sales-plan surfaces into a restrained old-money business style;
+- restored the desktop hamburger/sidebar toggle and made the NimbaOS mark link to home with the selected `?account`;
+- made home dashboard stats/account cards read the selected account from URL;
+- confirmed the worker was running, diagnosed advertising sync failures, and hardened ad stats/clusters for null WB fullstats and cluster periods longer than 30 days;
+- restarted `npm run worker:sync` locally after the worker fixes.
+
 Phase 9 code-level implementation on 2026-05-06:
 - added VPS production artifacts: `Dockerfile`, `docker-compose.prod.yml`, `.env.production.example`, `deploy/nginx/nimbaos.conf`;
 - enabled Next.js standalone output and added public `/api/health`;
@@ -43,15 +50,16 @@ Phase 8 реализована поверх существующего dirty wor
 
 ## Current safe next step
 
-Если нужно продолжать Phase 8 live-проверку: сначала поднять PostgreSQL + Redis, затем применить schema к dev DB (`npm run db:push` или migration) только после явного подтверждения, запустить `npm run worker:sync`, затем поставить один read-only job через `/sync`.
+Если нужно продолжать Phase 8 live-проверку: убедиться, что PostgreSQL + Redis + `npm run worker:sync` подняты, затем поставить один read-only job через `/sync` и не запускать дубли до завершения/ошибки.
 
-Если live-проверка не нужна: перейти к Phase 9 polish.
+Если live-проверка не нужна: дорабатывать desktop home empty states по макету/концепту пользователя.
 
 ## Active risks
 
 - Новая таблица `sync_job_runs` есть в Prisma schema, но DB schema не применялась в этой сессии.
 - Historical/full sync не запускать автоматически и не запускать без явного подтверждения.
 - WB advert API может возвращать долгий `429`; фоновые jobs должны фиксировать ошибку и retry, а UI не должен ждать десятки минут.
+- Старые failed rows в `/sync` являются историей; после code-level fix проверять новые задачи, а не ожидать изменения старых статусов.
 - Не читать и не выводить `.env`, WB tokens или decrypted API keys.
 - Dev server ранее зависал на `Starting...`; при повторе см. `docs/BUGS_AND_INCIDENTS.md`.
 
@@ -71,4 +79,4 @@ Phase 8 реализована поверх существующего dirty wor
 
 ## Last updated
 
-2026-05-05 — Phase 8 background sync implemented at code level.
+2026-05-08 — Post-Phase-9 UI refresh and advertising worker hardening.

@@ -42,8 +42,8 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
 
   if (!wbAccountId) {
     return (
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Карточки товаров</h1>
+      <div className="dashboard-page">
+        <h1 className="text-2xl font-semibold tracking-tight">Карточки товаров</h1>
         <p className="text-muted-foreground">
           Добавьте кабинет WB в{' '}
           <Link href="/settings" className="underline underline-offset-4 hover:text-foreground">
@@ -80,18 +80,19 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
 
   if (!result.success) {
     return (
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Карточки товаров</h1>
+      <div className="dashboard-page">
+        <h1 className="text-2xl font-semibold tracking-tight">Карточки товаров</h1>
         <p className="text-sm text-destructive">{result.error}</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Карточки товаров</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
+    <div className="dashboard-page">
+      <div className="shrink-0">
+        <p className="metric-label">Каталог</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Карточки товаров</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Синхронизированные товары из Wildberries
         </p>
       </div>

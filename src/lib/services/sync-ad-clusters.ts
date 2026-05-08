@@ -18,12 +18,42 @@ interface ClusterAccumulator {
   weight: number
 }
 
+const MAX_CLUSTER_DAYS = 30
+
 function toNumber(value: number | undefined | null): number {
   return Number(value ?? 0)
 }
 
 function parseDate(value: string): Date {
   return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function buildDateChunks(dateFrom: string, dateTo: string): Array<{ dateFrom: string; dateTo: string }> {
+  const chunks: Array<{ dateFrom: string; dateTo: string }> = []
+  const end = parseDate(dateTo)
+  let current = parseDate(dateFrom)
+
+  while (current <= end) {
+    const chunkEnd = addDays(current, MAX_CLUSTER_DAYS - 1)
+    const boundedEnd = chunkEnd < end ? chunkEnd : end
+    chunks.push({
+      dateFrom: formatDate(current),
+      dateTo: formatDate(boundedEnd),
+    })
+    current = addDays(boundedEnd, 1)
+  }
+
+  return chunks
 }
 
 /**
@@ -70,49 +100,51 @@ export async function syncAdClusters(
     return result
   }
 
-  let statsGroups
-  try {
-    statsGroups = await fetchClusterStats(client, advertId, nmIds, dateFrom, dateTo)
-  } catch (error) {
-    result.errors++
-    result.durationMs = Date.now() - startMs
-    throw error
-  }
-
   const aggregated = new Map<string, ClusterAccumulator>()
 
-  for (const group of statsGroups) {
-    for (const stat of group.stats ?? []) {
-      const cluster = stat.norm_query?.trim()
-      if (!cluster) continue
+  for (const chunk of buildDateChunks(dateFrom, dateTo)) {
+    let statsGroups
+    try {
+      statsGroups = await fetchClusterStats(client, advertId, nmIds, chunk.dateFrom, chunk.dateTo)
+    } catch (error) {
+      result.errors++
+      result.durationMs = Date.now() - startMs
+      throw error
+    }
 
-      const views = toNumber(stat.views)
-      const clicks = toNumber(stat.clicks)
-      const cartAdds = toNumber(stat.atbs)
-      const orders = toNumber(stat.orders)
-      const weight = Math.max(views, 1)
+    for (const group of statsGroups) {
+      for (const stat of group.stats ?? []) {
+        const cluster = stat.norm_query?.trim()
+        if (!cluster) continue
 
-      const entry = aggregated.get(cluster) ?? {
-        views: 0,
-        clicks: 0,
-        cartAdds: 0,
-        orders: 0,
-        weightedCtr: 0,
-        weightedPosition: 0,
-        weightedCpm: 0,
-        weight: 0,
+        const views = toNumber(stat.views)
+        const clicks = toNumber(stat.clicks)
+        const cartAdds = toNumber(stat.atbs)
+        const orders = toNumber(stat.orders)
+        const weight = Math.max(views, 1)
+
+        const entry = aggregated.get(cluster) ?? {
+          views: 0,
+          clicks: 0,
+          cartAdds: 0,
+          orders: 0,
+          weightedCtr: 0,
+          weightedPosition: 0,
+          weightedCpm: 0,
+          weight: 0,
+        }
+
+        entry.views += views
+        entry.clicks += clicks
+        entry.cartAdds += cartAdds
+        entry.orders += orders
+        entry.weightedCtr += toNumber(stat.ctr) * weight
+        entry.weightedPosition += toNumber(stat.avg_pos) * weight
+        entry.weightedCpm += toNumber(stat.cpm) * weight
+        entry.weight += weight
+
+        aggregated.set(cluster, entry)
       }
-
-      entry.views += views
-      entry.clicks += clicks
-      entry.cartAdds += cartAdds
-      entry.orders += orders
-      entry.weightedCtr += toNumber(stat.ctr) * weight
-      entry.weightedPosition += toNumber(stat.avg_pos) * weight
-      entry.weightedCpm += toNumber(stat.cpm) * weight
-      entry.weight += weight
-
-      aggregated.set(cluster, entry)
     }
   }
 

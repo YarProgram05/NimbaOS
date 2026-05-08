@@ -28,7 +28,7 @@ export function AccountSelector() {
   if (accounts === null) {
     return (
       <Select disabled>
-        <SelectTrigger className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground">
+        <SelectTrigger className="w-full border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground shadow-sm">
           <SelectValue placeholder="Загрузка..." />
         </SelectTrigger>
         <SelectContent />
@@ -40,7 +40,7 @@ export function AccountSelector() {
     return (
       <Link
         href="/settings"
-        className="flex items-center justify-center rounded-md px-3 py-2 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors border border-dashed border-sidebar-border"
+        className="flex items-center justify-center rounded-md border border-dashed border-sidebar-border px-3 py-2 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       >
         + Добавить кабинет
       </Link>
@@ -49,7 +49,7 @@ export function AccountSelector() {
 
   return (
     <Select value={selectedId ?? ''} onValueChange={handleSelect}>
-      <SelectTrigger className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground">
+      <SelectTrigger className="w-full border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground shadow-sm">
         <SelectValue placeholder="Выберите кабинет" />
       </SelectTrigger>
       <SelectContent>
