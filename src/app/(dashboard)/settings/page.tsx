@@ -61,7 +61,11 @@ export default async function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-4">
-          <AccountsSection accounts={accounts} isReadOnly={userRole === 'VIEWER'} />
+          <AccountsSection
+            accounts={accounts}
+            isReadOnly={userRole === 'VIEWER'}
+            canEditApiKey={userRole === 'ADMIN'}
+          />
         </TabsContent>
       </Tabs>
     </div>

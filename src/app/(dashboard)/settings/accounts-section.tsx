@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Pencil, Trash2, Check, X } from 'lucide-react'
+import { Pencil, Trash2, Check, X, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AddAccountDialog } from './add-account-dialog'
-import { updateTaxRate, toggleAccountActive } from '@/lib/actions/accounts'
+import { updateTaxRate, toggleAccountActive, updateWbAccountApiKey } from '@/lib/actions/accounts'
 import type { WbAccountSummary } from '@/lib/actions/accounts'
 
 interface TaxRateCellProps {
@@ -116,10 +116,16 @@ interface AccountRowProps {
   account: WbAccountSummary
   onDeactivated: () => void
   isReadOnly?: boolean
+  canEditApiKey?: boolean
 }
 
-function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
+function AccountRow({ account, onDeactivated, isReadOnly, canEditApiKey }: AccountRowProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [keyOpen, setKeyOpen] = useState(false)
+  const [showKey, setShowKey] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [savingKey, setSavingKey] = useState(false)
   const [deactivating, setDeactivating] = useState(false)
 
   async function handleDeactivate() {
@@ -135,6 +141,37 @@ function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
       }
     } finally {
       setDeactivating(false)
+    }
+  }
+
+  function handleKeyOpenChange(open: boolean) {
+    setKeyOpen(open)
+    if (!open) {
+      setApiKey('')
+      setApiError(null)
+      setShowKey(false)
+    }
+  }
+
+  async function handleSaveApiKey() {
+    if (!apiKey.trim()) {
+      setApiError('API-ключ обязателен')
+      return
+    }
+
+    setSavingKey(true)
+    setApiError(null)
+    try {
+      const result = await updateWbAccountApiKey(account.id, apiKey)
+      if (result.success) {
+        toast.success('API-ключ обновлен')
+        handleKeyOpenChange(false)
+        onDeactivated()
+      } else {
+        setApiError(result.error)
+      }
+    } finally {
+      setSavingKey(false)
     }
   }
 
@@ -159,6 +196,21 @@ function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
         </TableCell>
         <TableCell>
           <TaxRateCell account={account} isReadOnly={isReadOnly} />
+        </TableCell>
+        <TableCell>
+          {canEditApiKey ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => setKeyOpen(true)}
+            >
+              <KeyRound className="h-4 w-4" />
+              API
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">вЂ”</span>
+          )}
         </TableCell>
         <TableCell className="text-right">
           {!isReadOnly && (
@@ -194,6 +246,46 @@ function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={keyOpen} onOpenChange={handleKeyOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Обновить API-ключ</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 mt-2">
+            <div className="flex flex-col gap-1.5">
+              <p className="text-sm text-muted-foreground">{account.name}</p>
+              <div className="relative">
+                <Input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  type={showKey ? 'text' : 'password'}
+                  placeholder="eyJ..."
+                  className="pr-10"
+                  disabled={savingKey}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {apiError && <p className="text-sm text-destructive">{apiError}</p>}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => handleKeyOpenChange(false)} disabled={savingKey}>
+                Отмена
+              </Button>
+              <Button onClick={handleSaveApiKey} disabled={savingKey}>
+                {savingKey ? 'Проверка...' : 'Сохранить'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -201,9 +293,10 @@ function AccountRow({ account, onDeactivated, isReadOnly }: AccountRowProps) {
 interface AccountsSectionProps {
   accounts: WbAccountSummary[]
   isReadOnly?: boolean
+  canEditApiKey?: boolean
 }
 
-export function AccountsSection({ accounts, isReadOnly }: AccountsSectionProps) {
+export function AccountsSection({ accounts, isReadOnly, canEditApiKey }: AccountsSectionProps) {
   const router = useRouter()
 
   function refresh() {
@@ -239,12 +332,19 @@ export function AccountsSection({ accounts, isReadOnly }: AccountsSectionProps) 
                 <TableHead>Продавец</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead>Налоговая ставка</TableHead>
+                <TableHead>API</TableHead>
                 <TableHead className="text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {accounts.map((account) => (
-                <AccountRow key={account.id} account={account} onDeactivated={refresh} isReadOnly={isReadOnly} />
+                <AccountRow
+                  key={account.id}
+                  account={account}
+                  onDeactivated={refresh}
+                  isReadOnly={isReadOnly}
+                  canEditApiKey={canEditApiKey}
+                />
               ))}
             </TableBody>
           </Table>

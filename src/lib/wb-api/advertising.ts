@@ -94,15 +94,17 @@ export async function fetchCampaignBudget(
  */
 export async function fetchFullStats(
   client: WbApiClient,
-  advertId: number,
+  advertId: number | number[],
   dateFrom: string,
   dateTo: string,
 ): Promise<WbFullStatsResponse> {
+  const ids = Array.isArray(advertId) ? advertId.join(',') : String(advertId)
+
   return client.get<WbFullStatsResponse>(
     'advert',
     '/adv/v3/fullstats',
     {
-      ids: String(advertId),
+      ids,
       beginDate: dateFrom,
       endDate: dateTo,
     },
@@ -149,12 +151,13 @@ export async function fetchClusterStats(
  */
 export async function fetchUpdHistory(
   client: WbApiClient,
-  advertId: number,
+  dateFrom: string,
+  dateTo: string,
 ): Promise<WbUpdHistoryItem[]> {
   const response = await client.get<WbUpdHistoryItem[] | null>(
     'advert',
     '/adv/v1/upd',
-    { id: String(advertId) },
+    { from: dateFrom, to: dateTo },
   )
 
   return response ?? []

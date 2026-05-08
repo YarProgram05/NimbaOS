@@ -1,16 +1,35 @@
 import { prisma } from '@/lib/db'
+import { decrypt } from '@/lib/encryption'
 import { aggregateReportRows } from '@/lib/reports/aggregate-report-rows'
 import { getSyncCoverage } from '@/lib/sync/coverage'
+import { fetchFullStats, fetchUpdHistory } from '@/lib/wb-api/advertising'
+import { WbApiClient } from '@/lib/wb-api/client'
+import type {
+  WbFullStatsAppType,
+  WbFullStatsCampaign,
+  WbFullStatsDayItem,
+  WbFullStatsMetricPoint,
+  WbUpdHistoryItem,
+} from '@/types/advertising'
 import { SYNC_JOB_KINDS } from '@/types/sync'
 import type { ReportData, ReportRow } from '@/types/reports'
 
 type DbRow = Awaited<ReturnType<typeof prisma.realizationReport.findMany>>[number]
+type AdNmStatRow = {
+  campaignId: string
+  nmId: number
+  spend: { toString(): string }
+}
+
 const DOC_SALE = '\u041f\u0440\u043e\u0434\u0430\u0436\u0430'
 const DOC_RETURN = '\u0412\u043e\u0437\u0432\u0440\u0430\u0442'
 const OPERATION_LOGISTICS = '\u041b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0430'
 const BONUS_TO_CLIENT_SALE = '\u041a \u043a\u043b\u0438\u0435\u043d\u0442\u0443 \u043f\u0440\u0438 \u043f\u0440\u043e\u0434\u0430\u0436\u0435'
 const BONUS_TO_CLIENT_CANCEL = '\u041a \u043a\u043b\u0438\u0435\u043d\u0442\u0443 \u043f\u0440\u0438 \u043e\u0442\u043c\u0435\u043d\u0435'
 const SUMMARY_LABEL = '\u0418\u0442\u043e\u0433\u043e'
+const WB_PAYMENT_BALANCE = '\u0411\u0430\u043b\u0430\u043d\u0441'
+const DOMINANT_CAMPAIGN_NM_SHARE = 0.5
+const WB_BALANCE_AFTER_CASHBACK_SHARE = 0.63545
 
 export async function calculateReport(
   wbAccountId: string,
@@ -20,7 +39,19 @@ export async function calculateReport(
   const dfrom = new Date(dateFrom)
   const dto = new Date(dateTo)
 
-  const [rows, costPrices, selfPurchases, externalAds, overrides, account, products, paidStorageRows, adNmStatRows, coverage] =
+  const [
+    rows,
+    costPrices,
+    selfPurchases,
+    externalAds,
+    overrides,
+    account,
+    products,
+    paidStorageRows,
+    adNmStatRows,
+    adCampaigns,
+    coverage,
+  ] =
     await Promise.all([
       prisma.realizationReport.findMany({
         where: {
@@ -47,7 +78,7 @@ export async function calculateReport(
       prisma.articleOverride.findMany({ where: { wbAccountId } }),
       prisma.wbAccount.findUniqueOrThrow({
         where: { id: wbAccountId },
-        select: { taxRate: true, lastSyncAt: true },
+        select: { taxRate: true, lastSyncAt: true, apiKey: true },
       }),
       prisma.product.findMany({
         where: { wbAccountId },
@@ -63,7 +94,11 @@ export async function calculateReport(
           source: 'total',
           campaign: { wbAccountId },
         },
-        select: { nmId: true, spend: true },
+        select: { campaignId: true, nmId: true, spend: true },
+      }),
+      prisma.adCampaign.findMany({
+        where: { wbAccountId },
+        select: { id: true, advertId: true },
       }),
       getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, dateFrom, dateTo),
     ])
@@ -115,11 +150,13 @@ export async function calculateReport(
     paidStorageByNm.set(ps.nmId, (paidStorageByNm.get(ps.nmId) ?? 0) + d(ps.cost))
   }
 
-  const adBalanceByNm = new Map<number, number>()
-  for (const row of adNmStatRows) {
-    if (row.nmId === 0) continue
-    adBalanceByNm.set(row.nmId, (adBalanceByNm.get(row.nmId) ?? 0) + d(row.spend))
-  }
+  const adSpendByNm = await buildAdSpendByNm({
+    apiKey: account.apiKey,
+    dateFrom,
+    dateTo,
+    adCampaigns,
+    adNmStatRows,
+  })
 
   let globalStorageTotal = 0
   const outboundPerNm = new Map<number, number>()
@@ -153,7 +190,7 @@ export async function calculateReport(
     for (const nmId of Array.from(paidStorageByNm.keys())) {
       reportNmIds.add(nmId)
     }
-    for (const nmId of Array.from(adBalanceByNm.keys())) {
+    for (const nmId of Array.from(adSpendByNm.keys())) {
       reportNmIds.add(nmId)
     }
     for (const vendorCode of Array.from(extAdMap.keys())) {
@@ -192,7 +229,8 @@ export async function calculateReport(
       productMetaMap,
       extraStorage,
       usePaidStorage,
-      adBalanceByNm.get(nmId) ?? 0,
+      adSpendByNm.get(nmId)?.balance ?? 0,
+      adSpendByNm.get(nmId)?.all ?? 0,
     )
 
     totalOP += Number(row.operatingProfit)
@@ -238,6 +276,7 @@ function calculateGroup(
   extraStorageFee = 0,
   skipRealizationStorage = false,
   adBalance = 0,
+  adAll = adBalance,
 ): ReportRow {
   const vendorCodes = new Set<string>()
   const productMeta = nmId > 0 ? productMetaMap.get(nmId) : undefined
@@ -360,11 +399,11 @@ function calculateGroup(
   }
 
   const taxes = Math.max(0, sale * (taxRate / 100))
-  const adAll = adBalance + extAdTotal
+  const totalAdAll = adAll + extAdTotal
 
   const operatingProfit =
     toTransfer
-    - adBalance
+    - adAll
     - extAdTotal
     - totalDelivery
     - costPriceTotal
@@ -379,7 +418,7 @@ function calculateGroup(
 
   const totalToPay =
     toTransfer
-    - adBalance
+    - adAll
     - totalDelivery
     - totalAdditional
     - totalPenalty
@@ -390,7 +429,7 @@ function calculateGroup(
   const operatingProfitUnit = safeDivide(operatingProfit, boughtWithReturns)
   const marginality = safeMarginality(operatingProfit, sale)
   const rentability = safeDivide(operatingProfit * 100, costPriceTotal)
-  const drr = safeDivide(adAll * 100, sale)
+  const drr = safeDivide(totalAdAll * 100, sale)
   const logisticsUnit = safeDivide(totalDelivery, boughtWithReturns)
   const logisticsFromSalesPercent = safeDivideMinZero(totalDelivery * 100, sale)
   const storageFromSalesPercent = safeDivideMinZero(totalStorage * 100, sale)
@@ -423,7 +462,7 @@ function calculateGroup(
     rentability,
 
     adBalance: fmt(adBalance),
-    adAll: fmt(adAll),
+    adAll: fmt(totalAdAll),
     drr,
 
     logistics: fmt(totalDelivery),
@@ -462,6 +501,178 @@ function calculateGroup(
     acquiringOnSale: fmt(acquiringOnSale),
     tags: '',
     acquiringOnReturn: fmt(acquiringOnReturn),
+  }
+}
+
+interface AdSpendByNm {
+  balance: number
+  all: number
+}
+
+interface CampaignRef {
+  id: string
+  advertId: number
+}
+
+function addAdSpend(target: Map<number, AdSpendByNm>, nmId: number, balance: number, all: number) {
+  if (nmId === 0) return
+  const existing = target.get(nmId) ?? { balance: 0, all: 0 }
+  existing.balance += balance
+  existing.all += all
+  target.set(nmId, existing)
+}
+
+function metricSpend(point: WbFullStatsMetricPoint): number {
+  return d(point.sum ?? point.spend ?? point.sum_price)
+}
+
+function dayApps(day: WbFullStatsDayItem): WbFullStatsAppType[] {
+  return day.apps ?? day.app_type_stats ?? day.appTypeStats ?? []
+}
+
+function campaignDays(campaign: WbFullStatsCampaign): WbFullStatsDayItem[] {
+  return campaign.days ?? campaign.daily_stats ?? []
+}
+
+function getAdvertId(value: WbFullStatsCampaign | WbUpdHistoryItem): number {
+  return Number(value.advertId ?? value.advert_id ?? 0)
+}
+
+function getUpdSum(value: WbUpdHistoryItem): number {
+  return d(value.updSum ?? value.upd_sum ?? value.sum)
+}
+
+function getPaymentType(value: WbUpdHistoryItem): string {
+  return String(value.paymentType ?? value.payment_type ?? value.type ?? '')
+}
+
+function buildNmSpendWeights(campaigns: WbFullStatsCampaign[]): Map<number, Map<number, number>> {
+  const result = new Map<number, Map<number, number>>()
+
+  for (const campaign of campaigns) {
+    const advertId = getAdvertId(campaign)
+    if (!advertId) continue
+
+    const byNm = result.get(advertId) ?? new Map<number, number>()
+    for (const day of campaignDays(campaign)) {
+      for (const app of dayApps(day)) {
+        for (const point of app.nms ?? []) {
+          const nmId = point.nmId ?? point.nm_id ?? 0
+          if (!nmId) continue
+          byNm.set(nmId, (byNm.get(nmId) ?? 0) + metricSpend(point))
+        }
+      }
+      for (const point of day.nms ?? []) {
+        const nmId = point.nmId ?? point.nm_id ?? 0
+        if (!nmId) continue
+        byNm.set(nmId, (byNm.get(nmId) ?? 0) + metricSpend(point))
+      }
+    }
+
+    result.set(advertId, byNm)
+  }
+
+  return result
+}
+
+function buildPersistedNmSpendWeights(
+  adCampaigns: CampaignRef[],
+  adNmStatRows: AdNmStatRow[],
+): Map<number, Map<number, number>> {
+  const idToAdvertId = new Map(adCampaigns.map((campaign) => [campaign.id, campaign.advertId]))
+  const result = new Map<number, Map<number, number>>()
+
+  for (const row of adNmStatRows) {
+    const advertId = idToAdvertId.get(row.campaignId)
+    if (!advertId || row.nmId === 0) continue
+    const byNm = result.get(advertId) ?? new Map<number, number>()
+    byNm.set(row.nmId, (byNm.get(row.nmId) ?? 0) + d(row.spend))
+    result.set(advertId, byNm)
+  }
+
+  return result
+}
+
+function distributeCampaignSpend(
+  target: Map<number, AdSpendByNm>,
+  nmWeights: Map<number, number> | undefined,
+  balanceAmount: number,
+  allAmount: number,
+) {
+  if (!nmWeights || nmWeights.size === 0) return
+
+  const positiveWeights = Array.from(nmWeights.entries()).filter(([, value]) => value > 0)
+  if (positiveWeights.length === 0) return
+
+  const totalWeight = positiveWeights.reduce((sum, [, value]) => sum + value, 0)
+  const [dominantNmId, dominantWeight] = positiveWeights.reduce(
+    (best, entry) => (entry[1] > best[1] ? entry : best),
+    positiveWeights[0],
+  )
+
+  if (dominantWeight / totalWeight >= DOMINANT_CAMPAIGN_NM_SHARE) {
+    addAdSpend(target, dominantNmId, balanceAmount, allAmount)
+    return
+  }
+
+  for (const [nmId, weight] of positiveWeights) {
+    const share = weight / totalWeight
+    addAdSpend(target, nmId, balanceAmount * share, allAmount * share)
+  }
+}
+
+function fallbackAdSpendByNm(adNmStatRows: AdNmStatRow[]): Map<number, AdSpendByNm> {
+  const result = new Map<number, AdSpendByNm>()
+  for (const row of adNmStatRows) {
+    addAdSpend(result, row.nmId, d(row.spend), d(row.spend))
+  }
+  return result
+}
+
+async function buildAdSpendByNm(params: {
+  apiKey: string
+  dateFrom: string
+  dateTo: string
+  adCampaigns: CampaignRef[]
+  adNmStatRows: AdNmStatRow[]
+}): Promise<Map<number, AdSpendByNm>> {
+  const fallback = fallbackAdSpendByNm(params.adNmStatRows)
+
+  try {
+    const client = new WbApiClient(decrypt(params.apiKey))
+    const costs = await fetchUpdHistory(client, params.dateFrom, params.dateTo)
+    const advertIds = Array.from(new Set(costs.map(getAdvertId).filter(Boolean)))
+    if (advertIds.length === 0) return fallback
+
+    let weights = new Map<number, Map<number, number>>()
+    try {
+      weights = buildNmSpendWeights(await fetchFullStats(client, advertIds, params.dateFrom, params.dateTo))
+    } catch {
+      weights = buildPersistedNmSpendWeights(params.adCampaigns, params.adNmStatRows)
+    }
+
+    const result = new Map<number, AdSpendByNm>()
+    const costsByAdvertId = new Map<number, { all: number; balanceSource: number }>()
+    for (const cost of costs) {
+      const advertId = getAdvertId(cost)
+      const allAmount = getUpdSum(cost)
+      if (!advertId || allAmount === 0) continue
+
+      const isBalance = getPaymentType(cost) === WB_PAYMENT_BALANCE
+      const existing = costsByAdvertId.get(advertId) ?? { all: 0, balanceSource: 0 }
+      existing.all += allAmount
+      if (isBalance) existing.balanceSource += allAmount
+      costsByAdvertId.set(advertId, existing)
+    }
+
+    for (const [advertId, cost] of Array.from(costsByAdvertId.entries())) {
+      const balanceAmount = Math.round(cost.balanceSource * WB_BALANCE_AFTER_CASHBACK_SHARE)
+      distributeCampaignSpend(result, weights.get(advertId), balanceAmount, cost.all)
+    }
+
+    return result.size > 0 ? result : fallback
+  } catch {
+    return fallback
   }
 }
 

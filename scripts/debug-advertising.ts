@@ -134,8 +134,9 @@ async function main() {
   }
 
   console.log('Checking upd history...')
-  const history = await fetchUpdHistory(client, advertId)
-  console.log(`Upd history rows: ${history.length}`)
+  const history = await fetchUpdHistory(client, dateFrom, dateTo)
+  const campaignHistory = history.filter((item) => (item.advertId ?? item.advert_id) === advertId)
+  console.log(`Upd history rows: ${campaignHistory.length}`)
 }
 
 main()

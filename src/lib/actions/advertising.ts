@@ -61,6 +61,12 @@ function serializeDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
 function toFixedString(value: number | string | null | undefined, decimals = 2): string | null {
   if (value === null || value === undefined) return null
   return Number(value).toFixed(decimals)
@@ -227,10 +233,18 @@ function buildWbLogRow(item: WbUpdHistoryItem, index: number): AdActionLogRow | 
   return {
     id: `wb-${index}-${createdAt}`,
     source: 'wb',
-    action: item.action ?? item.type ?? 'wb_update',
+    action: item.action ?? item.type ?? item.paymentType ?? item.payment_type ?? 'wb_update',
     valueBefore: item.from != null ? String(item.from) : null,
-    valueAfter: item.to != null ? String(item.to) : item.sum != null ? String(item.sum) : null,
-    note: item.text ?? item.param ?? (item.status != null ? `status=${item.status}` : null),
+    valueAfter: item.to != null
+      ? String(item.to)
+      : item.updSum != null
+        ? String(item.updSum)
+        : item.upd_sum != null
+          ? String(item.upd_sum)
+          : item.sum != null
+            ? String(item.sum)
+            : null,
+    note: item.text ?? item.param ?? (item.advertStatus != null ? `status=${item.advertStatus}` : null),
     createdAt: new Date(createdAt).toISOString(),
   }
 }
@@ -604,8 +618,14 @@ export async function getCampaignLogAction(
     let wbLogs: AdActionLogRow[] = []
     try {
       const client = new WbApiClient(decrypt(campaign.wbAccount.apiKey))
-      const history = await fetchUpdHistory(client, campaign.advertId)
+      const today = new Date()
+      const history = await fetchUpdHistory(
+        client,
+        serializeDate(addDays(today, -30)),
+        serializeDate(today),
+      )
       wbLogs = history
+        .filter((item) => (item.advertId ?? item.advert_id) === campaign.advertId)
         .map(buildWbLogRow)
         .filter((item): item is AdActionLogRow => item !== null)
     } catch {

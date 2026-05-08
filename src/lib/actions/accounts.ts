@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { checkRole } from '@/lib/auth/check-role'
 import { prisma } from '@/lib/db'
 import { encrypt } from '@/lib/encryption'
 import { removeAllSyncSchedulesForAccount } from '@/lib/sync/schedules'
@@ -37,6 +38,12 @@ const WB_ACCOUNT_SUMMARY_SELECT = {
 async function requireSession() {
   const session = await getServerSession(authOptions)
   if (!session?.user) throw new Error('Не авторизован')
+  return session
+}
+
+async function requireAdminSession() {
+  const session = await requireSession()
+  if (!checkRole(session, 'ADMIN')) throw new Error('Недостаточно прав')
   return session
 }
 
@@ -174,6 +181,50 @@ export async function updateTaxRate(
   await prisma.wbAccount.update({ where: { id }, data: { taxRate } })
   revalidatePath('/settings')
   return { success: true, data: undefined }
+}
+
+export async function updateWbAccountApiKey(
+  id: string,
+  apiKey: string,
+): Promise<ActionResult<WbAccountSummary>> {
+  await requireAdminSession()
+
+  if (!apiKey.trim()) return { success: false, error: 'API-ключ обязателен' }
+
+  const account = await prisma.wbAccount.findUnique({
+    where: { id },
+    select: { id: true, sellerId: true },
+  })
+  if (!account) return { success: false, error: 'Кабинет не найден' }
+
+  let sellerInfo: { sellerName: string; sellerId: string; tradeMark?: string }
+  try {
+    sellerInfo = await validateAndFetchSellerInfo(apiKey)
+  } catch (err) {
+    if (err instanceof WbApiError) {
+      return { success: false, error: `Недействительный API-ключ (${err.status})` }
+    }
+    return { success: false, error: 'Не удалось подключиться к WB API' }
+  }
+
+  if (account.sellerId && sellerInfo.sellerId !== account.sellerId) {
+    return { success: false, error: 'API-ключ принадлежит другому продавцу' }
+  }
+
+  const updated = await prisma.wbAccount.update({
+    where: { id },
+    data: {
+      apiKey: encrypt(apiKey),
+      sellerName: sellerInfo.sellerName,
+      sellerId: sellerInfo.sellerId,
+      tradeMark: sellerInfo.tradeMark ?? null,
+      isActive: true,
+    },
+    select: WB_ACCOUNT_SUMMARY_SELECT,
+  })
+
+  revalidatePath('/settings')
+  return { success: true, data: { ...updated, taxRate: updated.taxRate.toString() } }
 }
 
 export async function toggleAccountActive(id: string): Promise<ActionResult> {

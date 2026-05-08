@@ -196,8 +196,21 @@ export interface WbClusterStatsResponse {
 export interface WbUpdHistoryItem {
   advertId?: number
   advert_id?: number
+  updNum?: number
+  upd_num?: number
+  updSum?: number
+  upd_sum?: number
   updTime?: string
   upd_time?: string
+  campName?: string
+  camp_name?: string
+  paymentType?: string
+  payment_type?: string
+  advertType?: number
+  advert_type?: number
+  advertStatus?: number
+  advert_status?: number
+  currency?: string
   type?: string
   action?: string
   param?: string
