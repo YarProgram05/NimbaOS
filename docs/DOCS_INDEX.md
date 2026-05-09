@@ -2,6 +2,23 @@
 
 Главный справочник по документации. В начале новой сессии читать только `docs/AGENTS.md`, этот файл, `docs/HANDOFF.md`, `docs/CURRENT_TASKS.md`. Остальные документы открывать по задаче.
 
+## docs/DASHBOARD_ANALYTICS_ROADMAP.md
+
+Purpose:
+Implementation roadmap for turning the home screen into a full operational dashboard and adding missing analytics modules: stocks, reviews, questions, forecasts, recommendations, exports, and freshness/problem center.
+
+Read when:
+Planning or implementing the next dashboard/analytics expansion phases.
+
+Update when:
+Dashboard scope, implementation order, or required analytics modules change.
+
+Do not store here:
+Daily implementation logs, temporary bugs, or completed status updates.
+
+Related docs:
+`docs/SPECIFICATION.md`, `docs/PROJECT_STATE.md`, `docs/CURRENT_TASKS.md`, `docs/DATA_FRESHNESS_POLICY.md`.
+
 ## docs/AGENTS.md
 
 Purpose:
