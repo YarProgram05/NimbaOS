@@ -9,9 +9,9 @@ Implemented:
 - Phase 0 is implemented.
   - Added the typed `DashboardSummary` contract in `src/types/dashboard.ts`.
   - Added supported period presets: today, yesterday, last 7 days, current month, previous month, custom range.
-  - Added default comparison behavior: previous equal-length period.
-  - Dashboard loading follows the selected `?account`.
-  - First implementation computes on demand through `src/lib/services/dashboard-summary.ts`.
+  - Added default comparison behavior: previous equal-length period. The current-month preset is month-to-date to avoid marking future dates as missing.
+  - Dashboard loading follows the selected `?account`, falls back from invalid account ids to an active cabinet, and mirrors the selected cabinet into a cookie for server renders.
+  - First implementation computes on demand through `src/lib/services/dashboard-summary.ts`, with a short in-memory summary cache and skips full report calculation when the period has no report rows and no coverage.
   - Missing and partial data are explicit via `ready`, `partial`, `missing`, and `not_applicable` statuses.
   - Added a server action in `src/lib/actions/dashboard.ts`.
 - Phase 1 is implemented as the current dashboard foundation.
@@ -20,12 +20,15 @@ Implemented:
   - Added KPI cards for revenue, operating profit, marginality, DRR, orders, and returns.
   - Added plan/fact, advertising, product leaders, product risks, freshness, and focus blocks.
   - Added empty states for missing report, plan, advertising, and product data.
+  - Removed live WB reads from dashboard/report render paths by preferring persisted advertising stats.
+  - Mobile layout now keeps the problem center before lower analytics and uses the page scroll instead of a nested dashboard scroll trap.
 - Phase 2 is implemented as the dashboard problem-center layer.
   - Extended freshness tracking across products, reports, sales plan, advertising campaigns, advertising stats, advertising clusters, and future stocks/reviews/questions domains.
   - Added normalized severity (`info`, `warning`, `critical`) and problem categories in `src/types/dashboard.ts`.
   - Added `src/lib/services/dashboard-problem-center.ts` to convert freshness/report/product issues into actionable dashboard insights.
   - The home screen "Focus" block now reads `summary.problemCenter.insights`, and every insight has an action link.
-  - Failed sync jobs are surfaced as issues without blocking the rest of the dashboard summary.
+  - Failed sync jobs are surfaced as issues with the latest stored error when available, without blocking the rest of the dashboard summary.
+  - Freshness issues now include stale-but-covered sources, so an old successful sync is not hidden just because period coverage exists.
 
 Important changes from the original plan:
 

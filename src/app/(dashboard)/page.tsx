@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import {
   AlertTriangle,
@@ -43,8 +44,9 @@ const PERIODS: { value: DashboardPeriodPreset; label: string }[] = [
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getServerSession(authOptions)
   const params = await searchParams
+  const storedAccountId = cookies().get('wb_selected_account')?.value
   const summary = await getDashboardSummary({
-    accountId: params.account,
+    accountId: params.account ?? storedAccountId,
     period: params.period,
     dateFrom: params.dateFrom,
     dateTo: params.dateTo,
@@ -148,7 +150,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="dashboard-scroll grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="grid content-start gap-3">
+        <div className="grid content-start gap-3 xl:order-none">
           <section className="old-money-panel rounded-md p-4">
             <PanelHeader
               label="План-факт"
@@ -199,7 +201,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </section>
         </div>
 
-        <div className="grid content-start gap-3">
+        <div className="order-first grid content-start gap-3 xl:order-none">
           <section className="old-money-panel rounded-md p-4">
             <PanelHeader
               label="Фокус"
@@ -450,54 +452,6 @@ function severityText(severity: DashboardIssueSeverity): string {
   if (severity === 'critical') return 'критично'
   if (severity === 'warning') return 'требует внимания'
   return 'инфо'
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function buildFocusItems(summary: DashboardSummary) {
-  const items: { title: string; caption: string; href: string }[] = []
-  const accountQuery = `account=${summary.account.id}`
-
-  if (summary.kpis.revenue.status !== 'ready') {
-    items.push({
-      title: 'Закрыть финансовые данные',
-      caption: summary.kpis.revenue.hint ?? 'Период не полностью покрыт отчетом реализации.',
-      href: `/sync?${accountQuery}`,
-    })
-  }
-
-  if (summary.plan.status === 'missing' || summary.plan.status === 'not_applicable') {
-    items.push({
-      title: 'Проверить план продаж',
-      caption: summary.plan.hint ?? 'Нужен активный план и продажи за период.',
-      href: `/sales-plan?${accountQuery}`,
-    })
-  }
-
-  if (summary.advertising.status !== 'ready') {
-    items.push({
-      title: 'Обновить рекламную статистику',
-      caption: summary.advertising.hint ?? 'ДРР рекламы может быть неполным.',
-      href: `/advertising?${accountQuery}`,
-    })
-  }
-
-  if (summary.products.risks.length > 0) {
-    items.push({
-      title: 'Разобрать товары с риском',
-      caption: `${summary.products.risks.length} позиций с отрицательной прибылью, высоким ДРР или без себестоимости.`,
-      href: `/reports?${accountQuery}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`,
-    })
-  }
-
-  if (items.length === 0) {
-    items.push({
-      title: 'Данные выглядят спокойно',
-      caption: 'Критичных пробелов по текущим источникам не найдено.',
-      href: `/sync?${accountQuery}`,
-    })
-  }
-
-  return items.slice(0, 4)
 }
 
 function formatMetricValue(metric: DashboardMetric): string {

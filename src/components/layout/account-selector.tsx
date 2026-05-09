@@ -27,12 +27,9 @@ export function AccountSelector() {
 
   if (accounts === null) {
     return (
-      <Select disabled>
-        <SelectTrigger className="w-full border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground shadow-sm">
-          <SelectValue placeholder="Загрузка..." />
-        </SelectTrigger>
-        <SelectContent />
-      </Select>
+      <div className="flex h-10 w-full items-center rounded-md border border-sidebar-border bg-sidebar-accent/70 px-3 text-sm text-sidebar-foreground/70 shadow-sm">
+        Загрузка...
+      </div>
     )
   }
 
@@ -47,8 +44,10 @@ export function AccountSelector() {
     )
   }
 
+  const effectiveSelectedId = selectedId ?? accounts[0]?.id
+
   return (
-    <Select value={selectedId ?? ''} onValueChange={handleSelect}>
+    <Select value={effectiveSelectedId} onValueChange={handleSelect}>
       <SelectTrigger className="w-full border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground shadow-sm">
         <SelectValue placeholder="Выберите кабинет" />
       </SelectTrigger>

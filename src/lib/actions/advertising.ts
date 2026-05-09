@@ -10,7 +10,6 @@ import { decrypt } from '@/lib/encryption'
 import {
   getBidPlacement,
   fetchAdvertInfoByIds,
-  fetchUpdHistory,
   depositBudget,
   pauseCampaign,
   setBid,
@@ -39,7 +38,6 @@ import type {
   WbAdvertInfoItem,
   WbCampaignBudgetDepositRequest,
   WbPaymentType,
-  WbUpdHistoryItem,
 } from '@/types/advertising'
 
 type CampaignWithAccount = Awaited<ReturnType<typeof prisma.adCampaign.findUnique>> & {
@@ -59,17 +57,6 @@ function parseDate(value: string): Date {
 
 function serializeDate(d: Date): string {
   return d.toISOString().slice(0, 10)
-}
-
-function addDays(value: Date, days: number): Date {
-  const next = new Date(value)
-  next.setUTCDate(next.getUTCDate() + days)
-  return next
-}
-
-function toFixedString(value: number | string | null | undefined, decimals = 2): string | null {
-  if (value === null || value === undefined) return null
-  return Number(value).toFixed(decimals)
 }
 
 function getStatusLabel(status: number): string {
@@ -226,29 +213,6 @@ function mapClusterRow(row: {
   }
 }
 
-function buildWbLogRow(item: WbUpdHistoryItem, index: number): AdActionLogRow | null {
-  const createdAt = item.updTime ?? item.upd_time
-  if (!createdAt) return null
-
-  return {
-    id: `wb-${index}-${createdAt}`,
-    source: 'wb',
-    action: item.action ?? item.type ?? item.paymentType ?? item.payment_type ?? 'wb_update',
-    valueBefore: item.from != null ? String(item.from) : null,
-    valueAfter: item.to != null
-      ? String(item.to)
-      : item.updSum != null
-        ? String(item.updSum)
-        : item.upd_sum != null
-          ? String(item.upd_sum)
-          : item.sum != null
-            ? String(item.sum)
-            : null,
-    note: item.text ?? item.param ?? (item.advertStatus != null ? `status=${item.advertStatus}` : null),
-    createdAt: new Date(createdAt).toISOString(),
-  }
-}
-
 export async function getCampaignsAction(
   wbAccountId: string,
 ): Promise<ActionResult<AdCampaignRow[]>> {
@@ -293,25 +257,7 @@ export async function getCampaignDetailAction(
       orderBy: { date: 'desc' },
     }).catch(() => null)
 
-    let lastBid = latestBid?.bid?.toString() ?? null
-
-    if (!lastBid) {
-      try {
-        const { advert } = await fetchLiveAdvertInfo(campaign)
-        if (advert) {
-          const liveBid = extractBidRubles(
-            advert,
-            campaign.bidType,
-            campaign.paymentType as WbPaymentType | null,
-            campaign.placementSearch,
-            campaign.placementReco,
-          )
-          lastBid = toFixedString(liveBid)
-        }
-      } catch {
-        // Keep DB fallback if live fetch failed.
-      }
-    }
+    const lastBid = latestBid?.bid?.toString() ?? null
 
     return {
       success: true,
@@ -608,29 +554,10 @@ export async function getCampaignLogAction(
     await requireManagerSession()
     if (!campaignId) return { success: false, error: 'Кампания не указана' }
 
-    const campaign = await getCampaignWithAccount(campaignId)
-
     const localLogs = await prisma.adActionLog.findMany({
       where: { campaignId },
       orderBy: { createdAt: 'desc' },
     })
-
-    let wbLogs: AdActionLogRow[] = []
-    try {
-      const client = new WbApiClient(decrypt(campaign.wbAccount.apiKey))
-      const today = new Date()
-      const history = await fetchUpdHistory(
-        client,
-        serializeDate(addDays(today, -30)),
-        serializeDate(today),
-      )
-      wbLogs = history
-        .filter((item) => (item.advertId ?? item.advert_id) === campaign.advertId)
-        .map(buildWbLogRow)
-        .filter((item): item is AdActionLogRow => item !== null)
-    } catch {
-      wbLogs = []
-    }
 
     const merged: AdActionLogRow[] = [
       ...localLogs.map((log) => ({
@@ -642,7 +569,6 @@ export async function getCampaignLogAction(
         note: log.note,
         createdAt: log.createdAt.toISOString(),
       })),
-      ...wbLogs,
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     return { success: true, data: merged }

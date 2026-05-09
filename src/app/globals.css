@@ -135,10 +135,10 @@
 @layer utilities {
   .text-balance { text-wrap: balance; }
   .dashboard-page {
-    @apply flex h-full min-h-0 flex-col gap-4 overflow-hidden;
+    @apply flex min-h-full flex-col gap-4;
   }
   .dashboard-scroll {
-    @apply min-h-0 flex-1 overflow-auto pr-1;
+    @apply min-h-0 flex-1 pr-1;
   }
   .old-money-panel {
     @apply border bg-card/95 shadow-sm;

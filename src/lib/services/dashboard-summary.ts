@@ -3,6 +3,7 @@ import { getSyncCoverage } from '@/lib/sync/coverage'
 import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
 import { calculateReport } from '@/lib/services/report-calculator'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
+import type { ReportData } from '@/types/reports'
 import type {
   DashboardAdvertisingSummary,
   DashboardFreshnessDomain,
@@ -17,6 +18,9 @@ import type {
   DashboardSummaryRequest,
   DashboardValueStatus,
 } from '@/types/dashboard'
+
+const DASHBOARD_SUMMARY_CACHE_TTL_MS = 60_000
+const dashboardSummaryCache = new Map<string, { expiresAt: number; summary: DashboardSummary }>()
 
 const SOURCE_MAP = [
   {
@@ -153,12 +157,15 @@ const FRESHNESS_DOMAINS: {
 export async function getDashboardSummary(
   request: DashboardSummaryRequest = {},
 ): Promise<DashboardSummary | null> {
-  const account = request.accountId
+  const requestedAccountId = request.accountId?.trim()
+  const requestedAccount = requestedAccountId
     ? await prisma.wbAccount.findFirst({
-        where: { id: request.accountId, isActive: true },
-        select: { id: true, name: true, sellerName: true, lastSyncAt: true },
-      })
-    : await prisma.wbAccount.findFirst({
+      where: { id: requestedAccountId, isActive: true },
+      select: { id: true, name: true, sellerName: true, lastSyncAt: true },
+    })
+    : null
+  const account = requestedAccount
+    ?? await prisma.wbAccount.findFirst({
         where: { isActive: true },
         select: { id: true, name: true, sellerName: true, lastSyncAt: true },
         orderBy: { createdAt: 'asc' },
@@ -170,49 +177,73 @@ export async function getDashboardSummary(
   const comparisonPeriod = resolveComparisonPeriod(period)
   const dateFrom = parseDateKey(period.dateFrom)
   const dateTo = parseDateKey(period.dateTo)
+  const comparisonDateFrom = parseDateKey(comparisonPeriod.dateFrom)
+  const comparisonDateTo = parseDateKey(comparisonPeriod.dateTo)
+  const cacheKey = [
+    account.id,
+    period.preset,
+    period.dateFrom,
+    period.dateTo,
+    comparisonPeriod.dateFrom,
+    comparisonPeriod.dateTo,
+  ].join(':')
+  const cached = dashboardSummaryCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.summary
 
   const [
     reportCoverage,
+    comparisonReportCoverage,
     advertisingCoverage,
     reportRowsCount,
+    comparisonReportRowsCount,
+  ] = await Promise.all([
+    getSyncCoverage(account.id, SYNC_JOB_KINDS.REPORTS_PERIOD, period.dateFrom, period.dateTo),
+    getSyncCoverage(account.id, SYNC_JOB_KINDS.REPORTS_PERIOD, comparisonPeriod.dateFrom, comparisonPeriod.dateTo),
+    getSyncCoverage(account.id, SYNC_JOB_KINDS.ADVERTISING_STATS, period.dateFrom, period.dateTo),
+    countReportRows(account.id, dateFrom, dateTo),
+    countReportRows(account.id, comparisonDateFrom, comparisonDateTo),
+  ])
+
+  const financialStatus = statusFromCoverage(reportCoverage.isCovered, reportRowsCount)
+  const comparisonFinancialStatus = statusFromCoverage(
+    comparisonReportCoverage.isCovered,
+    comparisonReportRowsCount,
+  )
+
+  const [
     report,
     comparisonReport,
     plan,
     advertising,
     freshness,
   ] = await Promise.all([
-    getSyncCoverage(account.id, SYNC_JOB_KINDS.REPORTS_PERIOD, period.dateFrom, period.dateTo),
-    getSyncCoverage(account.id, SYNC_JOB_KINDS.ADVERTISING_STATS, period.dateFrom, period.dateTo),
-    countReportRows(account.id, dateFrom, dateTo),
-    calculateReport(account.id, period.dateFrom, period.dateTo),
-    calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo),
+    financialStatus === 'missing'
+      ? Promise.resolve(null)
+      : calculateReport(account.id, period.dateFrom, period.dateTo, { preferPersistedAdStats: true }),
+    comparisonFinancialStatus === 'missing'
+      ? Promise.resolve(null)
+      : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, { preferPersistedAdStats: true }),
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
     getFreshnessSummary(account.id, period.dateFrom, period.dateTo),
   ])
 
-  const financialStatus = statusFromCoverage(reportCoverage.isCovered, reportRowsCount)
-  const comparisonFinancialStatus = statusFromCoverage(
-    comparisonReport.coverage.isCovered,
-    comparisonReport.rows.length,
-  )
+  const revenue = reportMetricValue(report, 'sale', financialStatus)
+  const operatingProfit = reportMetricValue(report, 'operatingProfit', financialStatus)
+  const marginality = reportMetricValue(report, 'marginality', financialStatus)
+  const drr = reportMetricValue(report, 'drr', financialStatus)
+  const orders = reportMetricValue(report, 'delivered', financialStatus)
+  const returns = reportMetricValue(report, 'returns', financialStatus)
 
-  const revenue = numberOrNull(report.summary.sale, financialStatus)
-  const operatingProfit = numberOrNull(report.summary.operatingProfit, financialStatus)
-  const marginality = numberOrNull(report.summary.marginality, financialStatus)
-  const drr = numberOrNull(report.summary.drr, financialStatus)
-  const orders = numberOrNull(report.summary.delivered, financialStatus)
-  const returns = numberOrNull(report.summary.returns, financialStatus)
-
-  const comparisonRevenue = numberOrNull(comparisonReport.summary.sale, comparisonFinancialStatus)
-  const comparisonOperatingProfit = numberOrNull(comparisonReport.summary.operatingProfit, comparisonFinancialStatus)
-  const comparisonMarginality = numberOrNull(comparisonReport.summary.marginality, comparisonFinancialStatus)
-  const comparisonDrr = numberOrNull(comparisonReport.summary.drr, comparisonFinancialStatus)
-  const comparisonOrders = numberOrNull(comparisonReport.summary.delivered, comparisonFinancialStatus)
-  const comparisonReturns = numberOrNull(comparisonReport.summary.returns, comparisonFinancialStatus)
+  const comparisonRevenue = reportMetricValue(comparisonReport, 'sale', comparisonFinancialStatus)
+  const comparisonOperatingProfit = reportMetricValue(comparisonReport, 'operatingProfit', comparisonFinancialStatus)
+  const comparisonMarginality = reportMetricValue(comparisonReport, 'marginality', comparisonFinancialStatus)
+  const comparisonDrr = reportMetricValue(comparisonReport, 'drr', comparisonFinancialStatus)
+  const comparisonOrders = reportMetricValue(comparisonReport, 'delivered', comparisonFinancialStatus)
+  const comparisonReturns = reportMetricValue(comparisonReport, 'returns', comparisonFinancialStatus)
 
   const productStatus = financialStatus
-  const productRows = productStatus === 'missing' ? [] : report.rows
+  const productRows = productStatus === 'missing' ? [] : report?.rows ?? []
   const topProfit = productRows
     .filter((row) => Number(row.operatingProfit) > 0)
     .sort((a, b) => Number(b.operatingProfit) - Number(a.operatingProfit))
@@ -240,7 +271,7 @@ export async function getDashboardSummary(
     generatedAt,
   })
 
-  return {
+  const summary: DashboardSummary = {
     account: {
       id: account.id,
       name: account.name,
@@ -277,6 +308,12 @@ export async function getDashboardSummary(
     problemCenter,
     sourceMap: SOURCE_MAP,
   }
+
+  dashboardSummaryCache.set(cacheKey, {
+    expiresAt: Date.now() + DASHBOARD_SUMMARY_CACHE_TTL_MS,
+    summary,
+  })
+  return summary
 }
 
 function resolveDashboardPeriod(request: DashboardSummaryRequest): DashboardPeriod {
@@ -302,7 +339,7 @@ function resolveDashboardPeriod(request: DashboardSummaryRequest): DashboardPeri
     return buildPeriod(
       'currentMonth',
       formatDateKey(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))),
-      formatDateKey(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0))),
+      formatDateKey(today),
       'Текущий месяц',
     )
   }
@@ -544,8 +581,11 @@ async function getFreshnessItem(
       label: domain.label,
       status: 'not_applicable',
       severity: 'info',
+      isStale: false,
       lastRunAt: null,
       lastSuccessAt: null,
+      lastFailedAt: null,
+      lastError: null,
       lastCoverageSyncedAt: null,
       checkedFrom: null,
       checkedTo: null,
@@ -559,7 +599,7 @@ async function getFreshnessItem(
     }
   }
 
-  const [lastRun, lastSuccess, activeJobs, failedJobs, coverage, rowCount] = await Promise.all([
+  const [lastRun, lastSuccess, lastFailed, activeJobs, failedJobs, coverage, rowCount] = await Promise.all([
     prisma.syncJobRun.findFirst({
       where: { wbAccountId, kind: domain.prismaKind },
       orderBy: { createdAt: 'desc' },
@@ -567,6 +607,11 @@ async function getFreshnessItem(
     prisma.syncJobRun.findFirst({
       where: { wbAccountId, kind: domain.prismaKind, status: 'SUCCEEDED' },
       orderBy: { finishedAt: 'desc' },
+    }),
+    prisma.syncJobRun.findFirst({
+      where: { wbAccountId, kind: domain.prismaKind, status: 'FAILED' },
+      select: { error: true, finishedAt: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
     }),
     prisma.syncJobRun.count({
       where: { wbAccountId, kind: domain.prismaKind, status: { in: ['QUEUED', 'RUNNING'] } },
@@ -587,14 +632,18 @@ async function getFreshnessItem(
 
   const status = freshnessStatus(domain.source, coverage.isCovered, rowCount, lastSuccess?.finishedAt ?? null)
   const severity = freshnessSeverity(status, failedJobs, domain.key, lastSuccess?.finishedAt ?? null, domain.staleAfterHours)
+  const isStale = isFreshnessStale(status, lastSuccess?.finishedAt ?? null, domain.staleAfterHours)
 
   return {
     key: domain.key,
     label: domain.label,
     status,
     severity,
+    isStale,
     lastRunAt: lastRun?.createdAt.toISOString() ?? null,
     lastSuccessAt: lastSuccess?.finishedAt?.toISOString() ?? null,
+    lastFailedAt: (lastFailed?.finishedAt ?? lastFailed?.createdAt)?.toISOString() ?? null,
+    lastError: lastFailed?.error ?? null,
     lastCoverageSyncedAt: coverage.syncedAt,
     checkedFrom: dateFrom,
     checkedTo: dateTo,
@@ -604,7 +653,11 @@ async function getFreshnessItem(
     source: domain.source,
     href: withAccount(domain.href, wbAccountId),
     implemented: domain.implemented,
-    hint: status === 'ready' ? null : freshnessHint(domain.key),
+    hint: status === 'ready' && isStale
+      ? staleFreshnessHint(domain.staleAfterHours)
+      : status === 'ready'
+        ? null
+        : freshnessHint(domain.key),
   }
 }
 
@@ -685,9 +738,27 @@ function freshnessSeverity(
   return 'warning'
 }
 
+function isFreshnessStale(
+  status: DashboardValueStatus,
+  lastSuccessAt: Date | null,
+  staleAfterHours: number | null,
+): boolean {
+  if (status !== 'ready' || !lastSuccessAt || !staleAfterHours) return false
+  return (Date.now() - lastSuccessAt.getTime()) / 3_600_000 > staleAfterHours
+}
+
 function withAccount(href: string, wbAccountId: string): string {
   const separator = href.includes('?') ? '&' : '?'
   return `${href}${separator}account=${wbAccountId}`
+}
+
+function reportMetricValue(
+  report: ReportData | null,
+  key: keyof ReportData['summary'],
+  status: DashboardValueStatus,
+): number | null {
+  if (status === 'missing') return null
+  return Number(report?.summary[key] ?? 0)
 }
 
 function metric(
@@ -756,11 +827,6 @@ function mergeStatus(a: DashboardValueStatus, b: DashboardValueStatus): Dashboar
   return 'ready'
 }
 
-function numberOrNull(value: unknown, status: DashboardValueStatus): number | null {
-  if (status === 'missing') return null
-  return Number(value ?? 0)
-}
-
 function reportHint(status: DashboardValueStatus): string | null {
   if (status === 'missing') return 'Синхронизируйте финансовый отчет за выбранный период.'
   if (status === 'partial') return 'В базе есть часть строк, но период не закрыт покрытием синхронизации.'
@@ -772,6 +838,11 @@ function freshnessHint(key: string): string {
   if (key === 'reports') return 'Синхронизируйте финансовый отчет.'
   if (key === 'sales-plan') return 'Синхронизируйте продажи, заказы и воронку.'
   return 'Синхронизируйте рекламную статистику.'
+}
+
+function staleFreshnessHint(staleAfterHours: number | null): string {
+  if (!staleAfterHours) return 'Источник давно не обновлялся.'
+  return `Последняя успешная синхронизация старше ${staleAfterHours} ч.`
 }
 
 function parseDateKey(value: string): Date {

@@ -161,7 +161,7 @@ export async function calculateReport(
     dateTo,
     adCampaigns,
     adNmStatRows,
-    preferPersistedAdStats: options.preferPersistedAdStats,
+    preferPersistedAdStats: options.preferPersistedAdStats ?? true,
   })
 
   let globalStorageTotal = 0

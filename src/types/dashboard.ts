@@ -103,8 +103,11 @@ export interface DashboardFreshnessItem {
   label: string
   status: DashboardValueStatus
   severity: DashboardIssueSeverity
+  isStale: boolean
   lastRunAt: string | null
   lastSuccessAt: string | null
+  lastFailedAt: string | null
+  lastError: string | null
   lastCoverageSyncedAt: string | null
   checkedFrom: string | null
   checkedTo: string | null

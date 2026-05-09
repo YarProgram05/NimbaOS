@@ -62,12 +62,13 @@ function buildFreshnessIssues(input: BuildDashboardProblemCenterInput): Dashboar
     if (!item.implemented) continue
 
     if (item.failedJobs > 0) {
+      const errorText = item.lastError ? ` Последняя ошибка: ${shortText(item.lastError, 220)}` : ''
       issues.push({
         id: `sync-failed:${item.key}`,
         category: 'sync_failed',
         severity: item.failedJobs > 2 ? 'critical' : 'warning',
         title: `Проверить сбой синхронизации: ${item.label}`,
-        description: `${item.failedJobs} задач за последние 7 дней завершились ошибкой. Дашборд продолжает работать по доступным данным.`,
+        description: `${item.failedJobs} задач за последние 7 дней завершились ошибкой. Дашборд продолжает работать по доступным данным.${errorText}`,
         href: item.href,
         source: item.label,
         metricLabel: 'Ошибок',
@@ -78,7 +79,7 @@ function buildFreshnessIssues(input: BuildDashboardProblemCenterInput): Dashboar
       })
     }
 
-    if (item.status === 'missing' || item.status === 'partial') {
+    if (item.status === 'missing' || item.status === 'partial' || item.isStale) {
       issues.push({
         id: `data-stale:${item.key}`,
         category: 'data_stale',
@@ -87,8 +88,8 @@ function buildFreshnessIssues(input: BuildDashboardProblemCenterInput): Dashboar
         description: item.hint ?? 'Источник данных не покрывает выбранный период полностью.',
         href: item.href,
         source: item.label,
-        metricLabel: item.status === 'partial' ? 'Покрытие' : 'Статус',
-        metricValue: item.status === 'partial' ? 'частично' : 'нет данных',
+        metricLabel: item.isStale ? 'Свежесть' : item.status === 'partial' ? 'Покрытие' : 'Статус',
+        metricValue: item.isStale ? 'устарело' : item.status === 'partial' ? 'частично' : 'нет данных',
         entityId: item.key,
         entityLabel: item.label,
         createdAt: input.generatedAt,
@@ -318,4 +319,8 @@ function formatNumber(value: number, digits = 0): string {
 function parseRub(value: string | null): number {
   if (!value) return 0
   return Number(value.replace(/[^\d,-]/g, '').replace(',', '.')) || 0
+}
+
+function shortText(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value
 }

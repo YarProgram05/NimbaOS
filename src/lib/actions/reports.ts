@@ -50,7 +50,9 @@ export async function getReportData(
     await requireSession()
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
     if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
-    const data = await calculateReport(wbAccountId, dateFrom, dateTo)
+    const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
+      preferPersistedAdStats: true,
+    })
     return { success: true, data }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки отчёта' }
@@ -68,7 +70,9 @@ export async function exportReportXlsx(
     await requireSession()
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
 
-    const data = await calculateReport(wbAccountId, dateFrom, dateTo)
+    const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
+      preferPersistedAdStats: true,
+    })
     const allRows = [...data.rows, data.summary]
 
     const headers: (keyof ReportRow)[] = [
