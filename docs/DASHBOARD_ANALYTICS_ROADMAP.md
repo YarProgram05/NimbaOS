@@ -20,6 +20,12 @@ Implemented:
   - Added KPI cards for revenue, operating profit, marginality, DRR, orders, and returns.
   - Added plan/fact, advertising, product leaders, product risks, freshness, and focus blocks.
   - Added empty states for missing report, plan, advertising, and product data.
+- Phase 2 is implemented as the dashboard problem-center layer.
+  - Extended freshness tracking across products, reports, sales plan, advertising campaigns, advertising stats, advertising clusters, and future stocks/reviews/questions domains.
+  - Added normalized severity (`info`, `warning`, `critical`) and problem categories in `src/types/dashboard.ts`.
+  - Added `src/lib/services/dashboard-problem-center.ts` to convert freshness/report/product issues into actionable dashboard insights.
+  - The home screen "Focus" block now reads `summary.problemCenter.insights`, and every insight has an action link.
+  - Failed sync jobs are surfaced as issues without blocking the rest of the dashboard summary.
 
 Important changes from the original plan:
 
@@ -27,10 +33,14 @@ Important changes from the original plan:
 - The dashboard "orders" KPI uses `RealizationReport` calculator output (`delivered`) instead of `WbOrder`, because `WbOrder` can be incomplete for periods where only realization data is available.
 - The existing report calculator may use its already implemented advertising spend flow. No new WB API domains or sync sources were added in Phase 0-1.
 - The `preferPersistedAdStats` option remains available in the report calculator for future DB-only dashboard work, but the current dashboard KPI path prioritizes consistency with the financial report.
+- The home screen focus/action block is now fed by `summary.problemCenter.insights`; page-local focus heuristics are deprecated in favor of the server-side problem center.
+- Phase 2 tracks future stocks, reviews, and questions as explicit freshness domains, but they are placeholders until the matching persisted modules exist. They do not create operational issues yet.
 
 Outdated or deferred parts:
 
 - Phase 1 wording that implies `WbOrder` should drive the executive "orders" KPI is outdated. `WbOrder` remains useful for sales-plan analytics, but executive KPI consistency is tied to the financial report.
+- Any dashboard implementation that rebuilds action/focus items directly in `src/app/(dashboard)/page.tsx` is outdated; new rules should go into `src/lib/services/dashboard-problem-center.ts`.
+- Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are contract-ready but deferred until Phase 3-4 data sources are implemented.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
 - Inventory, reviews, questions, forecasts, recommendation engine, and dashboard exports remain future phases.
 

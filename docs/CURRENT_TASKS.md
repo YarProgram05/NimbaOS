@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-2
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 2 is implemented: expanded data freshness domains, normalized `info`/`warning`/`critical` problem severities, issue categories, and the dashboard problem center service that turns raw freshness/report/product signals into actionable home-screen insights.
+Next step: Continue with Phase 3 stocks/inventory when ready; verify visually with representative account data after the local app is running.
+Related files: `src/types/dashboard.ts`, `src/lib/services/dashboard-summary.ts`, `src/lib/services/dashboard-problem-center.ts`, `src/app/(dashboard)/page.tsx`, `docs/DASHBOARD_ANALYTICS_ROADMAP.md`
+Risks: Stocks/reviews/questions are represented as future freshness domains only; they do not produce operational issues until those data sources are implemented.
+
 ### TASK-UI-OLD-MONEY-REDESIGN
 
 Status: Done at code level  

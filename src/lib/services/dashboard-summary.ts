@@ -1,10 +1,13 @@
 import { prisma } from '@/lib/db'
 import { getSyncCoverage } from '@/lib/sync/coverage'
+import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
 import { calculateReport } from '@/lib/services/report-calculator'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
 import type {
   DashboardAdvertisingSummary,
+  DashboardFreshnessDomain,
   DashboardFreshnessItem,
+  DashboardIssueSeverity,
   DashboardMetric,
   DashboardPeriod,
   DashboardPeriodPreset,
@@ -41,37 +44,109 @@ const SOURCE_MAP = [
     sources: ['SyncJobRun', 'SyncDataCoverage', 'WbAccount.lastSyncAt'],
     fallback: 'История синхронизаций недоступна: источник помечается как missing.',
   },
+  {
+    widget: 'Problem center',
+    sources: ['SyncJobRun', 'SyncDataCoverage', 'Report calculator output'],
+    fallback: 'Problems become actionable dashboard items; failed sync jobs do not block the whole dashboard.',
+  },
 ]
 
 const FRESHNESS_DOMAINS: {
   key: string
   label: string
-  source: SyncJobKind | 'products'
-  prismaKind: 'PRODUCTS_REFRESH' | 'REPORTS_PERIOD' | 'SALES_PLAN_PERIOD' | 'ADVERTISING_STATS'
+  source: DashboardFreshnessDomain
+  prismaKind:
+    | 'PRODUCTS_REFRESH'
+    | 'REPORTS_PERIOD'
+    | 'SALES_PLAN_PERIOD'
+    | 'ADVERTISING_CAMPAIGNS'
+    | 'ADVERTISING_STATS'
+    | 'ADVERTISING_CLUSTERS'
+    | null
+  href: string
+  implemented: boolean
+  staleAfterHours: number | null
 }[] = [
   {
     key: 'products',
     label: 'Карточки',
     source: 'products',
     prismaKind: 'PRODUCTS_REFRESH',
+    href: '/cards',
+    implemented: true,
+    staleAfterHours: 24,
   },
   {
     key: 'reports',
     label: 'Финансы',
     source: SYNC_JOB_KINDS.REPORTS_PERIOD,
     prismaKind: 'REPORTS_PERIOD',
+    href: '/reports',
+    implemented: true,
+    staleAfterHours: 24,
   },
   {
     key: 'sales-plan',
     label: 'План продаж',
     source: SYNC_JOB_KINDS.SALES_PLAN_PERIOD,
     prismaKind: 'SALES_PLAN_PERIOD',
+    href: '/sales-plan',
+    implemented: true,
+    staleAfterHours: 24,
   },
   {
-    key: 'advertising',
-    label: 'Реклама',
+    key: 'advertising-stats',
+    label: 'Рекламная статистика',
     source: SYNC_JOB_KINDS.ADVERTISING_STATS,
     prismaKind: 'ADVERTISING_STATS',
+    href: '/advertising',
+    implemented: true,
+    staleAfterHours: 24,
+  },
+  {
+    key: 'advertising-campaigns',
+    label: 'Рекламные кампании',
+    source: SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS,
+    prismaKind: 'ADVERTISING_CAMPAIGNS',
+    href: '/advertising',
+    implemented: true,
+    staleAfterHours: 24,
+  },
+  {
+    key: 'advertising-clusters',
+    label: 'Рекламные кластеры',
+    source: SYNC_JOB_KINDS.ADVERTISING_CLUSTERS,
+    prismaKind: 'ADVERTISING_CLUSTERS',
+    href: '/advertising',
+    implemented: true,
+    staleAfterHours: 48,
+  },
+  {
+    key: 'stocks',
+    label: 'Остатки',
+    source: 'stocks',
+    prismaKind: null,
+    href: '/sync',
+    implemented: false,
+    staleAfterHours: null,
+  },
+  {
+    key: 'reviews',
+    label: 'Отзывы',
+    source: 'reviews',
+    prismaKind: null,
+    href: '/sync',
+    implemented: false,
+    staleAfterHours: null,
+  },
+  {
+    key: 'questions',
+    label: 'Вопросы',
+    source: 'questions',
+    prismaKind: null,
+    href: '/sync',
+    implemented: false,
+    staleAfterHours: null,
   },
 ]
 
@@ -153,6 +228,17 @@ export async function getDashboardSummary(
     .sort((a, b) => Number(a.operatingProfit) - Number(b.operatingProfit))
     .slice(0, 5)
     .map((row) => mapProductSnapshot(row, productStatus))
+  const generatedAt = new Date().toISOString()
+  const problemCenter = buildDashboardProblemCenter({
+    accountId: account.id,
+    dateFrom: period.dateFrom,
+    dateTo: period.dateTo,
+    financialStatus,
+    reportRowsCount,
+    reportRows: productRows,
+    freshnessItems: freshness.items,
+    generatedAt,
+  })
 
   return {
     account: {
@@ -163,7 +249,7 @@ export async function getDashboardSummary(
     },
     period,
     comparisonPeriod,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     computeMode: 'on_demand',
     kpis: {
       revenue: metric('Выручка', revenue, comparisonRevenue, 'rub', financialStatus, 'RealizationReport', reportHint(financialStatus)),
@@ -188,6 +274,7 @@ export async function getDashboardSummary(
       hint: productStatus === 'missing' ? 'Синхронизируйте финансовый отчет за выбранный период.' : null,
     },
     freshness,
+    problemCenter,
     sourceMap: SOURCE_MAP,
   }
 }
@@ -436,7 +523,13 @@ async function getFreshnessSummary(
     Promise.all(FRESHNESS_DOMAINS.map((domain) => getFreshnessItem(wbAccountId, domain, dateFrom, dateTo))),
   ])
 
-  return { activeJobs, failedJobs, items }
+  return {
+    activeJobs,
+    failedJobs,
+    criticalCount: items.filter((item) => item.severity === 'critical').length,
+    warningCount: items.filter((item) => item.severity === 'warning').length,
+    items,
+  }
 }
 
 async function getFreshnessItem(
@@ -445,7 +538,28 @@ async function getFreshnessItem(
   dateFrom: string,
   dateTo: string,
 ): Promise<DashboardFreshnessItem> {
-  const [lastRun, lastSuccess, activeJobs, failedJobs, coverage, productCount] = await Promise.all([
+  if (!domain.implemented || !domain.prismaKind) {
+    return {
+      key: domain.key,
+      label: domain.label,
+      status: 'not_applicable',
+      severity: 'info',
+      lastRunAt: null,
+      lastSuccessAt: null,
+      lastCoverageSyncedAt: null,
+      checkedFrom: null,
+      checkedTo: null,
+      staleAfterHours: domain.staleAfterHours,
+      activeJobs: 0,
+      failedJobs: 0,
+      source: domain.source,
+      href: withAccount(domain.href, wbAccountId),
+      implemented: domain.implemented,
+      hint: 'Источник запланирован для будущей фазы и пока не участвует в оценке проблем.',
+    }
+  }
+
+  const [lastRun, lastSuccess, activeJobs, failedJobs, coverage, rowCount] = await Promise.all([
     prisma.syncJobRun.findFirst({
       where: { wbAccountId, kind: domain.prismaKind },
       orderBy: { createdAt: 'desc' },
@@ -465,28 +579,115 @@ async function getFreshnessItem(
         createdAt: { gte: addDays(new Date(), -7) },
       },
     }),
-    domain.source === 'products'
-      ? Promise.resolve({ isCovered: false, syncedAt: null as string | null })
-      : getSyncCoverage(wbAccountId, domain.source, dateFrom, dateTo),
-    domain.source === 'products' ? prisma.product.count({ where: { wbAccountId } }) : Promise.resolve(0),
+    needsCoverage(domain.source)
+      ? getSyncCoverage(wbAccountId, domain.source, dateFrom, dateTo)
+      : Promise.resolve({ isCovered: false, syncedAt: null as string | null }),
+    countFreshnessRows(wbAccountId, domain.key, dateFrom, dateTo),
   ])
 
-  const status: DashboardValueStatus = domain.source === 'products'
-    ? productCount > 0 ? 'ready' : 'missing'
-    : coverage.isCovered ? 'ready' : lastSuccess ? 'partial' : 'missing'
+  const status = freshnessStatus(domain.source, coverage.isCovered, rowCount, lastSuccess?.finishedAt ?? null)
+  const severity = freshnessSeverity(status, failedJobs, domain.key, lastSuccess?.finishedAt ?? null, domain.staleAfterHours)
 
   return {
     key: domain.key,
     label: domain.label,
     status,
+    severity,
     lastRunAt: lastRun?.createdAt.toISOString() ?? null,
     lastSuccessAt: lastSuccess?.finishedAt?.toISOString() ?? null,
     lastCoverageSyncedAt: coverage.syncedAt,
+    checkedFrom: dateFrom,
+    checkedTo: dateTo,
+    staleAfterHours: domain.staleAfterHours,
     activeJobs,
     failedJobs,
     source: domain.source,
+    href: withAccount(domain.href, wbAccountId),
+    implemented: domain.implemented,
     hint: status === 'ready' ? null : freshnessHint(domain.key),
   }
+}
+
+function needsCoverage(source: DashboardFreshnessDomain): source is SyncJobKind {
+  return source !== 'products' && source !== 'stocks' && source !== 'reviews' && source !== 'questions'
+}
+
+async function countFreshnessRows(
+  wbAccountId: string,
+  key: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<number> {
+  if (key === 'products') {
+    return prisma.product.count({ where: { wbAccountId } })
+  }
+  if (key === 'reports') {
+    return countReportRows(wbAccountId, parseDateKey(dateFrom), parseDateKey(dateTo))
+  }
+  if (key === 'sales-plan') {
+    return prisma.wbSale.count({
+      where: {
+        wbAccountId,
+        date: { gte: parseDateKey(dateFrom), lte: parseDateKey(dateTo) },
+      },
+    })
+  }
+  if (key === 'advertising-campaigns') {
+    return prisma.adCampaign.count({ where: { wbAccountId } })
+  }
+  if (key === 'advertising-stats') {
+    return prisma.adCampaignStat.count({
+      where: {
+        date: { gte: parseDateKey(dateFrom), lte: parseDateKey(dateTo) },
+        campaign: { wbAccountId },
+      },
+    })
+  }
+  if (key === 'advertising-clusters') {
+    return prisma.adCampaignCluster.count({
+      where: {
+        dateFrom: { lte: parseDateKey(dateTo) },
+        dateTo: { gte: parseDateKey(dateFrom) },
+        campaign: { wbAccountId },
+      },
+    })
+  }
+  return 0
+}
+
+function freshnessStatus(
+  source: DashboardFreshnessDomain,
+  isCovered: boolean,
+  rowCount: number,
+  lastSuccessAt: Date | null,
+): DashboardValueStatus {
+  if (source === 'products') return rowCount > 0 ? 'ready' : lastSuccessAt ? 'partial' : 'missing'
+  if (source === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS) return rowCount > 0 ? 'ready' : lastSuccessAt ? 'partial' : 'missing'
+  if (isCovered) return 'ready'
+  if (rowCount > 0 || lastSuccessAt) return 'partial'
+  return 'missing'
+}
+
+function freshnessSeverity(
+  status: DashboardValueStatus,
+  failedJobs: number,
+  key: string,
+  lastSuccessAt: Date | null,
+  staleAfterHours: number | null,
+): DashboardIssueSeverity {
+  if (status === 'not_applicable' || status === 'ready') {
+    if (!lastSuccessAt || !staleAfterHours) return failedJobs > 0 ? 'warning' : 'info'
+    const ageHours = (Date.now() - lastSuccessAt.getTime()) / 3_600_000
+    return ageHours > staleAfterHours ? 'warning' : failedJobs > 0 ? 'warning' : 'info'
+  }
+  if (failedJobs > 2) return 'critical'
+  if (key === 'reports' && status === 'missing') return 'critical'
+  return 'warning'
+}
+
+function withAccount(href: string, wbAccountId: string): string {
+  const separator = href.includes('?') ? '&' : '?'
+  return `${href}${separator}account=${wbAccountId}`
 }
 
 function metric(

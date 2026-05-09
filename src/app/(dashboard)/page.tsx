@@ -15,6 +15,7 @@ import {
 import { authOptions } from '@/lib/auth'
 import { getDashboardSummary } from '@/lib/services/dashboard-summary'
 import type {
+  DashboardIssueSeverity,
   DashboardMetric,
   DashboardPeriodPreset,
   DashboardProductSnapshot,
@@ -207,17 +208,34 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               icon={<AlertTriangle className="h-5 w-5 text-primary" />}
             />
             <div className="mt-3 space-y-2">
-              {buildFocusItems(summary).map((item) => (
+              {summary.problemCenter.insights.length === 0 ? (
                 <Link
-                  key={item.title}
+                  href={syncHref}
+                  className="flex items-start justify-between gap-3 rounded-md border bg-secondary/40 p-3 text-sm transition-colors hover:bg-secondary"
+                >
+                  <span>
+                    <span className="block font-semibold">Данные выглядят спокойно</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">Критичных проблем по текущим источникам не найдено.</span>
+                  </span>
+                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              ) : summary.problemCenter.insights.map((item) => (
+                <Link
+                  key={item.id}
                   href={item.href}
                   className="flex items-start justify-between gap-3 rounded-md border bg-secondary/40 p-3 text-sm transition-colors hover:bg-secondary"
                 >
                   <span>
-                    <span className="block font-semibold">{item.title}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{item.caption}</span>
+                    <span className="flex items-center gap-2 font-semibold">
+                      <SeverityDot severity={item.severity} />
+                      {item.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>
                   </span>
-                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
+                    {item.metric}
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
                 </Link>
               ))}
             </div>
@@ -418,6 +436,23 @@ function StatusDot({ status }: { status: DashboardValueStatus }) {
   return <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${className}`} title={statusText(status)} />
 }
 
+function SeverityDot({ severity }: { severity: DashboardIssueSeverity }) {
+  const className = severity === 'critical'
+    ? 'bg-destructive'
+    : severity === 'warning'
+      ? 'bg-amber-600'
+      : 'bg-primary'
+
+  return <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${className}`} title={severityText(severity)} />
+}
+
+function severityText(severity: DashboardIssueSeverity): string {
+  if (severity === 'critical') return 'критично'
+  if (severity === 'warning') return 'требует внимания'
+  return 'инфо'
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildFocusItems(summary: DashboardSummary) {
   const items: { title: string; caption: string; href: string }[] = []
   const accountQuery = `account=${summary.account.id}`

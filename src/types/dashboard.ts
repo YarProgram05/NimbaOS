@@ -11,6 +11,25 @@ export type DashboardPeriodPreset =
 export type DashboardMetricUnit = 'rub' | 'percent' | 'count'
 export type DashboardValueStatus = 'ready' | 'partial' | 'missing' | 'not_applicable'
 export type DashboardComputeMode = 'on_demand'
+export type DashboardIssueSeverity = 'info' | 'warning' | 'critical'
+export type DashboardIssueCategory =
+  | 'sync_failed'
+  | 'data_stale'
+  | 'missing_cost_price'
+  | 'no_recent_report_data'
+  | 'high_drr'
+  | 'negative_margin'
+  | 'product_without_stock_data'
+  | 'unanswered_review_question'
+  | 'low_stock'
+  | 'out_of_stock'
+
+export type DashboardFreshnessDomain =
+  | SyncJobKind
+  | 'products'
+  | 'stocks'
+  | 'reviews'
+  | 'questions'
 
 export interface DashboardPeriod {
   preset: DashboardPeriodPreset
@@ -83,13 +102,54 @@ export interface DashboardFreshnessItem {
   key: string
   label: string
   status: DashboardValueStatus
+  severity: DashboardIssueSeverity
   lastRunAt: string | null
   lastSuccessAt: string | null
   lastCoverageSyncedAt: string | null
+  checkedFrom: string | null
+  checkedTo: string | null
+  staleAfterHours: number | null
   activeJobs: number
   failedJobs: number
-  source: SyncJobKind | 'products'
+  source: DashboardFreshnessDomain
+  href: string
+  implemented: boolean
   hint: string | null
+}
+
+export interface DataFreshnessStatus {
+  activeJobs: number
+  failedJobs: number
+  criticalCount: number
+  warningCount: number
+  items: DashboardFreshnessItem[]
+}
+
+export interface DashboardIssue {
+  id: string
+  category: DashboardIssueCategory
+  severity: DashboardIssueSeverity
+  title: string
+  description: string
+  href: string
+  source: string
+  metricLabel: string | null
+  metricValue: string | null
+  entityId: string | null
+  entityLabel: string | null
+  createdAt: string
+}
+
+export interface DashboardInsight {
+  id: string
+  severity: DashboardIssueSeverity
+  category: DashboardIssueCategory
+  title: string
+  description: string
+  metric: string | null
+  href: string
+  issueIds: string[]
+  createdAt: string
 }
 
 export interface DashboardSourceMapping {
@@ -125,7 +185,17 @@ export interface DashboardSummary {
   freshness: {
     activeJobs: number
     failedJobs: number
+    criticalCount: number
+    warningCount: number
     items: DashboardFreshnessItem[]
+  }
+  problemCenter: {
+    status: DashboardValueStatus
+    criticalCount: number
+    warningCount: number
+    infoCount: number
+    issues: DashboardIssue[]
+    insights: DashboardInsight[]
   }
   sourceMap: DashboardSourceMapping[]
 }

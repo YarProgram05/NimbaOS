@@ -17,6 +17,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Phase 8: Bull MQ background sync for read-only WB syncs, `SyncJobRun` history, worker, scheduler, `/sync` mini-screen, manual enqueue actions.
 - Phase 9: VPS Docker production artifacts, public healthcheck, Prisma baseline migration, responsive table polish, shared XLSX export helper.
 - Post-Phase-9 UI refresh: dashboard shell redesigned in a restrained old-money business style; desktop sidebar/menu toggle restored; NimbaOS mark links to home while preserving `?account`; home dashboard reads the selected account from URL.
+- Dashboard analytics roadmap Phase 2: home summary now includes an operational problem center with normalized freshness domains, issue severity/categories, and actionable insights for sync failures, stale data, missing cost price, missing report data, high DRR, and negative margin.
 - Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
