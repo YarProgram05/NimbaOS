@@ -173,7 +173,7 @@ export interface DashboardSummary {
     marginality: DashboardMetric
     drr: DashboardMetric
     orders: DashboardMetric
-    returns: DashboardMetric
+    buyouts: DashboardMetric
   }
   plan: DashboardPlanSummary
   advertising: DashboardAdvertisingSummary

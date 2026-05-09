@@ -233,14 +233,14 @@ export async function getDashboardSummary(
   const marginality = reportMetricValue(report, 'marginality', financialStatus)
   const drr = reportMetricValue(report, 'drr', financialStatus)
   const orders = reportMetricValue(report, 'delivered', financialStatus)
-  const returns = reportMetricValue(report, 'returns', financialStatus)
+  const buyouts = reportMetricValue(report, 'boughtWithReturns', financialStatus)
 
   const comparisonRevenue = reportMetricValue(comparisonReport, 'sale', comparisonFinancialStatus)
   const comparisonOperatingProfit = reportMetricValue(comparisonReport, 'operatingProfit', comparisonFinancialStatus)
   const comparisonMarginality = reportMetricValue(comparisonReport, 'marginality', comparisonFinancialStatus)
   const comparisonDrr = reportMetricValue(comparisonReport, 'drr', comparisonFinancialStatus)
   const comparisonOrders = reportMetricValue(comparisonReport, 'delivered', comparisonFinancialStatus)
-  const comparisonReturns = reportMetricValue(comparisonReport, 'returns', comparisonFinancialStatus)
+  const comparisonBuyouts = reportMetricValue(comparisonReport, 'boughtWithReturns', comparisonFinancialStatus)
 
   const productStatus = financialStatus
   const productRows = productStatus === 'missing' ? [] : report?.rows ?? []
@@ -288,7 +288,7 @@ export async function getDashboardSummary(
       marginality: metric('Маржинальность', marginality, comparisonMarginality, 'percent', financialStatus, 'Report calculator', reportHint(financialStatus)),
       drr: metric('ДРР', drr, comparisonDrr, 'percent', financialStatus, 'Report calculator + AdCampaignNmStat', reportHint(financialStatus)),
       orders: metric('Заказы', orders, comparisonOrders, 'count', financialStatus, 'RealizationReport.delivered', reportHint(financialStatus)),
-      returns: metric('Возвраты', returns, comparisonReturns, 'count', financialStatus, 'RealizationReport', reportHint(financialStatus)),
+      buyouts: metric('Выкупы', buyouts, comparisonBuyouts, 'count', financialStatus, 'RealizationReport.boughtWithReturns', reportHint(financialStatus)),
     },
     plan,
     advertising: {

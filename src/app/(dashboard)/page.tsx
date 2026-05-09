@@ -146,7 +146,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <KpiCard metric={summary.kpis.marginality} href={reportsHref} />
         <KpiCard metric={summary.kpis.drr} href={reportsHref} />
         <KpiCard metric={summary.kpis.orders} href={salesPlanHref} />
-        <KpiCard metric={summary.kpis.returns} href={reportsHref} />
+        <KpiCard metric={summary.kpis.buyouts} href={reportsHref} />
       </section>
 
       <section className="dashboard-scroll grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">

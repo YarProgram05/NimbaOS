@@ -17,7 +17,7 @@ Implemented:
 - Phase 1 is implemented as the current dashboard foundation.
   - The home screen now loads one `DashboardSummary` object.
   - Added a period selector and custom date range form.
-  - Added KPI cards for revenue, operating profit, marginality, DRR, orders, and returns.
+  - Added KPI cards for revenue, operating profit, marginality, DRR, orders, and buyouts.
   - Added plan/fact, advertising, product leaders, product risks, freshness, and focus blocks.
   - Added empty states for missing report, plan, advertising, and product data.
   - Removed live WB reads from dashboard/report render paths by preferring persisted advertising stats.
@@ -32,7 +32,8 @@ Implemented:
 
 Important changes from the original plan:
 
-- The top KPI strip now treats the financial report calculator as the source of truth for revenue, operating profit, marginality, DRR, orders, and returns. This keeps the dashboard aligned with `/reports` for the same account and period.
+- The top KPI strip now treats the financial report calculator as the source of truth for revenue, operating profit, marginality, DRR, orders, and buyouts. This keeps the dashboard aligned with `/reports` for the same account and period.
+- The home screen uses buyouts (`boughtWithReturns`) instead of returns in the executive KPI strip; returns remain available in the detailed financial report and product-risk analytics.
 - The dashboard "orders" KPI uses `RealizationReport` calculator output (`delivered`) instead of `WbOrder`, because `WbOrder` can be incomplete for periods where only realization data is available.
 - The existing report calculator may use its already implemented advertising spend flow. No new WB API domains or sync sources were added in Phase 0-1.
 - The `preferPersistedAdStats` option remains available in the report calculator for future DB-only dashboard work, but the current dashboard KPI path prioritizes consistency with the financial report.
@@ -173,7 +174,7 @@ Use existing sources first:
 Tasks:
 
 - Add period selector to the dashboard.
-- Add KPI cards for revenue, operating profit, marginality, DRR, orders, returns.
+- Add KPI cards for revenue, operating profit, marginality, DRR, orders, buyouts.
 - Add compact plan/fact summary from active sales plans.
 - Add advertising summary from cached ad stats.
 - Add top/anti-top products using existing report calculator output.
