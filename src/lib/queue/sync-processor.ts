@@ -22,6 +22,25 @@ class SyncSubtaskError extends Error {
   }
 }
 
+type PrismaKind =
+  | 'PRODUCTS_REFRESH'
+  | 'REPORTS_PERIOD'
+  | 'SALES_PLAN_PERIOD'
+  | 'ADVERTISING_CAMPAIGNS'
+  | 'ADVERTISING_STATS'
+  | 'ADVERTISING_CLUSTERS'
+
+const KIND_TO_PRISMA: Record<string, PrismaKind> = {
+  [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: 'PRODUCTS_REFRESH',
+  [SYNC_JOB_KINDS.REPORTS_PERIOD]: 'REPORTS_PERIOD',
+  [SYNC_JOB_KINDS.SALES_PLAN_PERIOD]: 'SALES_PLAN_PERIOD',
+  [SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS]: 'ADVERTISING_CAMPAIGNS',
+  [SYNC_JOB_KINDS.ADVERTISING_STATS]: 'ADVERTISING_STATS',
+  [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: 'ADVERTISING_CLUSTERS',
+}
+
+const SCHEDULED_START_GRACE_MINUTES = 10
+
 function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`)
 }
@@ -34,6 +53,49 @@ function addDays(value: Date, days: number): Date {
   const next = new Date(value)
   next.setUTCDate(next.getUTCDate() + days)
   return next
+}
+
+function toMoscowDate(value: Date): Date {
+  const utcMs = value.getTime() + value.getTimezoneOffset() * 60_000
+  return new Date(utcMs + 3 * 60 * 60_000)
+}
+
+function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
+  const [hours, minutes] = timeOfDay.split(':').map(Number)
+  const moscowNow = toMoscowDate(now)
+  const scheduled = new Date(moscowNow)
+  scheduled.setHours(hours, minutes, 0, 0)
+  if (scheduled > moscowNow) scheduled.setDate(scheduled.getDate() - 1)
+  return Math.floor((moscowNow.getTime() - scheduled.getTime()) / 60_000)
+}
+
+async function shouldSkipScheduledJob(data: SyncJobData): Promise<string | null> {
+  if (data.source !== 'scheduled' || !data.wbAccountId) return null
+
+  const prismaKind = KIND_TO_PRISMA[data.kind]
+  if (!prismaKind) return null
+
+  const schedule = await prisma.syncScheduleSetting.findUnique({
+    where: {
+      wbAccountId_kind: {
+        wbAccountId: data.wbAccountId,
+        kind: prismaKind,
+      },
+    },
+    select: {
+      enabled: true,
+      timeOfDay: true,
+    },
+  })
+
+  if (!schedule?.enabled) return 'scheduled job is disabled'
+
+  const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
+  if (lateMinutes > SCHEDULED_START_GRACE_MINUTES) {
+    return `scheduled job is ${lateMinutes} minutes late`
+  }
+
+  return null
 }
 
 function resolvePeriod(data: { dateFrom?: string; dateTo?: string; rollingDays?: number }) {
@@ -246,6 +308,16 @@ function assertNoInternalErrors(result: unknown) {
 }
 
 export async function processSyncJob(job: Job<SyncJobData>) {
+  const skipReason = await shouldSkipScheduledJob(job.data)
+  if (skipReason) {
+    return {
+      skippedScheduledJob: true,
+      reason: skipReason,
+      kind: job.data.kind,
+      wbAccountId: job.data.wbAccountId ?? null,
+    }
+  }
+
   const existingRunId = job.data.runId
   const run = existingRunId
     ? await prisma.syncJobRun.update({

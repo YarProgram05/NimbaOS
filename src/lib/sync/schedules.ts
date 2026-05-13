@@ -156,11 +156,13 @@ export async function applySyncSchedule(
   if (!row.enabled) {
     await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
   } else {
+    const nextRunAt = getNextRunAt(row.timeOfDay, row.enabled)
     await queue.upsertJobScheduler(
       schedulerId(wbAccountId, kind),
       {
         pattern: patternFromTime(row.timeOfDay),
         tz: row.timezone,
+        startDate: nextRunAt ? new Date(nextRunAt).getTime() : undefined,
       },
       {
         name: kind,

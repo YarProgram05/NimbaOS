@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getReportData } from '@/lib/actions/reports'
+import { REPORT_COLUMN_ORDER_PREFERENCE_KEY } from '@/lib/reports/preferences'
 import { ReportsClient } from './reports-client'
 
 interface ReportsPageProps {
@@ -60,22 +61,27 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   // ── Fetch report data ─────────────────────────────────────────────────────
   const result = await getReportData(wbAccountId, dateFrom, dateTo)
   const initialData = result.success ? result.data : null
+  const columnOrderPreference = await prisma.userPreference.findUnique({
+    where: {
+      userId_key: {
+        userId: session.user.id,
+        key: REPORT_COLUMN_ORDER_PREFERENCE_KEY,
+      },
+    },
+    select: { value: true },
+  })
+  const initialColumnOrder = Array.isArray(columnOrderPreference?.value)
+    ? columnOrderPreference.value.filter((id): id is string => typeof id === 'string')
+    : null
 
   return (
-    <div className="dashboard-page">
-      <div className="shrink-0">
-        <p className="metric-label">Финансы</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Финансовые отчёты</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Реализация по кабинету Wildberries
-        </p>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col">
       <ReportsClient
         initialData={initialData}
         wbAccountId={wbAccountId}
         initialDateFrom={dateFrom}
         initialDateTo={dateTo}
+        initialColumnOrder={initialColumnOrder}
       />
     </div>
   )

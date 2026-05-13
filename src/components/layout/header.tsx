@@ -1,6 +1,7 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 import { Menu, LogOut, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -20,6 +21,7 @@ interface HeaderProps {
 }
 
 export function Header({ user, onMobileMenuOpen, onSidebarCollapse }: HeaderProps) {
+  const pathname = usePathname()
   const initials = user.name
     .split(' ')
     .map((n) => n[0])
@@ -50,10 +52,15 @@ export function Header({ user, onMobileMenuOpen, onSidebarCollapse }: HeaderProp
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="font-medium text-foreground">Операционный кабинет</span>
-          <span className="hidden lg:inline">· Wildberries аналитика и планирование</span>
+          <span className="shrink-0 font-medium text-foreground">Операционный кабинет</span>
+          <span className="hidden shrink-0 lg:inline">· Wildberries аналитика и планирование</span>
+          {pathname === '/reports' && (
+            <span className="hidden truncate font-medium text-foreground md:inline">
+              · Финансы · Финансовые отчёты · Реализация по кабинету Wildberries
+            </span>
+          )}
         </div>
       </div>
 

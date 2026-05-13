@@ -1,8 +1,11 @@
 'use server'
 
 import { getServerSession } from 'next-auth'
+import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 import { enqueueReportsSyncAction } from '@/lib/actions/sync'
+import { REPORT_COLUMN_ORDER_PREFERENCE_KEY } from '@/lib/reports/preferences'
 import { calculateReport } from '@/lib/services/report-calculator'
 import {
   appendAoaSheet,
@@ -51,11 +54,41 @@ export async function getReportData(
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
     if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
     const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
-      preferPersistedAdStats: true,
+      preferLiveAdCostTotals: true,
     })
     return { success: true, data }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки отчёта' }
+  }
+}
+
+export async function saveReportColumnOrder(
+  columnOrder: string[],
+): Promise<ActionResult<{ columnOrder: string[] }>> {
+  try {
+    const session = await requireSession()
+    const cleaned = Array.from(new Set(columnOrder.filter((id) => typeof id === 'string' && id.length > 0)))
+
+    await prisma.userPreference.upsert({
+      where: {
+        userId_key: {
+          userId: session.user.id,
+          key: REPORT_COLUMN_ORDER_PREFERENCE_KEY,
+        },
+      },
+      create: {
+        userId: session.user.id,
+        key: REPORT_COLUMN_ORDER_PREFERENCE_KEY,
+        value: cleaned as Prisma.InputJsonValue,
+      },
+      update: {
+        value: cleaned as Prisma.InputJsonValue,
+      },
+    })
+
+    return { success: true, data: { columnOrder: cleaned } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Не удалось сохранить порядок столбцов' }
   }
 }
 
@@ -71,7 +104,7 @@ export async function exportReportXlsx(
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
 
     const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
-      preferPersistedAdStats: true,
+      preferLiveAdCostTotals: true,
     })
     const allRows = [...data.rows, data.summary]
 

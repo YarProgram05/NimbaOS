@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-14 - Financial reports accuracy and table UX
+
+### Summary
+
+Fixed financial report advertising allocation for WB Galioni-style periods: `Реклама (все)` now uses WB advertising update/spend history totals, while `Реклама (баланс)` is distributed from the same corrected allocation map. Report period switching stays fast by reading already synchronized/local data and only using the lightweight ad spend history path where needed. The reports page also gained a compact fixed header/control area, table-only scrolling, sticky column headers and sticky totals, plus per-user persisted column order.
+
+### Files changed
+
+`src/lib/services/report-calculator.ts`, `src/lib/actions/reports.ts`, `src/app/(dashboard)/reports/*`, `src/components/layout/*`, `src/components/date-range-picker.tsx`, `src/lib/sync/schedules.ts`, `src/lib/queue/sync-processor.ts`, `prisma/schema.prisma`, `src/lib/reports/preferences.ts`, and the user preference migration.
+
+### Commands run
+
+`npm run type-check`, `npx prisma generate`, `npx prisma db push`, targeted report calculation checks for `WB Galioni (WB_2)` periods including `16.03.2026-12.05.2026`.
+
+### Result
+
+Code-level checks pass. The checked period now matches the reference service for advertising totals and article-level allocation: `Реклама (баланс) = 14 779`, `Реклама (все) = 15 997`.
+
 ## 2026-05-08 - UI refresh and advertising worker hardening
 
 ### Summary

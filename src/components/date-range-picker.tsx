@@ -85,8 +85,14 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
           <span>{label}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <div className="flex">
+      <PopoverContent
+        className="z-[200] max-h-[calc(100vh-5rem)] w-[min(calc(100vw-1rem),920px)] overflow-auto p-0 sm:w-auto"
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        collisionPadding={12}
+      >
+        <div className="flex min-w-max">
           {/* Quick presets sidebar */}
           <div className="flex flex-col gap-0.5 border-r p-3 min-w-[165px]">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-2">

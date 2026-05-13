@@ -45,8 +45,24 @@ model User {
   invitedBy    User?        @relation("UserInvites", fields: [invitedById], references: [id])
   invitees     User[]       @relation("UserInvites")
   invitations  Invitation[] @relation("InvitationCreator")
+  preferences  UserPreference[]
 
   @@map("users")
+}
+
+model UserPreference {
+  id        String   @id @default(uuid())
+  userId    String
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("user_preferences")
 }
 
 model Invitation {

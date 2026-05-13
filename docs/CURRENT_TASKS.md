@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-REPORTS-AD-ACCURACY-UX
+
+Status: Done
+Priority: High
+Description: Financial reports now keep a compact fixed reports header/control area, table-only scrolling, sticky header/totals, persisted per-user column order, and corrected article-level advertising allocation. For the checked WB Galioni period `16.03.2026-12.05.2026`, ad totals match the reference service: balance `14 779`, all `15 997`.
+Next step: If another historical mismatch appears, compare the affected period against WB ad update history and extend allocation rules only with concrete reference evidence.
+Related files: `src/lib/services/report-calculator.ts`, `src/app/(dashboard)/reports`, `src/lib/actions/reports.ts`, `prisma/schema.prisma`
+Risks: WB historical campaign settings can differ from current campaign settings; avoid replacing the spend-history allocation path with raw `fullstats` nm rows.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-2
 
 Status: Done at code level

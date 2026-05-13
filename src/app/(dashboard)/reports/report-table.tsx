@@ -11,25 +11,17 @@ import {
   type ColumnOrderState,
 } from '@tanstack/react-table'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { saveReportColumnOrder } from '@/lib/actions/reports'
 import type { ReportRow } from '@/types/reports'
 import { reportColumns } from './columns'
 
-const LS_KEY = 'nimba_report_column_order'
 const DEFAULT_ORDER = reportColumns.map((c) => c.id as string)
 
-function loadColumnOrder(): ColumnOrderState {
-  if (typeof window === 'undefined') return DEFAULT_ORDER
-  try {
-    const saved = localStorage.getItem(LS_KEY)
-    if (!saved) return DEFAULT_ORDER
-    const parsed: string[] = JSON.parse(saved)
-    // Validate: must contain all current columns (handles new columns added after save)
-    const allPresent = DEFAULT_ORDER.every((id) => parsed.includes(id))
-    if (!allPresent) return DEFAULT_ORDER
-    return parsed
-  } catch {
-    return DEFAULT_ORDER
-  }
+function normalizeColumnOrder(saved: string[] | null | undefined): ColumnOrderState {
+  if (!saved) return DEFAULT_ORDER
+  const known = saved.filter((id) => DEFAULT_ORDER.includes(id))
+  const missing = DEFAULT_ORDER.filter((id) => !known.includes(id))
+  return [...known, ...missing]
 }
 
 interface ReportTableProps {
@@ -38,21 +30,27 @@ interface ReportTableProps {
   columnVisibility: VisibilityState
   groupBy?: string
   groupSummaries?: Map<string, ReportRow>
+  initialColumnOrder?: string[] | null
 }
 
 const FROZEN_COUNT = 3 // nmId, subjectName, vendorCode
 
-export function ReportTable({ rows, summary, columnVisibility, groupBy }: ReportTableProps) {
+export function ReportTable({ rows, summary, columnVisibility, groupBy, initialColumnOrder }: ReportTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(loadColumnOrder)
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() => normalizeColumnOrder(initialColumnOrder))
+  const didMount = useRef(false)
 
-  // Persist column order changes to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(columnOrder))
-    } catch {
-      // localStorage unavailable (private browsing, etc.)
+    if (!didMount.current) {
+      didMount.current = true
+      return
     }
+
+    const timeout = window.setTimeout(() => {
+      saveReportColumnOrder(columnOrder)
+    }, 500)
+
+    return () => window.clearTimeout(timeout)
   }, [columnOrder])
 
   // Drag-and-drop state
@@ -120,7 +118,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
           borderSpacing: 0,
         }}
       >
-        <thead className="sticky top-0 z-20">
+        <thead>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((header, idx) => {
@@ -139,7 +137,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                     onDragEnd={handleDragEnd}
                     className={[
                       'relative whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground',
-                      'border-b border-r bg-secondary select-none',
+                      'sticky top-0 z-20 border-b border-r bg-secondary select-none',
                       isFrozen ? 'sticky z-30' : '',
                       canSort ? 'cursor-pointer hover:bg-accent/70' : '',
                     ].join(' ')}
@@ -251,7 +249,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
         </tbody>
 
         {table.getRowModel().rows.length > 0 && (
-          <tfoot className="sticky bottom-0 z-20">
+          <tfoot>
             <tr>
               {visibleLeafColumns.map((col, idx) => {
                 const isFrozen = idx < FROZEN_COUNT
@@ -265,14 +263,16 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                       key={col.id}
                       className={[
                         'whitespace-nowrap px-3 py-2 border-t border-r font-semibold',
-                        isFrozen ? 'sticky z-30 bg-secondary' : 'bg-secondary',
+                        isFrozen ? 'sticky bottom-0 z-30 bg-secondary' : 'sticky bottom-0 z-20 bg-secondary',
                       ].join(' ')}
                       style={{
                         width: col.getSize(),
                         minWidth: col.getSize(),
                         left: isFrozen ? frozenOffsets[idx] : undefined,
                       }}
-                    />
+                    >
+                      Итого
+                    </td>
                   )
                 }
 
@@ -294,7 +294,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy }: Report
                     key={col.id}
                     className={[
                       'whitespace-nowrap px-3 py-2 border-t border-r font-semibold',
-                      isFrozen ? 'sticky z-30 bg-secondary' : 'bg-secondary',
+                      isFrozen ? 'sticky bottom-0 z-30 bg-secondary' : 'sticky bottom-0 z-20 bg-secondary',
                     ].join(' ')}
                     style={{
                       width: col.getSize(),

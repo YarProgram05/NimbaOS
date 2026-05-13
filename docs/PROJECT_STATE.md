@@ -19,6 +19,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Post-Phase-9 UI refresh: dashboard shell redesigned in a restrained old-money business style; desktop sidebar/menu toggle restored; NimbaOS mark links to home while preserving `?account`; home dashboard reads the selected account from URL.
 - Dashboard analytics roadmap Phase 2: home summary now includes an operational problem center with normalized freshness domains, issue severity/categories, and actionable insights for sync failures, stale data, missing cost price, missing report data, high DRR, and negative margin.
 - Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
+- Financial reports hardening: report viewing is fast/local, the reports page uses table-only scrolling with sticky headers/totals, per-user report column order is persisted, and advertising allocation now uses WB ad update/spend history totals with corrected article-level distribution for `Реклама (баланс)` and `Реклама (все)`.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
 ## Partially implemented
@@ -58,6 +59,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - WB realization reports and paid storage are cached locally.
 - Sales plan reads orders/sales/funnel from local DB after sync.
 - Advertising stats are cached by campaign/date/source and by campaign/date/source/nmId where WB returns article-level stats.
+- Financial report ad totals should not rely only on persisted `fullstats` nm rows; WB ad update/spend history is the authoritative total source for `Реклама (все)`, with balance distributed from the same allocation map.
 - Advertising cluster sync stores one aggregate row set per selected period, while WB requests are chunked internally to satisfy the API's 30-day limit.
 - `WbAccount.lastSyncAt` is used as authoritative report sync timestamp where relevant.
 - `SyncJobRun` stores background sync status, payload, result, attempts and errors.

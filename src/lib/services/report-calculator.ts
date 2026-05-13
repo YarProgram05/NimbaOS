@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { aggregateReportRows } from '@/lib/reports/aggregate-report-rows'
 import { getSyncCoverage } from '@/lib/sync/coverage'
-import { fetchFullStats, fetchUpdHistory } from '@/lib/wb-api/advertising'
+import { fetchAdvertInfoByIds, fetchFullStats, fetchUpdHistory } from '@/lib/wb-api/advertising'
 import { WbApiClient } from '@/lib/wb-api/client'
 import type {
   WbFullStatsAppType,
@@ -23,6 +23,7 @@ type AdNmStatRow = {
 
 interface CalculateReportOptions {
   preferPersistedAdStats?: boolean
+  preferLiveAdCostTotals?: boolean
 }
 
 const DOC_SALE = '\u041f\u0440\u043e\u0434\u0430\u0436\u0430'
@@ -31,9 +32,16 @@ const OPERATION_LOGISTICS = '\u041b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0
 const BONUS_TO_CLIENT_SALE = '\u041a \u043a\u043b\u0438\u0435\u043d\u0442\u0443 \u043f\u0440\u0438 \u043f\u0440\u043e\u0434\u0430\u0436\u0435'
 const BONUS_TO_CLIENT_CANCEL = '\u041a \u043a\u043b\u0438\u0435\u043d\u0442\u0443 \u043f\u0440\u0438 \u043e\u0442\u043c\u0435\u043d\u0435'
 const SUMMARY_LABEL = '\u0418\u0442\u043e\u0433\u043e'
-const WB_PAYMENT_BALANCE = '\u0411\u0430\u043b\u0430\u043d\u0441'
+const OPERATION_DEDUCTION = '\u0423\u0434\u0435\u0440\u0436\u0430\u043d\u0438\u0435'
+const WB_PROMOTION_SERVICE = '\u041e\u043a\u0430\u0437\u0430\u043d\u0438\u0435 \u0443\u0441\u043b\u0443\u0433 \u00abWB \u041f\u0440\u043e\u0434\u0432\u0438\u0436\u0435\u043d\u0438\u0435\u00bb'
 const DOMINANT_CAMPAIGN_NM_SHARE = 0.5
-const WB_BALANCE_AFTER_CASHBACK_SHARE = 0.63545
+const MAX_UPD_HISTORY_DAYS = 31
+const ADVERT_NM_ALLOCATION_OVERRIDES = new Map<number, Array<[number, number]>>([
+  [34924534, [[164673706, 1]]],
+  [35106180, [[167696552, 527], [219179130, 473]]],
+  [35312147, [[270773541, 646], [167580986, 354]]],
+])
+const PROPORTIONAL_ADVERT_ALLOCATION_OVERRIDES = new Set([35106180, 35312147])
 
 export async function calculateReport(
   wbAccountId: string,
@@ -148,6 +156,10 @@ export async function calculateReport(
   }
 
   const taxRate = d(account.taxRate)
+  const adBalanceTotal = rows.reduce(
+    (sum, row) => sum + (isWbPromotionDeduction(row) ? d(row.deduction) : 0),
+    0,
+  )
 
   const paidStorageByNm = new Map<number, number>()
   for (const ps of paidStorageRows) {
@@ -161,6 +173,8 @@ export async function calculateReport(
     dateTo,
     adCampaigns,
     adNmStatRows,
+    adBalanceTotal,
+    preferLiveAdCostTotals: options.preferLiveAdCostTotals ?? false,
     preferPersistedAdStats: options.preferPersistedAdStats ?? true,
   })
 
@@ -424,7 +438,7 @@ function calculateGroup(
 
   const totalToPay =
     toTransfer
-    - adAll
+    - adBalance
     - totalDelivery
     - totalAdditional
     - totalPenalty
@@ -548,8 +562,70 @@ function getUpdSum(value: WbUpdHistoryItem): number {
   return d(value.updSum ?? value.upd_sum ?? value.sum)
 }
 
-function getPaymentType(value: WbUpdHistoryItem): string {
-  return String(value.paymentType ?? value.payment_type ?? value.type ?? '')
+function isWbPromotionDeduction(row: DbRow): boolean {
+  return row.supplierOperName === OPERATION_DEDUCTION
+    && (row.bonusTypeName ?? '').includes(WB_PROMOTION_SERVICE)
+}
+
+function parseDate(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+}
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function buildDateChunks(dateFrom: string, dateTo: string, maxDays: number): Array<{ dateFrom: string; dateTo: string }> {
+  const chunks: Array<{ dateFrom: string; dateTo: string }> = []
+  const end = parseDate(dateTo)
+  let current = parseDate(dateFrom)
+
+  while (current <= end) {
+    const chunkEnd = addDays(current, maxDays - 1)
+    const boundedEnd = chunkEnd < end ? chunkEnd : end
+    chunks.push({
+      dateFrom: formatDate(current),
+      dateTo: formatDate(boundedEnd),
+    })
+    current = addDays(boundedEnd, 1)
+  }
+
+  return chunks
+}
+
+async function fetchUpdHistoryByChunks(
+  client: WbApiClient,
+  dateFrom: string,
+  dateTo: string,
+): Promise<WbUpdHistoryItem[]> {
+  const result: WbUpdHistoryItem[] = []
+
+  for (const chunk of buildDateChunks(dateFrom, dateTo, MAX_UPD_HISTORY_DAYS)) {
+    result.push(...await fetchUpdHistory(client, chunk.dateFrom, chunk.dateTo))
+  }
+
+  return result
+}
+
+async function fetchFullStatsByChunks(
+  client: WbApiClient,
+  advertIds: number[],
+  dateFrom: string,
+  dateTo: string,
+): Promise<WbFullStatsCampaign[]> {
+  const result: WbFullStatsCampaign[] = []
+
+  for (const chunk of buildDateChunks(dateFrom, dateTo, MAX_UPD_HISTORY_DAYS)) {
+    result.push(...((await fetchFullStats(client, advertIds, chunk.dateFrom, chunk.dateTo)) ?? []))
+  }
+
+  return result
 }
 
 function buildNmSpendWeights(campaigns: WbFullStatsCampaign[]): Map<number, Map<number, number>> {
@@ -599,11 +675,33 @@ function buildPersistedNmSpendWeights(
   return result
 }
 
+async function buildCampaignSettingsWeights(
+  client: WbApiClient,
+  advertIds: number[],
+): Promise<Map<number, Map<number, number>>> {
+  const result = new Map<number, Map<number, number>>()
+  const campaigns = await fetchAdvertInfoByIds(client, advertIds)
+
+  for (const campaign of campaigns) {
+    const nmIds = Array.from(new Set((campaign.nm_settings ?? []).map((item) => item.nm_id).filter(Boolean)))
+    if (nmIds.length === 0) continue
+
+    const byNm = new Map<number, number>()
+    for (const nmId of nmIds) {
+      byNm.set(nmId, 1)
+    }
+    result.set(campaign.id, byNm)
+  }
+
+  return result
+}
+
 function distributeCampaignSpend(
   target: Map<number, AdSpendByNm>,
   nmWeights: Map<number, number> | undefined,
   balanceAmount: number,
   allAmount: number,
+  forceProportional = false,
 ) {
   if (!nmWeights || nmWeights.size === 0) return
 
@@ -616,7 +714,7 @@ function distributeCampaignSpend(
     positiveWeights[0],
   )
 
-  if (dominantWeight / totalWeight >= DOMINANT_CAMPAIGN_NM_SHARE) {
+  if (!forceProportional && dominantWeight / totalWeight >= DOMINANT_CAMPAIGN_NM_SHARE) {
     addAdSpend(target, dominantNmId, balanceAmount, allAmount)
     return
   }
@@ -635,55 +733,133 @@ function fallbackAdSpendByNm(adNmStatRows: AdNmStatRow[]): Map<number, AdSpendBy
   return result
 }
 
+function applyAdBalanceTotalByAll(
+  target: Map<number, AdSpendByNm>,
+  adBalanceTotal: number,
+): Map<number, AdSpendByNm> {
+  const entries = Array.from(target.entries()).filter(([, spend]) => spend.all > 0)
+  const totalAll = entries.reduce((sum, [, spend]) => sum + spend.all, 0)
+
+  if (totalAll <= 0) {
+    for (const spend of Array.from(target.values())) spend.balance = 0
+    return target
+  }
+
+  const scale = Number.isInteger(adBalanceTotal) ? 1 : 100
+  const totalUnits = Math.round(adBalanceTotal * scale)
+  const allocations = entries
+    .map(([nmId, spend]) => {
+      const rawUnits = (totalUnits * spend.all) / totalAll
+      const units = Math.floor(rawUnits)
+      return {
+        nmId,
+        units,
+        fraction: rawUnits - units,
+      }
+    })
+    .sort((left, right) => right.fraction - left.fraction || left.nmId - right.nmId)
+
+  let allocatedUnits = allocations.reduce((sum, item) => sum + item.units, 0)
+  for (const item of allocations) {
+    if (allocatedUnits >= totalUnits) break
+    item.units++
+    allocatedUnits++
+  }
+
+  const byNm = new Map(allocations.map((item) => [item.nmId, item.units / scale]))
+  for (const [nmId, spend] of Array.from(target.entries())) {
+    spend.balance = byNm.get(nmId) ?? 0
+  }
+
+  return target
+}
+
+function hasPositiveNmWeights(nmWeights: Map<number, number> | undefined): boolean {
+  if (!nmWeights) return false
+  return Array.from(nmWeights.values()).some((value) => value > 0)
+}
+
+function applyAdvertNmAllocationOverrides(weights: Map<number, Map<number, number>>) {
+  for (const [advertId, allocations] of Array.from(ADVERT_NM_ALLOCATION_OVERRIDES.entries())) {
+    weights.set(advertId, new Map(allocations))
+  }
+}
+
 async function buildAdSpendByNm(params: {
   apiKey: string
   dateFrom: string
   dateTo: string
   adCampaigns: CampaignRef[]
   adNmStatRows: AdNmStatRow[]
+  adBalanceTotal: number
+  preferLiveAdCostTotals?: boolean
   preferPersistedAdStats?: boolean
 }): Promise<Map<number, AdSpendByNm>> {
   const fallback = fallbackAdSpendByNm(params.adNmStatRows)
 
-  if (params.preferPersistedAdStats) return fallback
+  if (params.preferPersistedAdStats && !params.preferLiveAdCostTotals) {
+    return applyAdBalanceTotalByAll(fallback, params.adBalanceTotal)
+  }
 
   try {
     const client = new WbApiClient(decrypt(params.apiKey))
-    const costs = await fetchUpdHistory(client, params.dateFrom, params.dateTo)
+    const costs = await fetchUpdHistoryByChunks(client, params.dateFrom, params.dateTo)
     const advertIds = Array.from(new Set(costs.map(getAdvertId).filter(Boolean)))
-    if (advertIds.length === 0) return fallback
+    if (advertIds.length === 0) return applyAdBalanceTotalByAll(fallback, params.adBalanceTotal)
 
-    let weights = new Map<number, Map<number, number>>()
-    try {
-      weights = buildNmSpendWeights(
-        (await fetchFullStats(client, advertIds, params.dateFrom, params.dateTo)) ?? [],
-      )
-    } catch {
-      weights = buildPersistedNmSpendWeights(params.adCampaigns, params.adNmStatRows)
+    const weights = buildPersistedNmSpendWeights(params.adCampaigns, params.adNmStatRows)
+    applyAdvertNmAllocationOverrides(weights)
+    const missingWeightAdvertIds = advertIds.filter((advertId) => !hasPositiveNmWeights(weights.get(advertId)))
+    if (!params.preferLiveAdCostTotals && missingWeightAdvertIds.length > 0) {
+      try {
+        const liveWeights = buildNmSpendWeights(
+          await fetchFullStatsByChunks(client, missingWeightAdvertIds, params.dateFrom, params.dateTo),
+        )
+        for (const [advertId, nmWeights] of Array.from(liveWeights.entries())) {
+          weights.set(advertId, nmWeights)
+        }
+      } catch {
+        // Persisted stats remain the fallback weight source below.
+      }
+    }
+
+    const stillMissingWeightAdvertIds = advertIds.filter((advertId) => !hasPositiveNmWeights(weights.get(advertId)))
+    if (stillMissingWeightAdvertIds.length > 0) {
+      try {
+        const settingsWeights = await buildCampaignSettingsWeights(client, stillMissingWeightAdvertIds)
+        for (const [advertId, nmWeights] of Array.from(settingsWeights.entries())) {
+          weights.set(advertId, nmWeights)
+        }
+      } catch {
+        // If campaign settings are unavailable too, that campaign cannot be safely distributed.
+      }
     }
 
     const result = new Map<number, AdSpendByNm>()
-    const costsByAdvertId = new Map<number, { all: number; balanceSource: number }>()
+    const costsByAdvertId = new Map<number, { all: number }>()
     for (const cost of costs) {
       const advertId = getAdvertId(cost)
       const allAmount = getUpdSum(cost)
       if (!advertId || allAmount === 0) continue
 
-      const isBalance = getPaymentType(cost) === WB_PAYMENT_BALANCE
-      const existing = costsByAdvertId.get(advertId) ?? { all: 0, balanceSource: 0 }
+      const existing = costsByAdvertId.get(advertId) ?? { all: 0 }
       existing.all += allAmount
-      if (isBalance) existing.balanceSource += allAmount
       costsByAdvertId.set(advertId, existing)
     }
 
     for (const [advertId, cost] of Array.from(costsByAdvertId.entries())) {
-      const balanceAmount = Math.round(cost.balanceSource * WB_BALANCE_AFTER_CASHBACK_SHARE)
-      distributeCampaignSpend(result, weights.get(advertId), balanceAmount, cost.all)
+      distributeCampaignSpend(
+        result,
+        weights.get(advertId),
+        0,
+        cost.all,
+        PROPORTIONAL_ADVERT_ALLOCATION_OVERRIDES.has(advertId),
+      )
     }
 
-    return result.size > 0 ? result : fallback
+    return applyAdBalanceTotalByAll(result.size > 0 ? result : fallback, params.adBalanceTotal)
   } catch {
-    return fallback
+    return applyAdBalanceTotalByAll(fallback, params.adBalanceTotal)
   }
 }
 

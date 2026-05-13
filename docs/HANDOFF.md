@@ -6,6 +6,14 @@ NimbaOS находится после Phase 8 background sync на уровне 
 
 ## Latest session summary
 
+Financial reports follow-up on 2026-05-14:
+- fixed `/reports` layout so the page header is compact, controls stay visible, page-level scroll is removed, table headers and totals are sticky, and only the table scrolls internally;
+- added persisted per-user report column order via `UserPreference`;
+- fixed report period switching so it refreshes the displayed report quickly instead of waiting on the heavy live fullstats path;
+- corrected advertising allocation: `Реклама (все)` uses WB ad update/spend history totals, and `Реклама (баланс)` is distributed from the same allocation map;
+- verified `WB Galioni (WB_2)` for `16.03.2026-12.05.2026`: balance `14 779`, all `15 997`, with article rows matching the reference service;
+- adjusted scheduled sync handling so scheduled jobs are skipped if they start outside the configured time window.
+
 Post-Phase-9 UI and sync hardening on 2026-05-08:
 - redesigned the dashboard shell/home/cards/reports/sales-plan surfaces into a restrained old-money business style;
 - restored the desktop hamburger/sidebar toggle and made the NimbaOS mark link to home with the selected `?account`;
@@ -78,5 +86,7 @@ Phase 8 реализована поверх существующего dirty wor
 - Не автоматизировать WB-changing actions.
 
 ## Last updated
+
+2026-05-14 - Financial reports accuracy, sticky report table, and user column preferences.
 
 2026-05-08 — Post-Phase-9 UI refresh and advertising worker hardening.

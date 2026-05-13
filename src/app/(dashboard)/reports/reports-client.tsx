@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { syncReportsAction, exportReportXlsx } from '@/lib/actions/reports'
+import { syncReportsAction, exportReportXlsx, getReportData } from '@/lib/actions/reports'
 import { aggregateReportRows } from '@/lib/reports/aggregate-report-rows'
 import type { ReportData, ReportRow } from '@/types/reports'
 import { columnGroups } from './columns'
@@ -29,6 +29,7 @@ interface ReportsClientProps {
   wbAccountId: string
   initialDateFrom: string
   initialDateTo: string
+  initialColumnOrder: string[] | null
 }
 
 type GroupBy = '' | 'subjectName' | 'brandName'
@@ -44,15 +45,18 @@ export function ReportsClient({
   wbAccountId,
   initialDateFrom,
   initialDateTo,
+  initialColumnOrder,
 }: ReportsClientProps) {
-  const data = initialData
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [data, setData] = useState<ReportData | null>(initialData)
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(initialDateFrom),
     to: new Date(initialDateTo),
   })
+  const reportRequestId = useRef(0)
+  const [isLoadingReport, startReportLoad] = useTransition()
   const [isSyncing, startSync] = useTransition()
   const [isExporting, startExport] = useTransition()
 
@@ -68,11 +72,12 @@ export function ReportsClient({
   const [groupBy, setGroupBy] = useState<GroupBy>('')
 
   useEffect(() => {
+    setData(initialData)
     setDateRange({
       from: new Date(initialDateFrom),
       to: new Date(initialDateTo),
     })
-  }, [initialDateFrom, initialDateTo])
+  }, [initialData, initialDateFrom, initialDateTo])
 
   const { brands, categories, tags } = useMemo(() => {
     const rows = data?.rows ?? []
@@ -137,13 +142,34 @@ export function ReportsClient({
   const dateTo = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : initialDateTo
 
   function handleDateRangeChange(range: DateRange) {
-    setDateRange(range)
     if (!range.from) return
 
+    const nextRange = {
+      from: range.from,
+      to: range.to ?? range.from,
+    }
+    const nextDateFrom = format(nextRange.from, 'yyyy-MM-dd')
+    const nextDateTo = format(nextRange.to, 'yyyy-MM-dd')
+
+    setDateRange(nextRange)
+
     const params = new URLSearchParams(searchParams.toString())
-    params.set('dateFrom', format(range.from, 'yyyy-MM-dd'))
-    params.set('dateTo', format(range.to ?? range.from, 'yyyy-MM-dd'))
-    router.push(`${pathname}?${params.toString()}`)
+    params.set('dateFrom', nextDateFrom)
+    params.set('dateTo', nextDateTo)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+
+    const requestId = ++reportRequestId.current
+    startReportLoad(async () => {
+      const result = await getReportData(wbAccountId, nextDateFrom, nextDateTo)
+      if (requestId !== reportRequestId.current) return
+
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+
+      setData(result.data)
+    })
   }
 
   function handleSync() {
@@ -185,8 +211,8 @@ export function ReportsClient({
   const visibleArticles = filteredRows.length
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="old-money-panel shrink-0 rounded-md p-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
+      <div className="old-money-panel relative z-40 shrink-0 rounded-md p-2">
         <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
 
@@ -230,7 +256,7 @@ export function ReportsClient({
       </div>
 
       {data && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <FilterDropdown
             label="Бренд"
             value={selectedBrand}
@@ -305,7 +331,7 @@ export function ReportsClient({
       )}
 
       {data?.lastSyncAt && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           Последняя синхронизация:{' '}
           {format(new Date(data.lastSyncAt), 'd MMM yyyy HH:mm', { locale: ru })}
         </p>
@@ -314,7 +340,7 @@ export function ReportsClient({
 
       {data && (
         <div
-          className={`shrink-0 rounded-md border px-3 py-2 text-sm ${
+          className={`shrink-0 rounded-md border px-3 py-1.5 text-sm ${
             data.coverage.isCovered
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : 'border-amber-200 bg-amber-50 text-amber-800'
@@ -327,14 +353,22 @@ export function ReportsClient({
       )}
 
       {data ? (
-        <div className="min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
           <ReportTable
             rows={displayRows}
             summary={tableSummary}
             columnVisibility={columnVisibility}
             groupBy={groupBy}
             groupSummaries={groupSummaries}
+            initialColumnOrder={initialColumnOrder}
           />
+          {isLoadingReport && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/45 backdrop-blur-[1px]">
+              <div className="rounded-md border bg-card px-4 py-2 text-sm shadow-sm">
+                Обновляем отчёт...
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="old-money-panel flex min-h-0 flex-1 items-center justify-center rounded-md text-center text-sm text-muted-foreground">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
@@ -9,6 +10,7 @@ import type { SessionUser, UserRole } from '@/types'
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
+  const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -28,6 +30,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     name: session.user.name ?? '',
     role: session.user.role as UserRole,
   }
+  const isReportsPage = pathname === '/reports'
 
   return (
     <AccountProvider>
@@ -45,7 +48,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             onMobileMenuOpen={() => setIsMobileOpen(true)}
             onSidebarCollapse={() => setIsCollapsed((v) => !v)}
           />
-          <main className="min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5 lg:p-6">
+          <main
+            className={
+              isReportsPage
+                ? 'min-h-0 flex-1 overflow-hidden overscroll-contain p-2 sm:p-3'
+                : 'min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5 lg:p-6'
+            }
+          >
             {children}
           </main>
         </div>

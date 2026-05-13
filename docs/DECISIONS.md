@@ -25,6 +25,44 @@ Related files:
 
 ---
 
+## 2026-05-14 - Financial report advertising uses WB spend history totals
+
+Status:
+Active
+
+Decision:
+`Реклама (все)` in financial reports must be based on WB advertising update/spend history totals, not only on persisted `fullstats` nm rows. `Реклама (баланс)` must be distributed from the same corrected allocation map so totals and article rows stay consistent.
+
+Reason:
+WB `fullstats` article rows can be incomplete on arbitrary long periods, while the reference service matches WB spend history totals. Using separate sources for `Реклама (все)` and `Реклама (баланс)` caused correct-looking totals with wrong article allocation.
+
+Consequences:
+Report viewing remains fast/local for normal data, but the report calculator may use the lightweight ad spend history path for accurate advertising totals. Historical allocation overrides in `report-calculator.ts` are intentional for old unified campaigns whose current WB settings no longer describe the period's reference allocation.
+
+Related files:
+`src/lib/services/report-calculator.ts`, `src/lib/actions/reports.ts`
+
+---
+
+## 2026-05-14 - Reports table owns scrolling and user column order
+
+Status:
+Active
+
+Decision:
+The `/reports` page should not use page-level scrolling. The report controls stay fixed above the table, while the table body scrolls internally with sticky column headers and sticky totals. Each user's report column order is stored in `UserPreference`.
+
+Reason:
+Large financial reports need maximum visible table area and stable headers/totals during comparison. Local browser storage was not enough because user preferences must survive server/app restarts.
+
+Consequences:
+Dashboard shell treats `/reports` as an overflow-hidden workspace. Report column order persistence requires the `UserPreference` Prisma model and migration.
+
+Related files:
+`src/app/(dashboard)/reports`, `src/components/layout/dashboard-shell.tsx`, `src/components/layout/header.tsx`, `prisma/schema.prisma`, `src/lib/reports/preferences.ts`
+
+---
+
 ## 2026-05-08 — Desktop dashboard uses selected account and compact business layout
 
 Status:
