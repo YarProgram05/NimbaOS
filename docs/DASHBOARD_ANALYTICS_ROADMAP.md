@@ -33,6 +33,7 @@ Implemented:
   - Added persisted `Warehouse`, `StockSnapshot`, and `StockItem` models plus `ProductSize.chrtId`.
   - Added read-only WB warehouse inventory sync through `stocks.current` / `STOCKS_CURRENT` using the current seller analytics stock endpoint, not deprecated statistics stocks.
   - Added `/stocks` with stock KPI cards, filters, latest-sync timestamp, risk labels, and a manual sync action.
+  - `/stocks` supports both warehouse-by-warehouse rows and an "Общий остаток" mode that sums each article across all WB warehouses; the page keeps controls fixed while the table scrolls with sticky column headers.
   - Dashboard now includes stock summary, stock freshness, and stock-related problem-center issues for missing stock data, low stock, and out of stock.
   - Sales plan "add from stock" now uses products with positive quantity in the latest stock snapshot instead of all product cards.
 

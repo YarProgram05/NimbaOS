@@ -31,6 +31,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     role: session.user.role as UserRole,
   }
   const isReportsPage = pathname === '/reports'
+  const isFixedHeightPage = isReportsPage || pathname === '/stocks'
 
   return (
     <AccountProvider>
@@ -50,7 +51,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           />
           <main
             className={
-              isReportsPage
+              isFixedHeightPage
                 ? 'min-h-0 flex-1 overflow-hidden overscroll-contain p-2 sm:p-3'
                 : 'min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5 lg:p-6'
             }

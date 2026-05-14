@@ -1,5 +1,7 @@
 export type StockRisk = 'out_of_stock' | 'low_stock' | 'overstock' | 'ok' | 'no_sales'
 
+export const TOTAL_STOCK_WAREHOUSE_VALUE = '__total__'
+
 export interface WbWarehouseStockItem {
   nmId: number
   chrtId: number

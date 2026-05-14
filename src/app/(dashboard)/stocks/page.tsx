@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { getPaginatedStocks } from '@/lib/services/stocks'
 import { StocksClient } from './stocks-client'
-import type { StockRisk } from '@/types/stocks'
+import { TOTAL_STOCK_WAREHOUSE_VALUE, type StockRisk } from '@/types/stocks'
 
 const VALID_SORT_BY = ['vendorCode', 'nmId', 'brand', 'category', 'quantity', 'stockValue', 'risk'] as const
 const VALID_RISKS = ['all', 'out_of_stock', 'low_stock', 'overstock', 'ok', 'no_sales'] as const
@@ -63,7 +63,8 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
   const search = params.search?.trim() ?? ''
   const brand = params.brand?.trim() ?? ''
   const category = params.category?.trim() ?? ''
-  const warehouse = params.warehouse?.trim() ?? ''
+  const rawWarehouse = params.warehouse?.trim() ?? ''
+  const warehouse = rawWarehouse === TOTAL_STOCK_WAREHOUSE_VALUE ? TOTAL_STOCK_WAREHOUSE_VALUE : rawWarehouse
   const risk = VALID_RISKS.includes(params.risk as (typeof VALID_RISKS)[number])
     ? (params.risk as StockRisk | 'all')
     : 'all'
@@ -86,7 +87,7 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
   })
 
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page h-full min-h-0 overflow-hidden">
       <div className="shrink-0">
         <p className="metric-label">Склад</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">Остатки WB</h1>

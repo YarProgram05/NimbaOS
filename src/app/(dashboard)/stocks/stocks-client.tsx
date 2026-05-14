@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { WbArticleLink } from '@/components/wb-article-link'
 import { syncStocksAction } from '@/lib/actions/stocks'
-import type { PaginatedStocks, StockRisk } from '@/types/stocks'
+import { TOTAL_STOCK_WAREHOUSE_VALUE, type PaginatedStocks, type StockRisk } from '@/types/stocks'
 
 interface StocksClientProps {
   data: PaginatedStocks
@@ -90,7 +90,7 @@ export function StocksClient({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <section className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StockMetric label="Всего на складе" value={formatNumber(data.totalUnits)} />
         <StockMetric label="Стоимость" value={formatRub(data.stockValue)} />
@@ -132,13 +132,25 @@ export function StocksClient({
           values={data.categories}
           onChange={(value) => router.push(buildUrl({ category: value === '__all__' ? undefined : value, page: 1 }))}
         />
-        <FilterSelect
+        <Select
           value={currentWarehouse || '__all__'}
-          placeholder="Склад"
-          allLabel="Все склады"
-          values={data.warehouseOptions.map((warehouse) => warehouse.warehouseName)}
-          onChange={(value) => router.push(buildUrl({ warehouse: value === '__all__' ? undefined : value, page: 1 }))}
-        />
+          onValueChange={(value) =>
+            router.push(buildUrl({ warehouse: value === '__all__' ? undefined : value, page: 1 }))
+          }
+        >
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Склад" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Все склады</SelectItem>
+            <SelectItem value={TOTAL_STOCK_WAREHOUSE_VALUE}>Общий остаток</SelectItem>
+            {data.warehouseOptions.map((warehouse) => (
+              <SelectItem key={warehouse.warehouseId} value={warehouse.warehouseName}>
+                {warehouse.warehouseName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Select value={currentRisk} onValueChange={(value) => router.push(buildUrl({ risk: value === 'all' ? undefined : value, page: 1 }))}>
           <SelectTrigger className="w-full sm:w-44">
@@ -181,7 +193,7 @@ export function StocksClient({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
           <table className="min-w-[1100px] w-full">
-            <thead className="sticky top-0 z-10 border-b bg-muted/70">
+            <thead className="sticky top-0 z-20 border-b bg-muted">
               <tr>
                 <SortableHead label="Артикул" sortBy="vendorCode" currentSortBy={currentSortBy} onClick={toggleSort} />
                 <SortableHead label="WB" sortBy="nmId" currentSortBy={currentSortBy} onClick={toggleSort} />

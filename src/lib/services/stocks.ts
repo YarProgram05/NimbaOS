@@ -1,17 +1,19 @@
 import { prisma } from '@/lib/db'
-import type {
-  GetStocksOptions,
-  PaginatedStocks,
-  StockRisk,
-  StockSummaryItem,
-  StockWarehouseSummary,
-  StocksSummary,
+import {
+  TOTAL_STOCK_WAREHOUSE_VALUE,
+  type GetStocksOptions,
+  type PaginatedStocks,
+  type StockRisk,
+  type StockSummaryItem,
+  type StockWarehouseSummary,
+  type StocksSummary,
 } from '@/types/stocks'
 
 const LOW_STOCK_QTY = 3
 const LOW_STOCK_DAYS = 7
 const OVERSTOCK_DAYS = 60
 const SALES_WINDOW_DAYS = 30
+const TOTAL_STOCK_WAREHOUSE_LABEL = 'Общий остаток'
 
 function addDays(value: Date, days: number): Date {
   const next = new Date(value)
@@ -301,15 +303,17 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
   } = options
   const data = await buildStocksData(wbAccountId)
   const query = search?.trim().toLowerCase()
+  const useTotalStock = warehouse === TOTAL_STOCK_WAREHOUSE_VALUE
+  const sourceRows = useTotalStock ? aggregateRowsByArticle(data.rows) : data.rows
 
-  let rows = data.rows.filter((row) => {
+  let rows = sourceRows.filter((row) => {
     if (query) {
       const haystack = [row.vendorCode, row.title, String(row.nmId)].join(' ').toLowerCase()
       if (!haystack.includes(query)) return false
     }
     if (brand && row.brand !== brand) return false
     if (category && row.category !== category) return false
-    if (warehouse && row.warehouseName !== warehouse) return false
+    if (warehouse && !useTotalStock && row.warehouseName !== warehouse) return false
     if (risk !== 'all' && row.risk !== risk) return false
     return true
   })
@@ -337,4 +341,26 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
     categories: data.categories,
     warehouseOptions: data.warehouseOptions,
   }
+}
+
+function aggregateRowsByArticle(rows: StockSummaryItem[]): StockSummaryItem[] {
+  const grouped = new Map<number, StockSummaryItem>()
+
+  for (const row of rows) {
+    const existing = grouped.get(row.nmId)
+    if (!existing) {
+      grouped.set(row.nmId, {
+        ...row,
+        warehouseName: TOTAL_STOCK_WAREHOUSE_LABEL,
+      })
+      continue
+    }
+
+    existing.quantity += row.quantity
+    existing.inWayToClient += row.inWayToClient
+    existing.inWayFromClient += row.inWayFromClient
+    existing.stockValue += row.stockValue
+  }
+
+  return Array.from(grouped.values())
 }
