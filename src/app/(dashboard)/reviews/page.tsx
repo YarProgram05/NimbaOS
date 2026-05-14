@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getReplyTemplateGroups } from '@/lib/actions/references'
 import { getPaginatedFeedback } from '@/lib/services/feedback'
 import { ReviewsClient } from './reviews-client'
 import type {
@@ -90,20 +91,23 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     : 'createdDate'
   const sortDir: FeedbackSortDir = params.sortDir === 'asc' ? 'asc' : 'desc'
 
-  const data = await getPaginatedFeedback({
-    wbAccountId,
-    tab,
-    page,
-    pageSize,
-    search: search || undefined,
-    rating,
-    answerStatus,
-    nmId,
-    dateFrom,
-    dateTo,
-    sortBy,
-    sortDir,
-  })
+  const [data, replyTemplateGroups] = await Promise.all([
+    getPaginatedFeedback({
+      wbAccountId,
+      tab,
+      page,
+      pageSize,
+      search: search || undefined,
+      rating,
+      answerStatus,
+      nmId,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortDir,
+    }),
+    getReplyTemplateGroups(wbAccountId),
+  ])
 
   return (
     <div className="dashboard-page h-full min-h-0 overflow-hidden">
@@ -128,6 +132,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
         currentPage={page}
         currentSortBy={sortBy}
         currentSortDir={sortDir}
+        replyTemplateGroups={replyTemplateGroups}
       />
     </div>
   )

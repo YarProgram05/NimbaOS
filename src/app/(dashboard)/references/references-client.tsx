@@ -7,11 +7,13 @@ import { CostPriceTab } from './cost-price-tab'
 import { SelfPurchaseTab } from './self-purchase-tab'
 import { ExternalAdTab } from './external-ad-tab'
 import { ArticleOverrideTab } from './article-override-tab'
+import { ReplyTemplateTab } from './reply-template-tab'
 import type {
   CostPriceItem,
   SelfPurchaseRow,
   ExternalAdRow,
   ArticleOverrideRow,
+  ReplyTemplateGroupRow,
   VendorCodeOption,
 } from '@/types/references'
 
@@ -22,6 +24,7 @@ interface ReferencesClientProps {
   selfPurchases: SelfPurchaseRow[]
   externalAds: ExternalAdRow[]
   articleOverrides: ArticleOverrideRow[]
+  replyTemplateGroups: ReplyTemplateGroupRow[]
   vendorCodes: VendorCodeOption[]
 }
 
@@ -32,6 +35,7 @@ export function ReferencesClient({
   selfPurchases,
   externalAds,
   articleOverrides,
+  replyTemplateGroups,
   vendorCodes,
 }: ReferencesClientProps) {
   const router = useRouter()
@@ -63,6 +67,7 @@ export function ReferencesClient({
           <TabsTrigger value="self-purchases">Самовыкупы</TabsTrigger>
           <TabsTrigger value="external-ads">Внешняя реклама</TabsTrigger>
           <TabsTrigger value="overrides">Переименования</TabsTrigger>
+          <TabsTrigger value="reply-templates">Шаблоны ответов</TabsTrigger>
           </TabsList>
         </div>
 
@@ -96,6 +101,14 @@ export function ReferencesClient({
           <ArticleOverrideTab
             rows={articleOverrides}
             vendorCodes={vendorCodes}
+            wbAccountId={wbAccountId}
+            onMutate={handleMutate}
+          />
+        </TabsContent>
+
+        <TabsContent value="reply-templates" className="mt-4">
+          <ReplyTemplateTab
+            groups={replyTemplateGroups}
             wbAccountId={wbAccountId}
             onMutate={handleMutate}
           />

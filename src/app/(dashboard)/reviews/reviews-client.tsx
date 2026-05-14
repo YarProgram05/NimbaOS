@@ -1,14 +1,16 @@
 ﻿'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { format, subDays } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
-import { ArrowUpDown, MessageSquareText, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react'
+import { ArrowUpDown, MessageSquareReply, MessageSquareText, RefreshCw, Search, Star, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -16,8 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { WbArticleLink } from '@/components/wb-article-link'
-import { syncQuestionsAction, syncReviewsAction } from '@/lib/actions/feedback'
+import { answerFeedbackItemAction, bulkAnswerReviewsAction, syncQuestionsAction, syncReviewsAction } from '@/lib/actions/feedback'
 import type {
   FeedbackAnswerFilter,
   FeedbackRatingFilter,
@@ -26,6 +29,7 @@ import type {
   FeedbackTab,
   PaginatedFeedback,
 } from '@/types/feedback'
+import type { ReplyTemplateGroupRow } from '@/types/references'
 
 interface ReviewsClientProps {
   data: PaginatedFeedback
@@ -40,6 +44,7 @@ interface ReviewsClientProps {
   currentPage: number
   currentSortBy: FeedbackSortBy
   currentSortDir: FeedbackSortDir
+  replyTemplateGroups: ReplyTemplateGroupRow[]
 }
 
 const ANSWER_LABELS: Record<FeedbackAnswerFilter, string> = {
@@ -70,6 +75,7 @@ export function ReviewsClient({
   currentPage,
   currentSortBy,
   currentSortDir,
+  replyTemplateGroups,
 }: ReviewsClientProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -83,6 +89,10 @@ export function ReviewsClient({
     }
   })
   const [syncing, startSync] = useTransition()
+  const [answerTarget, setAnswerTarget] = useState<PaginatedFeedback['reviews'][number] | PaginatedFeedback['questions'][number] | null>(null)
+  const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set())
+  const [selectAllFilter, setSelectAllFilter] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const totalPages = Math.ceil(data.total / data.pageSize)
   const selectedDateFrom = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined
   const selectedDateTo = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : selectedDateFrom
@@ -140,6 +150,43 @@ export function ReviewsClient({
   function toggleSort(sortBy: FeedbackSortBy) {
     const nextDir = currentSortBy === sortBy && currentSortDir === 'asc' ? 'desc' : 'asc'
     router.push(buildUrl({ sortBy, sortDir: nextDir, page: 1 }))
+  }
+
+  function toggleReviewSelection(id: string, checked: boolean) {
+    setSelectAllFilter(false)
+    setSelectedReviewIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function toggleCurrentPageSelection(checked: boolean) {
+    setSelectAllFilter(false)
+    const unansweredIds = data.reviews.filter((row) => !row.isAnswered).map((row) => row.id)
+    setSelectedReviewIds((current) => {
+      const next = new Set(current)
+      for (const id of unansweredIds) {
+        if (checked) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const currentPageUnansweredIds = data.reviews.filter((row) => !row.isAnswered).map((row) => row.id)
+  const allCurrentPageSelected = currentPageUnansweredIds.length > 0
+    && currentPageUnansweredIds.every((id) => selectedReviewIds.has(id))
+  const selectedReviews = data.reviews.filter((row) => selectedReviewIds.has(row.id))
+  const selectedRatings = new Set(selectedReviews.map((row) => row.rating))
+  const showMixedRatingWarning = selectAllFilter
+    ? currentRating === 'all'
+    : selectedRatings.size > 1
+
+  function clearBulkSelection() {
+    setSelectedReviewIds(new Set())
+    setSelectAllFilter(false)
   }
 
   return (
@@ -263,6 +310,41 @@ export function ReviewsClient({
         <span>{data.summary.syncedAt ? `Обновлено ${formatDateTime(data.summary.syncedAt)}` : 'Отзывы и вопросы еще не синхронизированы'}</span>
       </div>
 
+      {currentTab === 'reviews' && data.summary.status !== 'missing' && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            {selectAllFilter
+              ? 'Выбраны все неотвеченные отзывы по текущему фильтру'
+              : `Выбрано на странице: ${selectedReviewIds.size}`}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSelectAllFilter(true)
+              setSelectedReviewIds(new Set())
+            }}
+          >
+            Выбрать все по текущему фильтру
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!selectAllFilter && selectedReviewIds.size === 0}
+            onClick={() => setBulkOpen(true)}
+          >
+            <MessageSquareReply className="mr-2 h-4 w-4" />
+            Ответить массово
+          </Button>
+          {(selectAllFilter || selectedReviewIds.size > 0) && (
+            <Button type="button" size="sm" variant="ghost" onClick={clearBulkSelection}>
+              Снять выбор
+            </Button>
+          )}
+        </div>
+      )}
+
       {data.summary.status === 'missing' ? (
         <section className="old-money-panel flex flex-col items-center justify-center rounded-md p-10 text-center">
           <MessageSquareText className="mb-3 h-10 w-10 text-muted-foreground" />
@@ -284,8 +366,19 @@ export function ReviewsClient({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
           {currentTab === 'reviews'
-            ? <ReviewsTable rows={data.reviews} currentSortBy={currentSortBy} onSort={toggleSort} />
-            : <QuestionsTable rows={data.questions} currentSortBy={currentSortBy} onSort={toggleSort} />}
+            ? (
+                <ReviewsTable
+                  rows={data.reviews}
+                  currentSortBy={currentSortBy}
+                  onSort={toggleSort}
+                  selectedIds={selectedReviewIds}
+                  allCurrentPageSelected={allCurrentPageSelected}
+                  onToggleSelected={toggleReviewSelection}
+                  onToggleCurrentPage={toggleCurrentPageSelection}
+                  onAnswer={setAnswerTarget}
+                />
+              )
+            : <QuestionsTable rows={data.questions} currentSortBy={currentSortBy} onSort={toggleSort} onAnswer={setAnswerTarget} />}
         </div>
       )}
 
@@ -310,6 +403,44 @@ export function ReviewsClient({
           </Button>
         </div>
       )}
+
+      <AnswerDialog
+        target={answerTarget}
+        wbAccountId={wbAccountId}
+        groups={replyTemplateGroups}
+        onClose={() => setAnswerTarget(null)}
+        onDone={() => {
+          setAnswerTarget(null)
+          router.refresh()
+        }}
+      />
+      <BulkAnswerDialog
+        open={bulkOpen}
+        wbAccountId={wbAccountId}
+        groups={replyTemplateGroups}
+        selectedCount={selectAllFilter ? data.total : selectedReviewIds.size}
+        selectAllFilter={selectAllFilter}
+        showMixedRatingWarning={showMixedRatingWarning}
+        selection={selectAllFilter
+          ? {
+              mode: 'filter',
+              search: currentSearch || undefined,
+              rating: currentRating,
+              answerStatus: currentAnswerStatus,
+              nmId: currentNmId ? Number(currentNmId) : undefined,
+              dateFrom: selectedDateFrom,
+              dateTo: selectedDateTo,
+              sortBy: currentSortBy,
+              sortDir: currentSortDir,
+            }
+          : { mode: 'ids', ids: Array.from(selectedReviewIds) }}
+        onClose={() => setBulkOpen(false)}
+        onDone={() => {
+          setBulkOpen(false)
+          clearBulkSelection()
+          router.refresh()
+        }}
+      />
     </div>
   )
 }
@@ -318,10 +449,20 @@ function ReviewsTable({
   rows,
   currentSortBy,
   onSort,
+  selectedIds,
+  allCurrentPageSelected,
+  onToggleSelected,
+  onToggleCurrentPage,
+  onAnswer,
 }: {
   rows: PaginatedFeedback['reviews']
   currentSortBy: FeedbackSortBy
   onSort: (sortBy: FeedbackSortBy) => void
+  selectedIds: Set<string>
+  allCurrentPageSelected: boolean
+  onToggleSelected: (id: string, checked: boolean) => void
+  onToggleCurrentPage: (checked: boolean) => void
+  onAnswer: (row: PaginatedFeedback['reviews'][number]) => void
 }) {
   const [expandedCell, setExpandedCell] = useState<string | null>(null)
 
@@ -330,9 +471,17 @@ function ReviewsTable({
   }
 
   return (
-    <table className="min-w-[1180px] w-full">
+    <table className="min-w-[1280px] w-full">
       <thead className="sticky top-0 z-20 border-b bg-muted">
         <tr>
+          <th className="w-10 px-4 py-3 text-left font-medium">
+            <input
+              type="checkbox"
+              checked={allCurrentPageSelected}
+              onChange={(event) => onToggleCurrentPage(event.target.checked)}
+              aria-label="Выбрать неотвеченные отзывы на странице"
+            />
+          </th>
           <SortableHead label="Дата" sortBy="createdDate" currentSortBy={currentSortBy} onSort={onSort} />
           <SortableHead label="Оценка" sortBy="rating" currentSortBy={currentSortBy} onSort={onSort} />
           <SortableHead label="WB" sortBy="nmId" currentSortBy={currentSortBy} onSort={onSort} />
@@ -341,11 +490,21 @@ function ReviewsTable({
           <th className="px-4 py-3 text-left font-medium">Отзыв</th>
           <th className="px-4 py-3 text-left font-medium">Ответ</th>
           <SortableHead label="Статус" sortBy="isAnswered" currentSortBy={currentSortBy} onSort={onSort} />
+          <th className="px-4 py-3 text-left font-medium">Действие</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
           <tr key={row.id} className="border-t hover:bg-muted/30">
+            <td className="px-4 py-2.5">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(row.id)}
+                disabled={row.isAnswered}
+                onChange={(event) => onToggleSelected(row.id, event.target.checked)}
+                aria-label="Выбрать отзыв"
+              />
+            </td>
             <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{formatDateTime(row.createdDate)}</td>
             <td className="px-4 py-2.5"><Rating value={row.rating ?? 0} /></td>
             <td className="px-4 py-2.5"><WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} /></td>
@@ -377,9 +536,12 @@ function ReviewsTable({
               />
             </td>
             <td className="px-4 py-2.5"><AnswerBadge answered={row.isAnswered} /></td>
+            <td className="px-4 py-2.5">
+              <AnswerButton answered={row.isAnswered} editable={row.answerEditable} onClick={() => onAnswer(row)} />
+            </td>
           </tr>
         ))}
-        {rows.length === 0 && <EmptyRow colSpan={8} />}
+        {rows.length === 0 && <EmptyRow colSpan={10} />}
       </tbody>
     </table>
   )
@@ -389,10 +551,12 @@ function QuestionsTable({
   rows,
   currentSortBy,
   onSort,
+  onAnswer,
 }: {
   rows: PaginatedFeedback['questions']
   currentSortBy: FeedbackSortBy
   onSort: (sortBy: FeedbackSortBy) => void
+  onAnswer: (row: PaginatedFeedback['questions'][number]) => void
 }) {
   const [expandedCell, setExpandedCell] = useState<string | null>(null)
 
@@ -401,7 +565,7 @@ function QuestionsTable({
   }
 
   return (
-    <table className="min-w-[1080px] w-full">
+    <table className="min-w-[1180px] w-full">
       <thead className="sticky top-0 z-20 border-b bg-muted">
         <tr>
           <SortableHead label="Дата" sortBy="createdDate" currentSortBy={currentSortBy} onSort={onSort} />
@@ -412,6 +576,7 @@ function QuestionsTable({
           <th className="px-4 py-3 text-left font-medium">Ответ</th>
           <SortableHead label="Просмотр" sortBy="wasViewed" currentSortBy={currentSortBy} onSort={onSort} />
           <SortableHead label="Статус" sortBy="isAnswered" currentSortBy={currentSortBy} onSort={onSort} />
+          <th className="px-4 py-3 text-left font-medium">Действие</th>
         </tr>
       </thead>
       <tbody>
@@ -443,11 +608,271 @@ function QuestionsTable({
             </td>
             <td className="px-4 py-2.5 text-muted-foreground">{row.wasViewed ? 'Да' : 'Нет'}</td>
             <td className="px-4 py-2.5"><AnswerBadge answered={row.isAnswered} /></td>
+            <td className="px-4 py-2.5">
+              <AnswerButton answered={row.isAnswered} editable={row.answerEditable} onClick={() => onAnswer(row)} />
+            </td>
           </tr>
         ))}
-        {rows.length === 0 && <EmptyRow colSpan={8} />}
+        {rows.length === 0 && <EmptyRow colSpan={9} />}
       </tbody>
     </table>
+  )
+}
+
+function AnswerButton({
+  answered,
+  editable,
+  onClick,
+}: {
+  answered: boolean
+  editable: boolean | null
+  onClick: () => void
+}) {
+  if (answered && editable !== true) {
+    return (
+      <Button size="sm" variant="outline" disabled>
+        Недоступно
+      </Button>
+    )
+  }
+
+  return (
+    <Button size="sm" variant={answered ? 'outline' : 'default'} onClick={onClick}>
+      <MessageSquareReply className="mr-2 h-4 w-4" />
+      {answered ? 'Изменить' : 'Ответить'}
+    </Button>
+  )
+}
+
+function AnswerDialog({
+  target,
+  wbAccountId,
+  groups,
+  onClose,
+  onDone,
+}: {
+  target: PaginatedFeedback['reviews'][number] | PaginatedFeedback['questions'][number] | null
+  wbAccountId: string
+  groups: ReplyTemplateGroupRow[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    setText(target?.answerText ?? '')
+  }, [target])
+
+  if (!target) return null
+
+  const isEdit = target.isAnswered
+  const title = target.type === 'reviews'
+    ? (isEdit ? 'Редактировать ответ на отзыв' : 'Ответить на отзыв')
+    : (isEdit ? 'Редактировать ответ на вопрос' : 'Ответить на вопрос')
+
+  async function submit() {
+    if (!target) return
+    setSending(true)
+    const result = await answerFeedbackItemAction({
+      wbAccountId,
+      type: target.type,
+      id: target.id,
+      text,
+    })
+    setSending(false)
+    if (result.success) {
+      const failed = result.data.failed
+      if (failed > 0) toast.error(result.data.logs[0]?.error ?? 'WB не принял ответ')
+      else toast.success(isEdit ? 'Ответ обновлен' : 'Ответ отправлен')
+      onDone()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <p className="font-medium">{target.productName ?? target.vendorCode ?? `WB ${target.nmId}`}</p>
+            <p className="mt-1 line-clamp-3 text-muted-foreground">{target.text}</p>
+          </div>
+          <ReplyTemplatePicker groups={groups} onPick={setText} />
+          <div className="space-y-2">
+            <Label htmlFor="feedback-answer-text">Текст ответа</Label>
+            <Textarea
+              id="feedback-answer-text"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={8}
+              placeholder="Напишите ответ покупателю..."
+            />
+            <p className="text-xs text-muted-foreground">{text.trim().length}/5000</p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Отмена</Button>
+          <Button onClick={submit} disabled={sending || text.trim().length < 2}>
+            {sending ? 'Отправка...' : (isEdit ? 'Сохранить ответ' : 'Отправить ответ')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function BulkAnswerDialog({
+  open,
+  wbAccountId,
+  groups,
+  selectedCount,
+  selectAllFilter,
+  showMixedRatingWarning,
+  selection,
+  onClose,
+  onDone,
+}: {
+  open: boolean
+  wbAccountId: string
+  groups: ReplyTemplateGroupRow[]
+  selectedCount: number
+  selectAllFilter: boolean
+  showMixedRatingWarning: boolean
+  selection:
+    | { mode: 'ids'; ids: string[] }
+    | {
+        mode: 'filter'
+        search?: string
+        rating?: FeedbackRatingFilter
+        answerStatus?: FeedbackAnswerFilter
+        nmId?: number
+        dateFrom?: string
+        dateTo?: string
+        sortBy?: FeedbackSortBy
+        sortDir?: FeedbackSortDir
+      }
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    if (open) setText('')
+  }, [open])
+
+  async function submit() {
+    setSending(true)
+    const result = await bulkAnswerReviewsAction({ wbAccountId, text, selection })
+    setSending(false)
+    if (result.success) {
+      if (result.data.failed > 0) {
+        toast.error(`Отправлено: ${result.data.succeeded}, ошибок: ${result.data.failed}`)
+      } else {
+        toast.success(`Ответы отправлены: ${result.data.succeeded}`)
+      }
+      onDone()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Массовый ответ на отзывы</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            {selectAllFilter
+              ? 'Будут обработаны все неотвеченные отзывы, которые попадают под текущий фильтр.'
+              : `Будут обработаны выбранные неотвеченные отзывы: ${selectedCount}.`}
+          </div>
+          {showMixedRatingWarning && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Среди выбранных отзывов могут быть разные оценки. Проверьте, что общий текст подходит для всех.
+            </div>
+          )}
+          <ReplyTemplatePicker groups={groups} onPick={setText} />
+          <div className="space-y-2">
+            <Label htmlFor="bulk-feedback-answer-text">Текст ответа</Label>
+            <Textarea
+              id="bulk-feedback-answer-text"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={8}
+              placeholder="Один текст будет отправлен во все выбранные неотвеченные отзывы..."
+            />
+            <p className="text-xs text-muted-foreground">{text.trim().length}/5000</p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Отмена</Button>
+          <Button onClick={submit} disabled={sending || text.trim().length < 2}>
+            {sending ? 'Отправка...' : 'Подтвердить и отправить'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ReplyTemplatePicker({
+  groups,
+  onPick,
+}: {
+  groups: ReplyTemplateGroupRow[]
+  onPick: (text: string) => void
+}) {
+  const [groupId, setGroupId] = useState(groups[0]?.id ?? '')
+  const group = groups.find((item) => item.id === groupId) ?? groups[0]
+
+  if (!groups.length) {
+    return (
+      <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+        Шаблоны пока не созданы. Их можно добавить в справочниках.
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Группа шаблонов</Label>
+        <Select value={group?.id ?? ''} onValueChange={setGroupId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Выберите группу" />
+          </SelectTrigger>
+          <SelectContent>
+            {groups.map((item) => (
+              <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Шаблон</Label>
+        <Select value="" onValueChange={(templateId) => {
+          const template = group?.templates.find((item) => item.id === templateId)
+          if (template) onPick(template.text)
+        }}>
+          <SelectTrigger>
+            <SelectValue placeholder={group?.templates.length ? 'Подставить шаблон' : 'Нет шаблонов'} />
+          </SelectTrigger>
+          <SelectContent>
+            {(group?.templates ?? []).map((template) => (
+              <SelectItem key={template.id} value={template.id}>{template.title}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   )
 }
 
@@ -541,7 +966,11 @@ function AnswerBadge({ answered }: { answered: boolean }) {
     ? 'border-border bg-secondary text-secondary-foreground'
     : 'border-amber-600/40 bg-amber-50 text-amber-700'
 
-  return <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${className}`}>{answered ? 'С ответом' : 'Без ответа'}</span>
+  return (
+    <span className={`inline-flex whitespace-nowrap rounded-md border px-2 py-1 text-xs font-semibold ${className}`}>
+      {answered ? 'С ответом' : 'Без ответа'}
+    </span>
+  )
 }
 
 function formatNumber(value: number): string {

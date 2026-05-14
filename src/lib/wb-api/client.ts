@@ -159,4 +159,11 @@ export class WbApiClient {
       body: JSON.stringify(body),
     })
   }
+
+  patch<T>(domain: WbApiDomain, path: string, body: unknown) {
+    return this.request<T>(domain, path, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+  }
 }

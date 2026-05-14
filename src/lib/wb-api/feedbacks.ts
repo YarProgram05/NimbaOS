@@ -87,3 +87,27 @@ export async function fetchWbQuestionById(
   assertWbEnvelope(resp)
   return resp.data ?? null
 }
+
+export async function answerWbFeedback(
+  client: WbApiClient,
+  params: { id: string; text: string; edit: boolean },
+): Promise<void> {
+  const body = { id: params.id, text: params.text }
+  if (params.edit) {
+    await client.patch<null>('feedbacks', '/api/v1/feedbacks/answer', body)
+    return
+  }
+
+  await client.post<null>('feedbacks', '/api/v1/feedbacks/answer', body)
+}
+
+export async function answerWbQuestion(
+  client: WbApiClient,
+  params: { id: string; text: string },
+): Promise<void> {
+  await client.patch<unknown>('feedbacks', '/api/v1/questions', {
+    id: params.id,
+    text: params.text,
+    state: 'wbRu',
+  })
+}

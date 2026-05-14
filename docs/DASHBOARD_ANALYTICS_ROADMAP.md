@@ -2,7 +2,7 @@
 
 ## Implementation Status
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-15.
 
 Implemented:
 
@@ -42,6 +42,13 @@ Implemented:
   - The sync loads both answered and unanswered rows for the selected period, persists answer text/status metadata, and does not call WB write endpoints.
   - Added `/reviews` with tabs for reviews and questions, KPI workload cards, filters by answer status/product/date/search, rating filter for reviews, sticky table headers, and manual read-only sync actions.
   - Dashboard now includes feedback workload, reviews/questions freshness, and problem-center issues for missing feedback data, unanswered reviews/questions, and new negative reviews.
+- Phase 4.1 is implemented as explicit feedback/question response operations.
+  - Added reply template groups and templates in references, including default review groups for 1-5 star ratings.
+  - Added explicit answer and edit actions for WB reviews/questions, with `answerEditable=true` enforced for edits.
+  - Added per-account write throttling at 3 requests per second, result logging, and local refresh after successful write attempts.
+  - Added template selection in answer dialogs and manual text entry for single replies.
+  - Added bulk replies for unanswered reviews with row selection, "select all by current filter", confirmation, and mixed-rating warning.
+  - Auto-replies, reject, and mark-viewed actions remain intentionally absent.
 
 Important changes from the original plan:
 
@@ -51,7 +58,7 @@ Important changes from the original plan:
 - The existing report calculator may use its already implemented advertising spend flow. No new WB API domains or sync sources were added in Phase 0-1.
 - The `preferPersistedAdStats` option remains available in the report calculator for future DB-only dashboard work, but the current dashboard KPI path prioritizes consistency with the financial report.
 - The home screen focus/action block is now fed by `summary.problemCenter.insights`; page-local focus heuristics are deprecated in favor of the server-side problem center.
-- Phase 2 originally tracked stocks, reviews, and questions as future freshness domains; stocks are now implemented in Phase 3, and reviews/questions are now implemented in Phase 4.
+- Phase 2 originally tracked stocks, reviews, and questions as future freshness domains; stocks are now implemented in Phase 3, reviews/questions are implemented in Phase 4, and explicit feedback write actions are implemented in Phase 4.1.
 
 Outdated or deferred parts:
 
@@ -75,7 +82,7 @@ Already implemented at code level:
 
 - Auth, roles, invitations, WB accounts, encrypted API keys.
 - Product cards sync from WB content/prices APIs.
-- References: cost prices, self-purchases, external ads, article overrides.
+- References: cost prices, self-purchases, external ads, article overrides, reply templates.
 - Financial reports: realization report, paid storage, P&L formulas, Excel export.
 - Sales plan: CRUD, article plan, orders/sales/funnel sync, daily grid, Excel export.
 - Advertising: campaigns, stats, clusters, breakdowns, action log, Excel export, selected WB actions.
@@ -358,6 +365,12 @@ Acceptance:
 - Dashboard shows review/question workload.
 - Negative reviews and unanswered questions are visible without opening the module.
 - No WB write action is performed without explicit user intent.
+
+Phase 4.1 addendum:
+
+- Reply templates are managed in references as groups plus reusable answer texts.
+- Review/question writes are explicit user actions with logging and per-account throttling.
+- Bulk review replies are limited to unanswered reviews and require confirmation.
 
 ## Phase 5 - Existing Analytics Upgrade
 

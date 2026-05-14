@@ -137,6 +137,7 @@ function mapReviewRow(row: {
   pros: string | null
   cons: string | null
   answerText: string | null
+  answerEditable: boolean | null
   isAnswered: boolean
   createdDate: Date
   product: { photoUrl: string | null } | null
@@ -156,6 +157,7 @@ function mapReviewRow(row: {
     pros: row.pros,
     cons: row.cons,
     answerText: row.answerText,
+    answerEditable: row.answerEditable,
     photoUrl: row.product?.photoUrl ?? null,
   }
 }
@@ -169,6 +171,7 @@ function mapQuestionRow(row: {
   brandName: string | null
   text: string
   answerText: string | null
+  answerEditable: boolean | null
   isAnswered: boolean
   wasViewed: boolean
   isWarned: boolean
@@ -190,6 +193,7 @@ function mapQuestionRow(row: {
     wasViewed: row.wasViewed,
     isWarned: row.isWarned,
     answerText: row.answerText,
+    answerEditable: row.answerEditable,
     photoUrl: row.product?.photoUrl ?? null,
   }
 }
@@ -368,4 +372,24 @@ export async function getPaginatedFeedback(options: GetFeedbackOptions): Promise
     page,
     pageSize,
   }
+}
+
+export async function getUnansweredReviewTargetsByFilter(options: Omit<GetFeedbackOptions, 'tab' | 'page' | 'pageSize'>) {
+  const where = reviewWhere({
+    ...options,
+    tab: 'reviews',
+    page: 1,
+    pageSize: 100,
+    answerStatus: 'unanswered',
+  })
+
+  return prisma.productReview.findMany({
+    where: { ...where, isAnswered: false },
+    select: {
+      id: true,
+      externalId: true,
+      rating: true,
+    },
+    orderBy: reviewOrderBy(options.sortBy, options.sortDir),
+  })
 }

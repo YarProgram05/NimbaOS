@@ -134,6 +134,7 @@ export interface FeedbackReviewRow extends FeedbackWorkloadItem {
   pros: string | null
   cons: string | null
   answerText: string | null
+  answerEditable: boolean | null
   photoUrl: string | null
 }
 
@@ -142,6 +143,7 @@ export interface FeedbackQuestionRow extends FeedbackWorkloadItem {
   wasViewed: boolean
   isWarned: boolean
   answerText: string | null
+  answerEditable: boolean | null
   photoUrl: string | null
 }
 
@@ -168,4 +170,24 @@ export interface GetFeedbackOptions {
   dateTo?: string
   sortBy?: FeedbackSortBy
   sortDir?: FeedbackSortDir
+}
+
+export interface FeedbackWriteLogRow {
+  id: string
+  kind: 'REVIEW_ANSWER_CREATE' | 'REVIEW_ANSWER_UPDATE' | 'QUESTION_ANSWER_UPSERT'
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  entityType: string
+  externalId: string
+  answerText: string
+  error: string | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface FeedbackWriteResult {
+  total: number
+  succeeded: number
+  failed: number
+  logs: FeedbackWriteLogRow[]
 }

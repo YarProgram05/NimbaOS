@@ -33,6 +33,19 @@ enum SyncJobStatus {
   FAILED
 }
 
+enum FeedbackWriteActionKind {
+  REVIEW_ANSWER_CREATE
+  REVIEW_ANSWER_UPDATE
+  QUESTION_ANSWER_UPSERT
+}
+
+enum FeedbackWriteActionStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 // ─── Auth ──────────────────────────────────────────────────────
 
 model User {
@@ -49,6 +62,7 @@ model User {
   invitees     User[]       @relation("UserInvites")
   invitations  Invitation[] @relation("InvitationCreator")
   preferences  UserPreference[]
+  feedbackWriteLogs FeedbackWriteActionLog[]
 
   @@map("users")
 }
@@ -115,6 +129,8 @@ model WbAccount {
   stockSnapshots     StockSnapshot[]
   productReviews     ProductReview[]
   productQuestions   ProductQuestion[]
+  replyTemplateGroups ReplyTemplateGroup[]
+  feedbackWriteLogs  FeedbackWriteActionLog[]
 
   @@map("wb_accounts")
 }
@@ -360,6 +376,65 @@ model ProductQuestion {
   @@index([wbAccountId, nmId])
   @@index([wbAccountId, isAnswered])
   @@map("product_questions")
+}
+
+model ReplyTemplateGroup {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  name        String
+  sortOrder   Int      @default(0)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wbAccount   WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  templates   ReplyTemplate[]
+
+  @@unique([wbAccountId, name])
+  @@index([wbAccountId, sortOrder])
+  @@map("reply_template_groups")
+}
+
+model ReplyTemplate {
+  id        String   @id @default(uuid())
+  groupId   String
+  title     String
+  text      String   @db.Text
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group     ReplyTemplateGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, sortOrder])
+  @@map("reply_templates")
+}
+
+model FeedbackWriteActionLog {
+  id                 String                    @id @default(uuid())
+  wbAccountId        String
+  userId             String?
+  kind               FeedbackWriteActionKind
+  status             FeedbackWriteActionStatus @default(QUEUED)
+  entityType         String
+  localEntityId      String?
+  externalId         String
+  answerText         String                    @db.Text
+  result             Json?
+  error              String?
+  queuedAt           DateTime                  @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  wbAccount          WbAccount                 @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  user               User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([wbAccountId, createdAt])
+  @@index([status, createdAt])
+  @@index([externalId])
+  @@map("feedback_write_action_logs")
 }
 
 model ProductMaterial {

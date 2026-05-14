@@ -60,3 +60,24 @@ export interface VendorCodeOption {
   vendorCode: string
   title: string | null
 }
+
+export interface ReplyTemplateRow {
+  id: string
+  groupId: string
+  title: string
+  text: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ReplyTemplateGroupRow {
+  id: string
+  wbAccountId: string
+  name: string
+  sortOrder: number
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+  templates: ReplyTemplateRow[]
+}

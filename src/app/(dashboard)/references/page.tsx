@@ -8,11 +8,12 @@ import {
   getSelfPurchases,
   getExternalAds,
   getArticleOverrides,
+  getReplyTemplateGroups,
   getVendorCodes,
 } from '@/lib/actions/references'
 import { ReferencesClient } from './references-client'
 
-const VALID_TABS = ['cost-price', 'self-purchases', 'external-ads', 'overrides'] as const
+const VALID_TABS = ['cost-price', 'self-purchases', 'external-ads', 'overrides', 'reply-templates'] as const
 type TabValue = (typeof VALID_TABS)[number]
 
 interface ReferencesPageProps {
@@ -61,12 +62,13 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
     : 'cost-price'
 
   // ── Fetch all datasets in parallel ──────────────────────────────────────────
-  const [costPriceItems, selfPurchases, externalAds, articleOverrides, vendorCodes] =
+  const [costPriceItems, selfPurchases, externalAds, articleOverrides, replyTemplateGroups, vendorCodes] =
     await Promise.all([
       getCostPriceItems(wbAccountId),
       getSelfPurchases(wbAccountId),
       getExternalAds(wbAccountId),
       getArticleOverrides(wbAccountId),
+      getReplyTemplateGroups(wbAccountId),
       getVendorCodes(wbAccountId),
     ])
 
@@ -78,6 +80,7 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
       selfPurchases={selfPurchases}
       externalAds={externalAds}
       articleOverrides={articleOverrides}
+      replyTemplateGroups={replyTemplateGroups}
       vendorCodes={vendorCodes}
     />
   )

@@ -12,6 +12,8 @@ import type {
   SelfPurchaseRow,
   ExternalAdRow,
   ArticleOverrideRow,
+  ReplyTemplateGroupRow,
+  ReplyTemplateRow,
   VendorCodeOption,
 } from '@/types/references'
 
@@ -25,6 +27,78 @@ async function requireSession() {
 
 function serializeDate(d: Date): string {
   return d.toISOString().slice(0, 10)
+}
+
+const DEFAULT_REPLY_GROUPS = ['1 звезда', '2 звезды', '3 звезды', '4 звезды', '5 звезд']
+
+function mapReplyTemplate(row: {
+  id: string
+  groupId: string
+  title: string
+  text: string
+  sortOrder: number
+  createdAt: Date
+  updatedAt: Date
+}): ReplyTemplateRow {
+  return {
+    id: row.id,
+    groupId: row.groupId,
+    title: row.title,
+    text: row.text,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+function mapReplyTemplateGroup(row: {
+  id: string
+  wbAccountId: string
+  name: string
+  sortOrder: number
+  isDefault: boolean
+  createdAt: Date
+  updatedAt: Date
+  templates: Array<{
+    id: string
+    groupId: string
+    title: string
+    text: string
+    sortOrder: number
+    createdAt: Date
+    updatedAt: Date
+  }>
+}): ReplyTemplateGroupRow {
+  return {
+    id: row.id,
+    wbAccountId: row.wbAccountId,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    isDefault: row.isDefault,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    templates: row.templates.map(mapReplyTemplate),
+  }
+}
+
+async function ensureDefaultReplyTemplateGroups(wbAccountId: string) {
+  await prisma.$transaction(
+    DEFAULT_REPLY_GROUPS.map((name, index) =>
+      prisma.replyTemplateGroup.upsert({
+        where: { wbAccountId_name: { wbAccountId, name } },
+        create: {
+          wbAccountId,
+          name,
+          sortOrder: index + 1,
+          isDefault: true,
+        },
+        update: {
+          isDefault: true,
+          sortOrder: index + 1,
+        },
+      }),
+    ),
+  )
 }
 
 // ─── Read Actions ───────────────────────────────────────────────────────────
@@ -117,6 +191,150 @@ export async function getVendorCodes(wbAccountId: string): Promise<VendorCodeOpt
   })
 
   return rows.map((r) => ({ vendorCode: r.vendorCode, title: r.title }))
+}
+
+export async function getReplyTemplateGroups(wbAccountId: string): Promise<ReplyTemplateGroupRow[]> {
+  await requireSession()
+  await ensureDefaultReplyTemplateGroups(wbAccountId)
+
+  const rows = await prisma.replyTemplateGroup.findMany({
+    where: { wbAccountId },
+    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    include: {
+      templates: {
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+      },
+    },
+  })
+
+  return rows.map(mapReplyTemplateGroup)
+}
+
+export async function createReplyTemplateGroup(data: {
+  wbAccountId: string
+  name: string
+}): Promise<ActionResult<ReplyTemplateGroupRow>> {
+  await requireSession()
+  const name = data.name.trim()
+  if (!name) return { success: false, error: 'Название группы обязательно' }
+
+  const maxOrder = await prisma.replyTemplateGroup.aggregate({
+    where: { wbAccountId: data.wbAccountId },
+    _max: { sortOrder: true },
+  })
+
+  try {
+    const row = await prisma.replyTemplateGroup.create({
+      data: {
+        wbAccountId: data.wbAccountId,
+        name,
+        sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+      },
+      include: { templates: true },
+    })
+    revalidatePath('/references')
+    return { success: true, data: mapReplyTemplateGroup(row) }
+  } catch {
+    return { success: false, error: 'Группа с таким названием уже есть' }
+  }
+}
+
+export async function updateReplyTemplateGroup(data: {
+  id: string
+  name: string
+}): Promise<ActionResult<ReplyTemplateGroupRow>> {
+  await requireSession()
+  const name = data.name.trim()
+  if (!name) return { success: false, error: 'Название группы обязательно' }
+
+  try {
+    const row = await prisma.replyTemplateGroup.update({
+      where: { id: data.id },
+      data: { name },
+      include: { templates: true },
+    })
+    revalidatePath('/references')
+    revalidatePath('/reviews')
+    return { success: true, data: mapReplyTemplateGroup(row) }
+  } catch {
+    return { success: false, error: 'Не удалось обновить группу' }
+  }
+}
+
+export async function deleteReplyTemplateGroup(id: string): Promise<ActionResult> {
+  await requireSession()
+  const exists = await prisma.replyTemplateGroup.findUnique({ where: { id }, select: { id: true, isDefault: true } })
+  if (!exists) return { success: false, error: 'Группа не найдена' }
+  if (exists.isDefault) return { success: false, error: 'Дефолтную группу нельзя удалить' }
+
+  await prisma.replyTemplateGroup.delete({ where: { id } })
+  revalidatePath('/references')
+  revalidatePath('/reviews')
+  return { success: true, data: undefined }
+}
+
+export async function createReplyTemplate(data: {
+  groupId: string
+  title: string
+  text: string
+}): Promise<ActionResult<ReplyTemplateRow>> {
+  await requireSession()
+  const title = data.title.trim()
+  const text = data.text.trim()
+  if (!title) return { success: false, error: 'Название шаблона обязательно' }
+  if (text.length < 2) return { success: false, error: 'Текст ответа должен быть не короче 2 символов' }
+  if (text.length > 5000) return { success: false, error: 'Текст ответа должен быть не длиннее 5000 символов' }
+
+  const maxOrder = await prisma.replyTemplate.aggregate({
+    where: { groupId: data.groupId },
+    _max: { sortOrder: true },
+  })
+
+  const row = await prisma.replyTemplate.create({
+    data: {
+      groupId: data.groupId,
+      title,
+      text,
+      sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+    },
+  })
+
+  revalidatePath('/references')
+  revalidatePath('/reviews')
+  return { success: true, data: mapReplyTemplate(row) }
+}
+
+export async function updateReplyTemplate(data: {
+  id: string
+  title: string
+  text: string
+}): Promise<ActionResult<ReplyTemplateRow>> {
+  await requireSession()
+  const title = data.title.trim()
+  const text = data.text.trim()
+  if (!title) return { success: false, error: 'Название шаблона обязательно' }
+  if (text.length < 2) return { success: false, error: 'Текст ответа должен быть не короче 2 символов' }
+  if (text.length > 5000) return { success: false, error: 'Текст ответа должен быть не длиннее 5000 символов' }
+
+  const row = await prisma.replyTemplate.update({
+    where: { id: data.id },
+    data: { title, text },
+  })
+
+  revalidatePath('/references')
+  revalidatePath('/reviews')
+  return { success: true, data: mapReplyTemplate(row) }
+}
+
+export async function deleteReplyTemplate(id: string): Promise<ActionResult> {
+  await requireSession()
+  const exists = await prisma.replyTemplate.findUnique({ where: { id }, select: { id: true } })
+  if (!exists) return { success: false, error: 'Шаблон не найден' }
+
+  await prisma.replyTemplate.delete({ where: { id } })
+  revalidatePath('/references')
+  revalidatePath('/reviews')
+  return { success: true, data: undefined }
 }
 
 export async function getCostPriceItems(wbAccountId: string): Promise<CostPriceItem[]> {
