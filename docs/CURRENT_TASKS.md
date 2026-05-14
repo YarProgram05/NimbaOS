@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-4
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 4 is implemented as reviews/questions read-only v1: persisted `ProductReview` and `ProductQuestion`, `reviews.refresh` and `questions.refresh` jobs, `/reviews`, dashboard feedback workload/freshness, and problem-center issues for unanswered or negative feedback.
+Next step: Apply the new Prisma migration in the target environment, run one safe read-only reviews/questions sync for a test account, then verify `/reviews` and dashboard feedback workload with real WB data.
+Related files: `prisma/schema.prisma`, `src/lib/services/sync-feedback.ts`, `src/lib/services/feedback.ts`, `src/app/(dashboard)/reviews`, `src/lib/services/dashboard-summary.ts`, `src/lib/services/dashboard-problem-center.ts`
+Risks: WB feedbacks/questions require a token category with the correct permission; Phase 4 intentionally does not send answers, mark viewed, reject, or edit WB feedback.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-3
 
 Status: Done at code level

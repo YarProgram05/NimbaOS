@@ -8,6 +8,7 @@ export const WB_API_DOMAINS = {
   finance:    'https://finance-api.wildberries.ru',
   marketplace:'https://marketplace-api.wildberries.ru',
   documents:  'https://documents-api.wildberries.ru',
+  feedbacks:  'https://feedbacks-api.wildberries.ru',
 } as const
 
 export type WbApiDomain = keyof typeof WB_API_DOMAINS
@@ -23,4 +24,5 @@ export const RATE_LIMITS = {
   finance:    600,
   marketplace:200,
   documents:  600,
+  feedbacks:  333,   // 3 req/sec for feedbacks and questions category
 } as const satisfies Record<WbApiDomain, number>

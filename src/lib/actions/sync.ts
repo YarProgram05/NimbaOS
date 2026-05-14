@@ -285,6 +285,56 @@ export async function enqueueStocksSyncAction(
   }
 }
 
+export async function enqueueReviewsSyncAction(
+  wbAccountId: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  try {
+    await requireManagerSession()
+    if (!wbAccountId) return { success: false, error: 'РљР°Р±РёРЅРµС‚ РЅРµ РІС‹Р±СЂР°РЅ' }
+
+    await prisma.wbAccount.findUniqueOrThrow({ where: { id: wbAccountId }, select: { id: true } })
+    const period = dateFrom && dateTo ? { dateFrom, dateTo } : lastDaysPeriod(7)
+
+    const job = await enqueueSyncJob({
+      kind: SYNC_JOB_KINDS.REVIEWS_REFRESH,
+      source: 'manual',
+      wbAccountId,
+      ...period,
+    })
+
+    return { success: true, data: job }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'РћС€РёР±РєР° РїРѕСЃС‚Р°РЅРѕРІРєРё Р·Р°РґР°С‡Рё' }
+  }
+}
+
+export async function enqueueQuestionsSyncAction(
+  wbAccountId: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  try {
+    await requireManagerSession()
+    if (!wbAccountId) return { success: false, error: 'РљР°Р±РёРЅРµС‚ РЅРµ РІС‹Р±СЂР°РЅ' }
+
+    await prisma.wbAccount.findUniqueOrThrow({ where: { id: wbAccountId }, select: { id: true } })
+    const period = dateFrom && dateTo ? { dateFrom, dateTo } : lastDaysPeriod(7)
+
+    const job = await enqueueSyncJob({
+      kind: SYNC_JOB_KINDS.QUESTIONS_REFRESH,
+      source: 'manual',
+      wbAccountId,
+      ...period,
+    })
+
+    return { success: true, data: job }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'РћС€РёР±РєР° РїРѕСЃС‚Р°РЅРѕРІРєРё Р·Р°РґР°С‡Рё' }
+  }
+}
+
 export async function enqueueManualSyncAction(
   kind: SyncJobKind,
   wbAccountId: string,
@@ -330,6 +380,10 @@ export async function enqueueManualSyncAction(
       }
     case SYNC_JOB_KINDS.STOCKS_CURRENT:
       return enqueueStocksSyncAction(wbAccountId)
+    case SYNC_JOB_KINDS.REVIEWS_REFRESH:
+      return enqueueReviewsSyncAction(wbAccountId, dateFrom, dateTo)
+    case SYNC_JOB_KINDS.QUESTIONS_REFRESH:
+      return enqueueQuestionsSyncAction(wbAccountId, dateFrom, dateTo)
     case SYNC_JOB_KINDS.ADVERTISING_CLUSTERS:
       return { success: false, error: 'Кластеры запускаются из карточки кампании с выбранным периодом' }
   }

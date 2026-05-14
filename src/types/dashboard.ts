@@ -1,5 +1,6 @@
 import type { SyncJobKind, SyncJobStatus } from '@/types/sync'
 import type { StocksSummary } from '@/types/stocks'
+import type { FeedbackSummary } from '@/types/feedback'
 
 export type DashboardPeriodPreset =
   | 'today'
@@ -179,6 +180,7 @@ export interface DashboardSummary {
   plan: DashboardPlanSummary
   advertising: DashboardAdvertisingSummary
   stocks: StocksSummary
+  feedback: FeedbackSummary
   products: {
     status: DashboardValueStatus
     topProfit: DashboardProductSnapshot[]

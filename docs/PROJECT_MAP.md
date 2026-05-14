@@ -19,6 +19,8 @@
 - `src/app/(dashboard)/sales-plan`: sales plan.
 - `src/app/(dashboard)/references`: reference data.
 - `src/app/(dashboard)/advertising`: advertising campaigns.
+- `src/app/(dashboard)/stocks`: WB warehouse inventory.
+- `src/app/(dashboard)/reviews`: read-only reviews and questions workload.
 - `src/app/(dashboard)/sync`: background sync status and safe manual enqueue.
 - `src/app/(dashboard)/settings`: account/profile settings.
 - `src/app/(dashboard)/admin/users`: user administration.

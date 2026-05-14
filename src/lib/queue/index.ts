@@ -65,6 +65,20 @@ export interface StocksCurrentJobData extends SyncJobBase {
   wbAccountId: string
 }
 
+export interface ReviewsRefreshJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.REVIEWS_REFRESH
+  wbAccountId: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export interface QuestionsRefreshJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.QUESTIONS_REFRESH
+  wbAccountId: string
+  dateFrom?: string
+  dateTo?: string
+}
+
 export type SyncJobData =
   | ProductsRefreshJobData
   | ReportsPeriodJobData
@@ -73,6 +87,8 @@ export type SyncJobData =
   | AdvertisingStatsJobData
   | AdvertisingClustersJobData
   | StocksCurrentJobData
+  | ReviewsRefreshJobData
+  | QuestionsRefreshJobData
 
 export const DEFAULT_SYNC_JOB_OPTIONS: JobsOptions = {
   attempts: 3,

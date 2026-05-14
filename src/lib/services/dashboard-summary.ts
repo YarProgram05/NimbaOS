@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { getSyncCoverage } from '@/lib/sync/coverage'
 import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
 import { calculateReport } from '@/lib/services/report-calculator'
+import { getFeedbackSummary } from '@/lib/services/feedback'
 import { getStocksSummary } from '@/lib/services/stocks'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
 import type { ReportData } from '@/types/reports'
@@ -59,6 +60,11 @@ const SOURCE_MAP = [
     sources: ['StockSnapshot', 'StockItem', 'Warehouse', 'CostPrice', 'WbSale'],
     fallback: 'Нет снимка остатков: блок показывает явное состояние missing и предлагает синхронизацию.',
   },
+  {
+    widget: 'Reviews and questions',
+    sources: ['ProductReview', 'ProductQuestion', 'feedbacks-api.wildberries.ru'],
+    fallback: 'Нет синхронизации отзывов и вопросов: workload помечается как missing, а не подменяется нулями.',
+  },
 ]
 
 const FRESHNESS_DOMAINS: {
@@ -73,6 +79,8 @@ const FRESHNESS_DOMAINS: {
     | 'ADVERTISING_STATS'
     | 'ADVERTISING_CLUSTERS'
     | 'STOCKS_CURRENT'
+    | 'REVIEWS_REFRESH'
+    | 'QUESTIONS_REFRESH'
     | null
   href: string
   implemented: boolean
@@ -144,20 +152,20 @@ const FRESHNESS_DOMAINS: {
   {
     key: 'reviews',
     label: 'Отзывы',
-    source: 'reviews',
-    prismaKind: null,
-    href: '/sync',
-    implemented: false,
-    staleAfterHours: null,
+    source: SYNC_JOB_KINDS.REVIEWS_REFRESH,
+    prismaKind: 'REVIEWS_REFRESH',
+    href: '/reviews',
+    implemented: true,
+    staleAfterHours: 12,
   },
   {
     key: 'questions',
     label: 'Вопросы',
-    source: 'questions',
-    prismaKind: null,
-    href: '/sync',
-    implemented: false,
-    staleAfterHours: null,
+    source: SYNC_JOB_KINDS.QUESTIONS_REFRESH,
+    prismaKind: 'QUESTIONS_REFRESH',
+    href: '/reviews?tab=questions',
+    implemented: true,
+    staleAfterHours: 12,
   },
 ]
 
@@ -223,6 +231,7 @@ export async function getDashboardSummary(
     plan,
     advertising,
     stocks,
+    feedback,
     freshness,
   ] = await Promise.all([
     financialStatus === 'missing'
@@ -234,6 +243,7 @@ export async function getDashboardSummary(
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
     getStocksSummary(account.id),
+    getFeedbackSummary(account.id, period.dateFrom, period.dateTo),
     getFreshnessSummary(account.id, period.dateFrom, period.dateTo),
   ])
 
@@ -277,6 +287,7 @@ export async function getDashboardSummary(
     reportRowsCount,
     reportRows: productRows,
     stocks,
+    feedback,
     freshnessItems: freshness.items,
     generatedAt,
   })
@@ -307,6 +318,7 @@ export async function getDashboardSummary(
       status: mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
     },
     stocks,
+    feedback,
     products: {
       status: productStatus,
       topProfit,
@@ -723,6 +735,22 @@ async function countFreshnessRows(
       select: { id: true },
     })
     return snapshot ? prisma.stockItem.count({ where: { snapshotId: snapshot.id } }) : 0
+  }
+  if (key === 'reviews') {
+    return prisma.productReview.count({
+      where: {
+        wbAccountId,
+        createdDate: { gte: parseDateKey(dateFrom), lt: addDays(parseDateKey(dateTo), 1) },
+      },
+    })
+  }
+  if (key === 'questions') {
+    return prisma.productQuestion.count({
+      where: {
+        wbAccountId,
+        createdDate: { gte: parseDateKey(dateFrom), lt: addDays(parseDateKey(dateTo), 1) },
+      },
+    })
   }
   return 0
 }

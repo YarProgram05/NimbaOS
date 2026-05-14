@@ -36,6 +36,12 @@ Implemented:
   - `/stocks` supports both warehouse-by-warehouse rows and an "Общий остаток" mode that sums each article across all WB warehouses; the page keeps controls fixed while the table scrolls with sticky column headers.
   - Dashboard now includes stock summary, stock freshness, and stock-related problem-center issues for missing stock data, low stock, and out of stock.
   - Sales plan "add from stock" now uses products with positive quantity in the latest stock snapshot instead of all product cards.
+- Phase 4 is implemented as the reviews/questions read-only v1.
+  - Added persisted `ProductReview` and `ProductQuestion` models with product snapshot fields and optional local `Product` relation by `nmId`.
+  - Added read-only WB feedback sync through `reviews.refresh` / `REVIEWS_REFRESH` and `questions.refresh` / `QUESTIONS_REFRESH` using `feedbacks-api.wildberries.ru`.
+  - The sync loads both answered and unanswered rows for the selected period, persists answer text/status metadata, and does not call WB write endpoints.
+  - Added `/reviews` with tabs for reviews and questions, KPI workload cards, filters by answer status/product/date/search, rating filter for reviews, sticky table headers, and manual read-only sync actions.
+  - Dashboard now includes feedback workload, reviews/questions freshness, and problem-center issues for missing feedback data, unanswered reviews/questions, and new negative reviews.
 
 Important changes from the original plan:
 
@@ -45,16 +51,15 @@ Important changes from the original plan:
 - The existing report calculator may use its already implemented advertising spend flow. No new WB API domains or sync sources were added in Phase 0-1.
 - The `preferPersistedAdStats` option remains available in the report calculator for future DB-only dashboard work, but the current dashboard KPI path prioritizes consistency with the financial report.
 - The home screen focus/action block is now fed by `summary.problemCenter.insights`; page-local focus heuristics are deprecated in favor of the server-side problem center.
-- Phase 2 tracks future stocks, reviews, and questions as explicit freshness domains, but they are placeholders until the matching persisted modules exist. They do not create operational issues yet.
+- Phase 2 originally tracked stocks, reviews, and questions as future freshness domains; stocks are now implemented in Phase 3, and reviews/questions are now implemented in Phase 4.
 
 Outdated or deferred parts:
 
 - Phase 1 wording that implies `WbOrder` should drive the executive "orders" KPI is outdated. `WbOrder` remains useful for sales-plan analytics, but executive KPI consistency is tied to the financial report.
 - Any dashboard implementation that rebuilds action/focus items directly in `src/app/(dashboard)/page.tsx` is outdated; new rules should go into `src/lib/services/dashboard-problem-center.ts`.
-- Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are contract-ready but deferred until Phase 3-4 data sources are implemented.
+- Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are now backed by Phase 3-4 data sources.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
-- Inventory, reviews, questions, forecasts, recommendation engine, and dashboard exports remain future phases.
-- Reviews, questions, forecasts, recommendation engine, dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
+- Forecasts, recommendation engine, dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
 
 ## Purpose
 

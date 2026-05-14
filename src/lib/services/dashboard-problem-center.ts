@@ -7,6 +7,7 @@ import type {
   DashboardSummary,
   DashboardValueStatus,
 } from '@/types/dashboard'
+import type { FeedbackSummary } from '@/types/feedback'
 import type { StocksSummary } from '@/types/stocks'
 
 type ProblemRow = {
@@ -27,6 +28,7 @@ interface BuildDashboardProblemCenterInput {
   reportRowsCount: number
   reportRows: ProblemRow[]
   stocks: StocksSummary
+  feedback: FeedbackSummary
   freshnessItems: DashboardFreshnessItem[]
   generatedAt: string
 }
@@ -39,6 +41,7 @@ export function buildDashboardProblemCenter(
     ...buildReportAvailabilityIssues(input),
     ...buildProductIssues(input),
     ...buildStockIssues(input),
+    ...buildFeedbackIssues(input),
   ]
     .sort(compareIssues)
     .slice(0, 50)
@@ -56,6 +59,81 @@ export function buildDashboardProblemCenter(
     issues,
     insights,
   }
+}
+
+function buildFeedbackIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
+  if (input.feedback.status === 'missing') {
+    return [
+      {
+        id: 'feedback-missing',
+        category: 'unanswered_review_question',
+        severity: 'warning',
+        title: 'Синхронизировать отзывы и вопросы',
+        description: 'Нет сохраненной обратной связи покупателей, поэтому dashboard не видит негативные отзывы и вопросы без ответа.',
+        href: feedbackHref(input),
+        source: 'ProductReview + ProductQuestion',
+        metricLabel: 'Данные',
+        metricValue: 'нет',
+        entityId: null,
+        entityLabel: null,
+        createdAt: input.generatedAt,
+      },
+    ]
+  }
+
+  const issues: DashboardIssue[] = []
+  if (input.feedback.unansweredReviews > 0) {
+    issues.push({
+      id: 'unanswered-reviews',
+      category: 'unanswered_review_question',
+      severity: input.feedback.unansweredReviews >= 10 ? 'critical' : 'warning',
+      title: 'Есть отзывы без ответа',
+      description: 'Проверьте необработанные отзывы. В этой фазе NimbaOS только показывает очередь и не отправляет ответы в WB.',
+      href: `${feedbackHref(input)}&tab=reviews&answerStatus=unanswered`,
+      source: 'ProductReview',
+      metricLabel: 'Без ответа',
+      metricValue: String(input.feedback.unansweredReviews),
+      entityId: null,
+      entityLabel: null,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  if (input.feedback.unansweredQuestions > 0) {
+    issues.push({
+      id: 'unanswered-questions',
+      category: 'unanswered_review_question',
+      severity: input.feedback.unansweredQuestions >= 10 ? 'critical' : 'warning',
+      title: 'Есть вопросы без ответа',
+      description: 'Вопросы покупателей ждут обработки. Откройте очередь, чтобы не терять спрос по карточкам.',
+      href: `${feedbackHref(input)}&tab=questions&answerStatus=unanswered`,
+      source: 'ProductQuestion',
+      metricLabel: 'Без ответа',
+      metricValue: String(input.feedback.unansweredQuestions),
+      entityId: null,
+      entityLabel: null,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  if (input.feedback.negativeReviews > 0) {
+    issues.push({
+      id: 'negative-reviews',
+      category: 'unanswered_review_question',
+      severity: input.feedback.negativeReviews >= 5 ? 'critical' : 'warning',
+      title: 'Есть новые негативные отзывы',
+      description: 'Отзывы с оценкой 1-3 за выбранный период стоит разобрать первыми: они влияют на доверие к карточкам.',
+      href: `${feedbackHref(input)}&tab=reviews&rating=1`,
+      source: 'ProductReview',
+      metricLabel: 'Негативных',
+      metricValue: String(input.feedback.negativeReviews),
+      entityId: null,
+      entityLabel: null,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  return issues
 }
 
 function buildStockIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
@@ -371,6 +449,10 @@ function advertisingHref(input: BuildDashboardProblemCenterInput): string {
 
 function stockHref(input: BuildDashboardProblemCenterInput): string {
   return `/stocks?account=${input.accountId}`
+}
+
+function feedbackHref(input: BuildDashboardProblemCenterInput): string {
+  return `/reviews?account=${input.accountId}`
 }
 
 function formatRub(value: number): string {

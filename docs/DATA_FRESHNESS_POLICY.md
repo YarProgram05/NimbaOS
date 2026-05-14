@@ -38,6 +38,7 @@ WB API — механизм обновления базы, а не основн�
 - Sales plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, sales plan tables.
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`, `ad_action_logs`.
 - Stocks: `stock_snapshots`, `stock_items`, `warehouses`; WB API is used only by `stocks.current` sync, and UI reads the latest local snapshot.
+- Reviews/questions: `product_reviews`, `product_questions`; WB API is used only by read-only `reviews.refresh` and `questions.refresh` syncs, and UI/dashboard read local rows. Answering, marking viewed, rejecting, or editing feedback in WB is out of scope for the current read-only phase.
 
 ## WB API limits
 

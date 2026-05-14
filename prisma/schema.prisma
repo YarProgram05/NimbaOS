@@ -22,6 +22,8 @@ enum SyncJobKind {
   ADVERTISING_STATS
   ADVERTISING_CLUSTERS
   STOCKS_CURRENT
+  REVIEWS_REFRESH
+  QUESTIONS_REFRESH
 }
 
 enum SyncJobStatus {
@@ -111,6 +113,8 @@ model WbAccount {
   syncCoverages      SyncDataCoverage[]
   warehouses         Warehouse[]
   stockSnapshots     StockSnapshot[]
+  productReviews     ProductReview[]
+  productQuestions   ProductQuestion[]
 
   @@map("wb_accounts")
 }
@@ -195,6 +199,8 @@ model Product {
   sizes      ProductSize[]
   materials  ProductMaterial[]
   stockItems StockItem[]
+  reviews    ProductReview[]
+  questions  ProductQuestion[]
 
   @@unique([wbAccountId, nmId])
   @@index([nmId])
@@ -281,6 +287,79 @@ model StockItem {
   @@index([warehouseId])
   @@index([chrtId])
   @@map("stock_items")
+}
+
+model ProductReview {
+  id             String   @id @default(uuid())
+  wbAccountId    String
+  externalId     String
+  nmId           Int
+  rating         Int
+  text           String?  @db.Text
+  pros           String?  @db.Text
+  cons           String?  @db.Text
+  state          String?
+  answerText     String?  @db.Text
+  answerState    String?
+  answerEditable Boolean?
+  isAnswered     Boolean  @default(false)
+  hasMedia       Boolean  @default(false)
+  photos         Json?
+  videos         Json?
+  productId      String?
+  vendorCode     String?
+  productName    String?
+  brandName      String?
+  supplierName   String?
+  productSnapshot Json?
+  createdDate    DateTime
+  fetchedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  wbAccount      WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  product        Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([wbAccountId, externalId])
+  @@index([wbAccountId, createdDate])
+  @@index([wbAccountId, nmId])
+  @@index([wbAccountId, isAnswered])
+  @@index([rating])
+  @@map("product_reviews")
+}
+
+model ProductQuestion {
+  id               String   @id @default(uuid())
+  wbAccountId      String
+  externalId       String
+  nmId             Int
+  text             String   @db.Text
+  state            String?
+  wasViewed        Boolean  @default(false)
+  isWarned         Boolean  @default(false)
+  answerText       String?  @db.Text
+  answerEditable   Boolean?
+  answerCreatedDate DateTime?
+  isAnswered       Boolean  @default(false)
+  productId        String?
+  vendorCode       String?
+  productName      String?
+  brandName        String?
+  supplierName     String?
+  productSnapshot  Json?
+  createdDate      DateTime
+  fetchedAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  wbAccount        WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  product          Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([wbAccountId, externalId])
+  @@index([wbAccountId, createdDate])
+  @@index([wbAccountId, nmId])
+  @@index([wbAccountId, isAnswered])
+  @@map("product_questions")
 }
 
 model ProductMaterial {

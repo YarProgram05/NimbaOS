@@ -11,6 +11,7 @@ import { syncAdCampaigns } from '@/lib/services/sync-ad-campaigns'
 import { syncAdStats } from '@/lib/services/sync-ad-stats'
 import { syncAdClusters } from '@/lib/services/sync-ad-clusters'
 import { syncStocksCurrent } from '@/lib/services/sync-stocks'
+import { syncQuestions, syncReviews } from '@/lib/services/sync-feedback'
 import { DEFAULT_SYNC_JOB_OPTIONS, SYNC_JOB_KINDS, getSyncQueue, type SyncJobData } from '@/lib/queue'
 import { createRunForBullJob } from '@/lib/queue/sync-jobs'
 import { WbRateLimitError } from '@/lib/wb-api/client'
@@ -31,6 +32,8 @@ type PrismaKind =
   | 'ADVERTISING_STATS'
   | 'ADVERTISING_CLUSTERS'
   | 'STOCKS_CURRENT'
+  | 'REVIEWS_REFRESH'
+  | 'QUESTIONS_REFRESH'
 
 const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: 'PRODUCTS_REFRESH',
@@ -40,6 +43,8 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.ADVERTISING_STATS]: 'ADVERTISING_STATS',
   [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: 'ADVERTISING_CLUSTERS',
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'STOCKS_CURRENT',
+  [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'REVIEWS_REFRESH',
+  [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'QUESTIONS_REFRESH',
 }
 
 const SCHEDULED_START_GRACE_MINUTES = 10
@@ -276,6 +281,18 @@ async function processSyncJobData(data: SyncJobData) {
       )
     case SYNC_JOB_KINDS.STOCKS_CURRENT:
       return syncStocksCurrent(data.wbAccountId)
+    case SYNC_JOB_KINDS.REVIEWS_REFRESH: {
+      const { dateFrom, dateTo } = resolvePeriod(data)
+      const result = await syncReviews(data.wbAccountId, { dateFrom, dateTo })
+      await markSyncCoverage(data.wbAccountId, SYNC_JOB_KINDS.REVIEWS_REFRESH, dateFrom, dateTo)
+      return result
+    }
+    case SYNC_JOB_KINDS.QUESTIONS_REFRESH: {
+      const { dateFrom, dateTo } = resolvePeriod(data)
+      const result = await syncQuestions(data.wbAccountId, { dateFrom, dateTo })
+      await markSyncCoverage(data.wbAccountId, SYNC_JOB_KINDS.QUESTIONS_REFRESH, dateFrom, dateTo)
+      return result
+    }
   }
 }
 

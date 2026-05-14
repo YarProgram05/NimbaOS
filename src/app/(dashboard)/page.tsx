@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   LineChart,
+  MessageSquareText,
   RefreshCw,
   Target,
   TrendingDown,
@@ -76,6 +77,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const salesPlanHref = `/sales-plan?${accountQuery}`
   const advertisingHref = `/advertising?${accountQuery}`
   const stocksHref = `/stocks?${accountQuery}`
+  const reviewsHref = `/reviews?${accountQuery}`
   const syncHref = `/sync?${accountQuery}`
 
   return (
@@ -202,6 +204,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <MiniMetric label="Нет остатка" value={String(summary.stocks.outOfStockCount)} />
               <MiniMetric label="Низкий" value={String(summary.stocks.lowStockCount)} />
               <MiniMetric label="В пути" value={formatOptionalNumber(summary.stocks.inWayToClient + summary.stocks.inWayFromClient, 0)} />
+            </div>
+          </section>
+
+          <section className="old-money-panel rounded-md p-4">
+            <PanelHeader
+              label="Клиенты"
+              title="Отзывы и вопросы"
+              href={reviewsHref}
+              icon={<MessageSquareText className="h-5 w-5 text-primary" />}
+            />
+            <StatusLine
+              status={summary.feedback.status === 'ready' ? 'ready' : 'missing'}
+              hint={summary.feedback.syncedAt ? `Обновлено ${formatDateTime(summary.feedback.syncedAt)}` : 'Синхронизируйте отзывы и вопросы, чтобы видеть негатив и очередь без ответа.'}
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <MiniMetric label="Средняя оценка" value={formatOptionalNumber(summary.feedback.averageRating, 2)} />
+              <MiniMetric label="Негативные" value={String(summary.feedback.negativeReviews)} />
+              <MiniMetric label="Отзывы без ответа" value={String(summary.feedback.unansweredReviews)} />
+              <MiniMetric label="Вопросы без ответа" value={String(summary.feedback.unansweredQuestions)} />
             </div>
           </section>
 

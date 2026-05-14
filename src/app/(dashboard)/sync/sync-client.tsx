@@ -61,6 +61,8 @@ const JOB_LABELS: Record<SyncJobKind, string> = {
   [SYNC_JOB_KINDS.ADVERTISING_STATS]: 'Статистика рекламы',
   [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: 'Кластеры рекламы',
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'Остатки WB',
+  [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'Отзывы',
+  [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'Вопросы',
 }
 
 const STATUS_LABELS: Record<SyncJobRunRow['status'], string> = {
@@ -84,6 +86,8 @@ const MANUAL_JOBS: SyncJobKind[] = [
   SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS,
   SYNC_JOB_KINDS.ADVERTISING_STATS,
   SYNC_JOB_KINDS.STOCKS_CURRENT,
+  SYNC_JOB_KINDS.REVIEWS_REFRESH,
+  SYNC_JOB_KINDS.QUESTIONS_REFRESH,
 ]
 
 function formatDateTime(value: string | null): string {
