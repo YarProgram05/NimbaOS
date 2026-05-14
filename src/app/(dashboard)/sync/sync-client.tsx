@@ -60,6 +60,7 @@ const JOB_LABELS: Record<SyncJobKind, string> = {
   [SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS]: 'Рекламные кампании',
   [SYNC_JOB_KINDS.ADVERTISING_STATS]: 'Статистика рекламы',
   [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: 'Кластеры рекламы',
+  [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'Остатки WB',
 }
 
 const STATUS_LABELS: Record<SyncJobRunRow['status'], string> = {
@@ -82,6 +83,7 @@ const MANUAL_JOBS: SyncJobKind[] = [
   SYNC_JOB_KINDS.SALES_PLAN_PERIOD,
   SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS,
   SYNC_JOB_KINDS.ADVERTISING_STATS,
+  SYNC_JOB_KINDS.STOCKS_CURRENT,
 ]
 
 function formatDateTime(value: string | null): string {
@@ -343,7 +345,8 @@ export function SyncClient({
                           disabled={
                             !canEnqueue ||
                             schedule.kind === SYNC_JOB_KINDS.PRODUCTS_REFRESH ||
-                            schedule.kind === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS
+                            schedule.kind === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS ||
+                            schedule.kind === SYNC_JOB_KINDS.STOCKS_CURRENT
                           }
                           onChange={(event) =>
                             patchSchedule(schedule.kind, {

@@ -60,6 +60,11 @@ export interface AdvertisingClustersJobData extends SyncJobBase {
   dateTo: string
 }
 
+export interface StocksCurrentJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.STOCKS_CURRENT
+  wbAccountId: string
+}
+
 export type SyncJobData =
   | ProductsRefreshJobData
   | ReportsPeriodJobData
@@ -67,6 +72,7 @@ export type SyncJobData =
   | AdvertisingCampaignsJobData
   | AdvertisingStatsJobData
   | AdvertisingClustersJobData
+  | StocksCurrentJobData
 
 export const DEFAULT_SYNC_JOB_OPTIONS: JobsOptions = {
   attempts: 3,

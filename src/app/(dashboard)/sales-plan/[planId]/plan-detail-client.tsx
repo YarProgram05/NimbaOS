@@ -397,7 +397,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
           <DropdownMenuContent align="start">
             <DropdownMenuItem onClick={handleAddFromStock} disabled={isAddingFromStock}>
               <Package className="h-4 w-4 mr-2" />
-              {isAddingFromStock ? 'Добавление...' : 'Из остатков (все товары)'}
+              {isAddingFromStock ? 'Добавление...' : 'Из остатков WB'}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setAddDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />

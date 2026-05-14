@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { getSyncCoverage } from '@/lib/sync/coverage'
 import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
 import { calculateReport } from '@/lib/services/report-calculator'
+import { getStocksSummary } from '@/lib/services/stocks'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
 import type { ReportData } from '@/types/reports'
 import type {
@@ -53,6 +54,11 @@ const SOURCE_MAP = [
     sources: ['SyncJobRun', 'SyncDataCoverage', 'Report calculator output'],
     fallback: 'Problems become actionable dashboard items; failed sync jobs do not block the whole dashboard.',
   },
+  {
+    widget: 'Stock risk',
+    sources: ['StockSnapshot', 'StockItem', 'Warehouse', 'CostPrice', 'WbSale'],
+    fallback: 'Нет снимка остатков: блок показывает явное состояние missing и предлагает синхронизацию.',
+  },
 ]
 
 const FRESHNESS_DOMAINS: {
@@ -66,6 +72,7 @@ const FRESHNESS_DOMAINS: {
     | 'ADVERTISING_CAMPAIGNS'
     | 'ADVERTISING_STATS'
     | 'ADVERTISING_CLUSTERS'
+    | 'STOCKS_CURRENT'
     | null
   href: string
   implemented: boolean
@@ -129,10 +136,10 @@ const FRESHNESS_DOMAINS: {
     key: 'stocks',
     label: 'Остатки',
     source: 'stocks',
-    prismaKind: null,
-    href: '/sync',
-    implemented: false,
-    staleAfterHours: null,
+    prismaKind: 'STOCKS_CURRENT',
+    href: '/stocks',
+    implemented: true,
+    staleAfterHours: 2,
   },
   {
     key: 'reviews',
@@ -215,6 +222,7 @@ export async function getDashboardSummary(
     comparisonReport,
     plan,
     advertising,
+    stocks,
     freshness,
   ] = await Promise.all([
     financialStatus === 'missing'
@@ -225,6 +233,7 @@ export async function getDashboardSummary(
       : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, { preferPersistedAdStats: true }),
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
+    getStocksSummary(account.id),
     getFreshnessSummary(account.id, period.dateFrom, period.dateTo),
   ])
 
@@ -267,6 +276,7 @@ export async function getDashboardSummary(
     financialStatus,
     reportRowsCount,
     reportRows: productRows,
+    stocks,
     freshnessItems: freshness.items,
     generatedAt,
   })
@@ -296,6 +306,7 @@ export async function getDashboardSummary(
       drr,
       status: mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
     },
+    stocks,
     products: {
       status: productStatus,
       topProfit,
@@ -705,6 +716,14 @@ async function countFreshnessRows(
       },
     })
   }
+  if (key === 'stocks') {
+    const snapshot = await prisma.stockSnapshot.findFirst({
+      where: { wbAccountId },
+      orderBy: { syncedAt: 'desc' },
+      select: { id: true },
+    })
+    return snapshot ? prisma.stockItem.count({ where: { snapshotId: snapshot.id } }) : 0
+  }
   return 0
 }
 
@@ -715,6 +734,7 @@ function freshnessStatus(
   lastSuccessAt: Date | null,
 ): DashboardValueStatus {
   if (source === 'products') return rowCount > 0 ? 'ready' : lastSuccessAt ? 'partial' : 'missing'
+  if (source === 'stocks') return lastSuccessAt ? 'ready' : 'missing'
   if (source === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS) return rowCount > 0 ? 'ready' : lastSuccessAt ? 'partial' : 'missing'
   if (isCovered) return 'ready'
   if (rowCount > 0 || lastSuccessAt) return 'partial'
@@ -835,6 +855,7 @@ function reportHint(status: DashboardValueStatus): string | null {
 
 function freshnessHint(key: string): string {
   if (key === 'products') return 'Обновите карточки товаров.'
+  if (key === 'stocks') return 'Синхронизируйте текущие остатки WB.'
   if (key === 'reports') return 'Синхронизируйте финансовый отчет.'
   if (key === 'sales-plan') return 'Синхронизируйте продажи, заказы и воронку.'
   return 'Синхронизируйте рекламную статистику.'

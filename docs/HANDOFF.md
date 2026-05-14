@@ -6,6 +6,17 @@ NimbaOS находится после Phase 8 background sync на уровне 
 
 ## Latest session summary
 
+Dashboard analytics Phase 3 on 2026-05-14:
+- implemented WB warehouse inventory v1 using the current seller analytics stock endpoint, not deprecated statistics stocks;
+- added Prisma models for warehouses, stock snapshots and stock items, plus `ProductSize.chrtId`;
+- added `stocks.current` / `STOCKS_CURRENT` sync kind, worker handling, `/sync` manual button and default schedule;
+- added `/stocks` with KPI cards, filters, latest snapshot timestamp, risk badges and empty state sync action;
+- connected stock summary to the home dashboard, data freshness and problem center issues for missing stock data, low stock and out of stock;
+- changed sales-plan add-from-stock to use only products with positive quantity in the latest stock snapshot;
+- verified `npx prisma validate`, `npx prisma generate`, `npm run type-check`, and `npm run build`.
+
+No live WB stock sync, DB migration apply, DB push or production migration was run.
+
 Financial reports follow-up on 2026-05-14:
 - fixed `/reports` layout so the page header is compact, controls stay visible, page-level scroll is removed, table headers and totals are sticky, and only the table scrolls internally;
 - added persisted per-user report column order via `UserPreference`;

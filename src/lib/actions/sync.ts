@@ -264,6 +264,27 @@ export async function enqueueAdClustersSyncAction(
   }
 }
 
+export async function enqueueStocksSyncAction(
+  wbAccountId: string,
+): Promise<ActionResult<EnqueuedSyncJob>> {
+  try {
+    await requireManagerSession()
+    if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
+
+    await prisma.wbAccount.findUniqueOrThrow({ where: { id: wbAccountId }, select: { id: true } })
+
+    const job = await enqueueSyncJob({
+      kind: SYNC_JOB_KINDS.STOCKS_CURRENT,
+      source: 'manual',
+      wbAccountId,
+    })
+
+    return { success: true, data: job }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка постановки задачи' }
+  }
+}
+
 export async function enqueueManualSyncAction(
   kind: SyncJobKind,
   wbAccountId: string,
@@ -307,6 +328,8 @@ export async function enqueueManualSyncAction(
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : 'Ошибка постановки задачи' }
       }
+    case SYNC_JOB_KINDS.STOCKS_CURRENT:
+      return enqueueStocksSyncAction(wbAccountId)
     case SYNC_JOB_KINDS.ADVERTISING_CLUSTERS:
       return { success: false, error: 'Кластеры запускаются из карточки кампании с выбранным периодом' }
   }

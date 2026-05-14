@@ -21,6 +21,7 @@ enum SyncJobKind {
   ADVERTISING_CAMPAIGNS
   ADVERTISING_STATS
   ADVERTISING_CLUSTERS
+  STOCKS_CURRENT
 }
 
 enum SyncJobStatus {
@@ -108,6 +109,8 @@ model WbAccount {
   syncJobRuns        SyncJobRun[]
   syncSchedules      SyncScheduleSetting[]
   syncCoverages      SyncDataCoverage[]
+  warehouses         Warehouse[]
+  stockSnapshots     StockSnapshot[]
 
   @@map("wb_accounts")
 }
@@ -191,6 +194,7 @@ model Product {
   wbAccount  WbAccount      @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
   sizes      ProductSize[]
   materials  ProductMaterial[]
+  stockItems StockItem[]
 
   @@unique([wbAccountId, nmId])
   @@index([nmId])
@@ -202,6 +206,7 @@ model Product {
 model ProductSize {
   id        String   @id @default(uuid())
   productId String
+  chrtId    Int?
   techSize  String
   wbSize    String?
   barcode   String
@@ -210,11 +215,72 @@ model ProductSize {
   spp       Decimal? @db.Decimal(10, 2)
   createdAt DateTime @default(now())
 
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItems StockItem[]
 
   @@index([productId])
+  @@index([chrtId])
   @@index([barcode])
   @@map("product_sizes")
+}
+
+model Warehouse {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  warehouseId Int
+  name        String
+  regionName  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  stockItems  StockItem[]
+
+  @@unique([wbAccountId, warehouseId])
+  @@index([wbAccountId])
+  @@index([warehouseId])
+  @@map("warehouses")
+}
+
+model StockSnapshot {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  syncedAt    DateTime @default(now())
+  source      String   @default("wb_warehouses")
+  createdAt   DateTime @default(now())
+
+  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  items       StockItem[]
+
+  @@index([wbAccountId, syncedAt])
+  @@map("stock_snapshots")
+}
+
+model StockItem {
+  id              String   @id @default(uuid())
+  snapshotId      String
+  wbAccountId     String
+  nmId            Int
+  chrtId          Int?
+  warehouseId     Int
+  quantity        Int      @default(0)
+  inWayToClient   Int      @default(0)
+  inWayFromClient Int      @default(0)
+  productId       String?
+  productSizeId   String?
+  createdAt       DateTime @default(now())
+
+  snapshot        StockSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  product         Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productSize     ProductSize?  @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
+  warehouse       Warehouse    @relation(fields: [wbAccountId, warehouseId], references: [wbAccountId, warehouseId], onDelete: Cascade)
+
+  @@unique([snapshotId, nmId, chrtId, warehouseId])
+  @@index([snapshotId])
+  @@index([wbAccountId, nmId])
+  @@index([warehouseId])
+  @@index([chrtId])
+  @@map("stock_items")
 }
 
 model ProductMaterial {

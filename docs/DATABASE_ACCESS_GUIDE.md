@@ -16,6 +16,7 @@
 - `ad_campaign_stats`: advertising daily stats by campaign/date/source.
 - `ad_campaign_nm_stats`: advertising daily stats by campaign/date/source/nmId.
 - `ad_campaign_clusters`: advertising cluster stats by period.
+- `stock_snapshots`, `stock_items`, `warehouses`: current WB warehouse inventory snapshots. Read the latest `stock_snapshots` row per `wbAccountId` for stock analytics.
 
 ## Normalized project tables
 

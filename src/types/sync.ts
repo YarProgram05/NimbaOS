@@ -5,6 +5,7 @@ export const SYNC_JOB_KINDS = {
   ADVERTISING_CAMPAIGNS: 'advertising.campaigns',
   ADVERTISING_STATS: 'advertising.stats',
   ADVERTISING_CLUSTERS: 'advertising.clusters',
+  STOCKS_CURRENT: 'stocks.current',
 } as const
 
 export type SyncJobKind = (typeof SYNC_JOB_KINDS)[keyof typeof SYNC_JOB_KINDS]

@@ -7,6 +7,7 @@ import type {
   DashboardSummary,
   DashboardValueStatus,
 } from '@/types/dashboard'
+import type { StocksSummary } from '@/types/stocks'
 
 type ProblemRow = {
   nmId: number
@@ -25,6 +26,7 @@ interface BuildDashboardProblemCenterInput {
   financialStatus: DashboardValueStatus
   reportRowsCount: number
   reportRows: ProblemRow[]
+  stocks: StocksSummary
   freshnessItems: DashboardFreshnessItem[]
   generatedAt: string
 }
@@ -36,6 +38,7 @@ export function buildDashboardProblemCenter(
     ...buildFreshnessIssues(input),
     ...buildReportAvailabilityIssues(input),
     ...buildProductIssues(input),
+    ...buildStockIssues(input),
   ]
     .sort(compareIssues)
     .slice(0, 50)
@@ -53,6 +56,71 @@ export function buildDashboardProblemCenter(
     issues,
     insights,
   }
+}
+
+function buildStockIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
+  if (input.stocks.status === 'missing') {
+    return [
+      {
+        id: 'stocks-missing',
+        category: 'product_without_stock_data',
+        severity: 'warning',
+        title: 'Синхронизировать остатки WB',
+        description: 'Нет актуального снимка остатков, поэтому dashboard не может показать дефицит, отсутствие товара и излишки.',
+        href: stockHref(input),
+        source: 'StockSnapshot',
+        metricLabel: 'Снимок',
+        metricValue: 'нет данных',
+        entityId: null,
+        entityLabel: null,
+        createdAt: input.generatedAt,
+      },
+    ]
+  }
+
+  const issues: DashboardIssue[] = []
+  const seen = new Set<number>()
+  for (const item of input.stocks.items) {
+    if (seen.has(item.nmId)) continue
+    seen.add(item.nmId)
+    const label = item.vendorCode || `WB ${item.nmId}`
+
+    if (item.risk === 'out_of_stock') {
+      issues.push({
+        id: `out-of-stock:${item.nmId}`,
+        category: 'out_of_stock',
+        severity: 'critical',
+        title: `Нет остатка: ${label}`,
+        description: 'Товар отсутствует на складах WB. Проверьте поставку или исключите его из активного плана продаж.',
+        href: stockHref(input),
+        source: 'StockItem',
+        metricLabel: 'Остаток',
+        metricValue: '0 шт.',
+        entityId: String(item.nmId),
+        entityLabel: label,
+        createdAt: input.generatedAt,
+      })
+    }
+
+    if (item.risk === 'low_stock') {
+      issues.push({
+        id: `low-stock:${item.nmId}`,
+        category: 'low_stock',
+        severity: 'warning',
+        title: `Низкий остаток: ${label}`,
+        description: 'Остаток близок к нулю по текущему темпу продаж или ниже минимального порога.',
+        href: stockHref(input),
+        source: 'StockItem + WbSale',
+        metricLabel: 'Остаток',
+        metricValue: `${item.quantity} шт.`,
+        entityId: String(item.nmId),
+        entityLabel: label,
+        createdAt: input.generatedAt,
+      })
+    }
+  }
+
+  return issues.slice(0, 20)
 }
 
 function buildFreshnessIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
@@ -299,6 +367,10 @@ function referencesHref(input: BuildDashboardProblemCenterInput): string {
 
 function advertisingHref(input: BuildDashboardProblemCenterInput): string {
   return `/advertising?account=${input.accountId}`
+}
+
+function stockHref(input: BuildDashboardProblemCenterInput): string {
+  return `/stocks?account=${input.accountId}`
 }
 
 function formatRub(value: number): string {

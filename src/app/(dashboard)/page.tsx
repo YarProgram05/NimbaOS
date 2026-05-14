@@ -12,6 +12,7 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  Warehouse,
 } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { getDashboardSummary } from '@/lib/services/dashboard-summary'
@@ -74,6 +75,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const reportsHref = `/reports?${accountQuery}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`
   const salesPlanHref = `/sales-plan?${accountQuery}`
   const advertisingHref = `/advertising?${accountQuery}`
+  const stocksHref = `/stocks?${accountQuery}`
   const syncHref = `/sync?${accountQuery}`
 
   return (
@@ -181,6 +183,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <MiniMetric label="CTR" value={formatOptionalPercent(summary.advertising.ctr)} />
               <MiniMetric label="CPC" value={formatOptionalRub(summary.advertising.cpc)} />
               <MiniMetric label="Заказы" value={formatOptionalNumber(summary.advertising.orders, 0)} />
+            </div>
+          </section>
+
+          <section className="old-money-panel rounded-md p-4">
+            <PanelHeader
+              label="Остатки"
+              title="Риски склада WB"
+              href={stocksHref}
+              icon={<Warehouse className="h-5 w-5 text-primary" />}
+            />
+            <StatusLine
+              status={summary.stocks.status === 'ready' ? 'ready' : 'missing'}
+              hint={summary.stocks.syncedAt ? `Синхронизировано ${formatDateTime(summary.stocks.syncedAt)}` : 'Синхронизируйте остатки WB, чтобы видеть дефицит и излишки.'}
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <MiniMetric label="Всего, шт." value={formatOptionalNumber(summary.stocks.totalUnits, 0)} />
+              <MiniMetric label="Нет остатка" value={String(summary.stocks.outOfStockCount)} />
+              <MiniMetric label="Низкий" value={String(summary.stocks.lowStockCount)} />
+              <MiniMetric label="В пути" value={formatOptionalNumber(summary.stocks.inWayToClient + summary.stocks.inWayFromClient, 0)} />
             </div>
           </section>
 

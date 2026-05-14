@@ -37,6 +37,7 @@ WB API — механизм обновления базы, а не основн�
 - Financial reports: `realization_reports`, `paid_storage`, references, products, advertising stats.
 - Sales plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, sales plan tables.
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`, `ad_action_logs`.
+- Stocks: `stock_snapshots`, `stock_items`, `warehouses`; WB API is used only by `stocks.current` sync, and UI reads the latest local snapshot.
 
 ## WB API limits
 

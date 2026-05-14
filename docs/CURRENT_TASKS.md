@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-3
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 3 is implemented as WB warehouse inventory v1: persisted stock snapshots, `stocks.current` sync, `/stocks`, dashboard stock-risk widget, stock freshness/problem-center issues, and sales-plan add-from-stock based on positive current stock.
+Next step: Apply the new Prisma migration in the target environment, run one stock sync for a test account, and verify `/stocks` plus dashboard stock risk with real WB data.
+Related files: `prisma/schema.prisma`, `src/lib/services/sync-stocks.ts`, `src/lib/services/stocks.ts`, `src/app/(dashboard)/stocks`, `src/lib/services/dashboard-summary.ts`, `src/lib/services/dashboard-problem-center.ts`, `src/lib/actions/sales-plan.ts`
+Risks: Phase 3 v1 intentionally covers only WB warehouse inventory from seller analytics; FBS/seller warehouses and stock history are deferred.
+
 ### TASK-REPORTS-AD-ACCURACY-UX
 
 Status: Done

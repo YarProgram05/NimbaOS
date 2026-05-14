@@ -203,6 +203,7 @@ async function upsertCard(
 
           return {
             productId,
+            chrtId: s.chrtID ?? s.sizeID ?? null,
             techSize: s.techSize,
             wbSize:   s.wbSize || null,
             barcode,
@@ -238,10 +239,7 @@ async function updatePrices(
 ): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { wbAccountId_nmId: { wbAccountId, nmId: good.nmID } },
-    select: {
-      id: true,
-      sizes: { select: { id: true, techSize: true, wbSize: true } },
-    },
+    select: { id: true, sizes: { select: { id: true, chrtId: true, techSize: true, wbSize: true } } },
   })
 
   if (!product) return  // Card not yet in DB (edge case)
@@ -269,6 +267,7 @@ async function updatePrices(
   for (const sizePrice of good.sizes) {
     const apiSizeName = normalizeSize(sizePrice.techSizeName)
     const dbSize =
+      product.sizes.find((s) => s.chrtId === sizePrice.sizeID) ??
       product.sizes.find((s) => normalizeSize(s.techSize) === apiSizeName) ??
       product.sizes.find((s) => normalizeSize(s.wbSize) === apiSizeName) ??
       product.sizes.find((s) => normalizeSize(s.techSize) === '0' && apiSizeName === '') ??

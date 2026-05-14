@@ -6,6 +6,8 @@ export interface WbCardPhoto {
 }
 
 export interface WbCardSize {
+  chrtID?: number
+  sizeID?: number
   techSize: string
   wbSize: string
   skus: string[]         // barcodes

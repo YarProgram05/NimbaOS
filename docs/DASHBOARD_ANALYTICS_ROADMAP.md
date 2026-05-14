@@ -2,7 +2,7 @@
 
 ## Implementation Status
 
-Last updated: 2026-05-09.
+Last updated: 2026-05-14.
 
 Implemented:
 
@@ -29,6 +29,12 @@ Implemented:
   - The home screen "Focus" block now reads `summary.problemCenter.insights`, and every insight has an action link.
   - Failed sync jobs are surfaced as issues with the latest stored error when available, without blocking the rest of the dashboard summary.
   - Freshness issues now include stale-but-covered sources, so an old successful sync is not hidden just because period coverage exists.
+- Phase 3 is implemented as the WB warehouse inventory v1.
+  - Added persisted `Warehouse`, `StockSnapshot`, and `StockItem` models plus `ProductSize.chrtId`.
+  - Added read-only WB warehouse inventory sync through `stocks.current` / `STOCKS_CURRENT` using the current seller analytics stock endpoint, not deprecated statistics stocks.
+  - Added `/stocks` with stock KPI cards, filters, latest-sync timestamp, risk labels, and a manual sync action.
+  - Dashboard now includes stock summary, stock freshness, and stock-related problem-center issues for missing stock data, low stock, and out of stock.
+  - Sales plan "add from stock" now uses products with positive quantity in the latest stock snapshot instead of all product cards.
 
 Important changes from the original plan:
 
@@ -47,6 +53,7 @@ Outdated or deferred parts:
 - Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are contract-ready but deferred until Phase 3-4 data sources are implemented.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
 - Inventory, reviews, questions, forecasts, recommendation engine, and dashboard exports remain future phases.
+- Reviews, questions, forecasts, recommendation engine, dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
 
 ## Purpose
 

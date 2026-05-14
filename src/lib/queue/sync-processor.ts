@@ -10,6 +10,7 @@ import { syncFunnel } from '@/lib/services/sync-funnel'
 import { syncAdCampaigns } from '@/lib/services/sync-ad-campaigns'
 import { syncAdStats } from '@/lib/services/sync-ad-stats'
 import { syncAdClusters } from '@/lib/services/sync-ad-clusters'
+import { syncStocksCurrent } from '@/lib/services/sync-stocks'
 import { DEFAULT_SYNC_JOB_OPTIONS, SYNC_JOB_KINDS, getSyncQueue, type SyncJobData } from '@/lib/queue'
 import { createRunForBullJob } from '@/lib/queue/sync-jobs'
 import { WbRateLimitError } from '@/lib/wb-api/client'
@@ -29,6 +30,7 @@ type PrismaKind =
   | 'ADVERTISING_CAMPAIGNS'
   | 'ADVERTISING_STATS'
   | 'ADVERTISING_CLUSTERS'
+  | 'STOCKS_CURRENT'
 
 const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: 'PRODUCTS_REFRESH',
@@ -37,6 +39,7 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS]: 'ADVERTISING_CAMPAIGNS',
   [SYNC_JOB_KINDS.ADVERTISING_STATS]: 'ADVERTISING_STATS',
   [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: 'ADVERTISING_CLUSTERS',
+  [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'STOCKS_CURRENT',
 }
 
 const SCHEDULED_START_GRACE_MINUTES = 10
@@ -271,6 +274,8 @@ async function processSyncJobData(data: SyncJobData) {
         data.dateFrom,
         data.dateTo,
       )
+    case SYNC_JOB_KINDS.STOCKS_CURRENT:
+      return syncStocksCurrent(data.wbAccountId)
   }
 }
 

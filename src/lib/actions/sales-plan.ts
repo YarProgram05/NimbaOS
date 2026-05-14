@@ -288,9 +288,23 @@ export async function addItemsFromStockAction(
     if (!planId) return { success: false, error: 'План не указан' }
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
 
-    // Fetch all products for the account
-    const products = await prisma.product.findMany({
+    const latestSnapshot = await prisma.stockSnapshot.findFirst({
       where: { wbAccountId },
+      orderBy: { syncedAt: 'desc' },
+      select: { id: true },
+    })
+    if (!latestSnapshot) return { success: false, error: 'Сначала синхронизируйте остатки WB.' }
+
+    const stockRows = await prisma.stockItem.findMany({
+      where: { snapshotId: latestSnapshot.id, quantity: { gt: 0 } },
+      select: { nmId: true },
+      distinct: ['nmId'],
+    })
+    const stockedNmIds = stockRows.map((row) => row.nmId)
+    if (!stockedNmIds.length) return { success: false, error: 'В последнем снимке нет товаров с положительным остатком.' }
+
+    const products = await prisma.product.findMany({
+      where: { wbAccountId, nmId: { in: stockedNmIds } },
       select: { nmId: true, vendorCode: true },
     })
 
