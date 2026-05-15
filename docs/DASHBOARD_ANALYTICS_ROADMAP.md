@@ -62,6 +62,12 @@ Implemented:
   - Closed or too-short periods return explicit `not_applicable` forecast statuses instead of fake precision.
   - The home screen now includes a compact "Forecast and pace" panel and uses `summary.recommendations` as the primary Focus/action center.
   - Recommendations remain deterministic and explainable; no automated destructive WB actions were added.
+- Phase 8 is implemented as dashboard management Excel exports.
+  - Added `src/lib/services/dashboard-export.ts` to build dashboard workbooks from the same `DashboardSummary` values shown on screen.
+  - Added a server action for dashboard Excel export in `src/lib/actions/dashboard.ts`.
+  - The home screen now has an Excel menu with compact exports for dashboard summary, product risks, stock risks, and review/question workload.
+  - Every workbook includes account, period, comparison period, sync freshness, and generation context.
+  - PDF executive report remains optional and deferred.
 
 Important changes from the original plan:
 
@@ -79,7 +85,7 @@ Outdated or deferred parts:
 - Any dashboard implementation that rebuilds action/focus items directly in `src/app/(dashboard)/page.tsx` is outdated; new rules should go into `src/lib/services/dashboard-problem-center.ts`.
 - Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are now backed by Phase 3-4 data sources.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
-- Dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
+- Optional PDF executive report, stock history, and FBS/seller-warehouse inventory remain future phases.
 
 ## Purpose
 

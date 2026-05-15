@@ -2,9 +2,18 @@
 
 ## Current objective
 
-NimbaOS находится после Phase 8 background sync на уровне кода. Поддерживать документацию как систему памяти и дальше двигаться к Phase 9 polish или к live verification по явному запросу.
+NimbaOS находится после dashboard analytics Phase 8 exports на уровне кода. Поддерживать документацию как систему памяти и дальше двигаться к optional PDF/verification, Phase 9 UI polish, или live WB verification по явному запросу.
 
 ## Latest session summary
+
+Dashboard analytics Phase 8 on 2026-05-15:
+- implemented dashboard management Excel exports from the existing `DashboardSummary`;
+- added workbooks for dashboard summary, product risks, stock risks, and review/question workload;
+- included account, period, comparison period, sync freshness, and generation context in every workbook;
+- added the dashboard server export action and an Excel menu on the home dashboard;
+- verified `npm run type-check`.
+
+No live WB sync, DB migration, production command, or PDF generation was run. Optional PDF executive report remains deferred.
 
 Dashboard analytics Phase 3 on 2026-05-14:
 - implemented WB warehouse inventory v1 using the current seller analytics stock endpoint, not deprecated statistics stocks;
@@ -97,6 +106,8 @@ Phase 8 реализована поверх существующего dirty wor
 - Не автоматизировать WB-changing actions.
 
 ## Last updated
+
+2026-05-15 - Dashboard analytics Phase 8 Excel exports.
 
 2026-05-14 - Financial reports accuracy, sticky report table, and user column preferences.
 

@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-8
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 8 is implemented as management Excel exports. The dashboard now exposes an Excel menu for summary, product risks, stock risks, and review/question workload; workbooks are generated from `DashboardSummary` and include account, period, freshness, and generation context.
+Next step: Verify downloads visually in the browser with representative account data and compare exported values against the dashboard cards for the same period.
+Related files: `src/lib/services/dashboard-export.ts`, `src/lib/actions/dashboard.ts`, `src/app/(dashboard)/dashboard-export-buttons.tsx`, `src/app/(dashboard)/page.tsx`, `docs/DASHBOARD_ANALYTICS_ROADMAP.md`
+Risks: PDF executive report is still optional/deferred; Excel exports intentionally use dashboard-level compact lists, not full module-table exports.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-6-7
 
 Status: Done at code level

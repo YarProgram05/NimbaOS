@@ -25,6 +25,7 @@ import type {
   DashboardSummary,
   DashboardValueStatus,
 } from '@/types/dashboard'
+import { DashboardExportButtons } from './dashboard-export-buttons'
 
 interface DashboardPageProps {
   searchParams: Promise<{
@@ -79,6 +80,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const stocksHref = `/stocks?${accountQuery}`
   const reviewsHref = `/reviews?${accountQuery}`
   const syncHref = `/sync?${accountQuery}`
+  const exportRequest = {
+    accountId: summary.account.id,
+    period: summary.period.preset,
+    dateFrom: summary.period.dateFrom,
+    dateTo: summary.period.dateTo,
+  }
 
   return (
     <div className="dashboard-page">
@@ -139,6 +146,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <button type="submit" className="h-9 rounded-md border bg-secondary px-3 text-xs font-semibold hover:bg-accent">
                 Применить
               </button>
+              <DashboardExportButtons request={exportRequest} />
             </form>
           </div>
         </div>
@@ -319,38 +327,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               empty={summary.products.hint ?? 'Критичных товаров по текущим правилам нет.'}
               risk
             />
-            <ProductPanel
-              title="Высокая логистика"
-              rows={summary.products.highLogisticsShare}
-              href={reportsHref}
-              empty={summary.products.hint ?? 'Товаров с высокой долей логистики нет.'}
-              metric="logistics"
-              risk
-            />
-            <ProductPanel
-              title="Высокое хранение"
-              rows={summary.products.highStorageShare}
-              href={reportsHref}
-              empty={summary.products.hint ?? 'Товаров с высокой долей хранения нет.'}
-              metric="storage"
-              risk
-            />
-            <ProductPanel
-              title="Нет себестоимости"
-              rows={summary.products.missingCostPrice}
-              href={`/references?${accountQuery}`}
-              empty={summary.products.hint ?? 'Товаров без себестоимости в продажах нет.'}
-              metric="cost"
-              risk
-            />
-            <ProductPanel
-              title="Высокие возвраты"
-              rows={summary.products.highReturnRate}
-              href={reportsHref}
-              empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
-              metric="returns"
-              risk
-            />
           </section>
         </div>
 
@@ -436,6 +412,39 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <ProductRows rows={summary.products.topRevenue} empty={summary.products.hint ?? 'Выручки по товарам за период нет.'} metric="revenue" />
             </div>
           </section>
+
+          <ProductPanel
+            title="Высокая логистика"
+            rows={summary.products.highLogisticsShare}
+            href={reportsHref}
+            empty={summary.products.hint ?? 'Товаров с высокой долей логистики нет.'}
+            metric="logistics"
+            risk
+          />
+          <ProductPanel
+            title="Высокое хранение"
+            rows={summary.products.highStorageShare}
+            href={reportsHref}
+            empty={summary.products.hint ?? 'Товаров с высокой долей хранения нет.'}
+            metric="storage"
+            risk
+          />
+          <ProductPanel
+            title="Нет себестоимости"
+            rows={summary.products.missingCostPrice}
+            href={`/references?${accountQuery}`}
+            empty={summary.products.hint ?? 'Товаров без себестоимости в продажах нет.'}
+            metric="cost"
+            risk
+          />
+          <ProductPanel
+            title="Высокие возвраты"
+            rows={summary.products.highReturnRate}
+            href={reportsHref}
+            empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
+            metric="returns"
+            risk
+          />
         </div>
       </section>
     </div>
