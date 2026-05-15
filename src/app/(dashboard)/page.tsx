@@ -327,6 +327,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               empty={summary.products.hint ?? 'Критичных товаров по текущим правилам нет.'}
               risk
             />
+            <ProductPanel
+              title="Высокие возвраты"
+              rows={summary.products.highReturnRate}
+              href={reportsHref}
+              empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
+              metric="returns"
+              risk
+            />
           </section>
         </div>
 
@@ -435,14 +443,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             href={`/references?${accountQuery}`}
             empty={summary.products.hint ?? 'Товаров без себестоимости в продажах нет.'}
             metric="cost"
-            risk
-          />
-          <ProductPanel
-            title="Высокие возвраты"
-            rows={summary.products.highReturnRate}
-            href={reportsHref}
-            empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
-            metric="returns"
             risk
           />
         </div>
