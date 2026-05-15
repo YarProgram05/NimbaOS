@@ -22,6 +22,8 @@ import type {
   DashboardSummary,
   DashboardSummaryRequest,
   DashboardValueStatus,
+  ActionRecommendation,
+  ActionRecommendationCategory,
 } from '@/types/dashboard'
 
 const DASHBOARD_SUMMARY_CACHE_TTL_MS = 60_000
@@ -31,6 +33,8 @@ const HIGH_RETURN_RATE_PERCENT = 20
 const HIGH_RETURN_RATE_MIN_RETURNS = 2
 const ACTIVE_AD_STATUS = 9
 const RECENT_AD_STATS_DAYS = 3
+const MIN_FORECAST_OBSERVED_DAYS = 3
+const WEAK_PLAN_COMPLETION_PERCENT = 90
 const dashboardSummaryCache = new Map<string, { expiresAt: number; summary: DashboardSummary }>()
 
 const SOURCE_MAP = [
@@ -336,6 +340,25 @@ export async function getDashboardSummary(
     freshnessItems: freshness.items,
     generatedAt,
   })
+  const forecasts = await buildDashboardForecasts({
+    accountId: account.id,
+    period,
+    financialStatus,
+    financialBreakdown,
+    plan,
+    advertising,
+    stocks,
+    productsRequiringPlanAdjustment: risks,
+  })
+  const recommendations = buildActionRecommendations({
+    accountId: account.id,
+    dateFrom: period.dateFrom,
+    dateTo: period.dateTo,
+    problemCenter,
+    forecasts,
+    stocks,
+    generatedAt,
+  })
 
   const summary: DashboardSummary = {
     account: {
@@ -366,6 +389,8 @@ export async function getDashboardSummary(
     },
     stocks,
     feedback,
+    forecasts,
+    recommendations,
     products: {
       status: productStatus,
       topProfit,
@@ -766,6 +791,509 @@ async function getSalesAnalytics(
     source: 'WbOrder + WbSale + WbFunnelStat',
     hint: status === 'partial' ? 'Есть часть данных продаж или воронки, но период не закрыт покрытием.' : null,
   }
+}
+
+async function buildDashboardForecasts(input: {
+  accountId: string
+  period: DashboardPeriod
+  financialStatus: DashboardValueStatus
+  financialBreakdown: DashboardFinancialBreakdown
+  plan: DashboardPlanSummary
+  advertising: DashboardAdvertisingSummary
+  stocks: DashboardSummary['stocks']
+  productsRequiringPlanAdjustment: DashboardProductSnapshot[]
+}): Promise<DashboardSummary['forecasts']> {
+  const window = resolveForecastWindow(input.period)
+  const planCompletion = await buildPlanForecast(input.accountId, input.period, input.plan, window)
+  const stockDepletion = buildStockForecast(input.stocks, window)
+
+  return {
+    revenue: buildPaceForecast({
+      label: 'Прогноз выручки',
+      value: input.financialBreakdown.revenue,
+      unit: 'rub',
+      sourceStatus: input.financialStatus,
+      source: 'Report calculator',
+      window,
+    }),
+    operatingProfit: buildPaceForecast({
+      label: 'Прогноз операционной прибыли',
+      value: input.financialBreakdown.operatingProfit,
+      unit: 'rub',
+      sourceStatus: input.financialStatus,
+      source: 'Report calculator',
+      window,
+    }),
+    advertisingSpend: buildPaceForecast({
+      label: 'Прогноз рекламного расхода',
+      value: input.advertising.spend,
+      unit: 'rub',
+      sourceStatus: input.advertising.status,
+      source: 'AdCampaignStat',
+      window,
+    }),
+    planCompletion,
+    stockDepletion,
+    dailySalesPace: {
+      label: 'Текущий темп продаж',
+      status: planCompletion.status,
+      value: planCompletion.currentDailyUnits,
+      projectedValue: planCompletion.forecastUnits,
+      dailyAverage: planCompletion.currentDailyUnits,
+      unit: 'count',
+      confidence: planCompletion.confidence,
+      horizonDate: planCompletion.horizonDate,
+      source: planCompletion.source,
+      hint: planCompletion.hint,
+    },
+    unitsNeeded: {
+      label: 'Нужно продать до плана',
+      status: planCompletion.status,
+      value: planCompletion.unitsNeeded,
+      projectedValue: null,
+      dailyAverage: planCompletion.requiredDailyUnits,
+      unit: 'count',
+      confidence: planCompletion.confidence,
+      horizonDate: planCompletion.horizonDate,
+      source: planCompletion.source,
+      hint: planCompletion.hint,
+    },
+    stockNeeded: {
+      label: 'Оценка пополнения',
+      status: stockDepletion.status,
+      value: stockDepletion.stockNeeded,
+      projectedValue: null,
+      dailyAverage: null,
+      unit: 'count',
+      confidence: stockDepletion.confidence,
+      horizonDate: stockDepletion.horizonDate,
+      source: stockDepletion.source,
+      hint: stockDepletion.hint,
+    },
+    productsRequiringPlanAdjustment: input.productsRequiringPlanAdjustment,
+  }
+}
+
+type ForecastWindow = {
+  status: 'ready' | 'not_applicable'
+  dateFrom: string
+  observedTo: string | null
+  horizonDate: string | null
+  observedDays: number
+  horizonDays: number
+  remainingDays: number
+  confidence: DashboardSummary['forecasts']['revenue']['confidence']
+  hint: string | null
+}
+
+function resolveForecastWindow(period: DashboardPeriod): ForecastWindow {
+  const today = startOfUtcDay(new Date())
+  const from = parseDateKey(period.dateFrom)
+  const selectedTo = parseDateKey(period.dateTo)
+
+  let horizon = selectedTo
+  if (period.preset === 'currentMonth') {
+    horizon = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0))
+  }
+
+  if (from > today) {
+    return notApplicableWindow(period.dateFrom, 'Период начинается в будущем: нет фактического темпа для прогноза.')
+  }
+
+  if (period.preset !== 'currentMonth' && selectedTo <= today) {
+    return notApplicableWindow(period.dateFrom, 'Выбранный период уже закрыт, прогноз до конца периода не строится.')
+  }
+
+  const observedTo = minDate(today, selectedTo)
+  const observedDays = inclusiveDays(from, observedTo)
+  const horizonDays = inclusiveDays(from, horizon)
+  const remainingDays = Math.max(0, horizonDays - observedDays)
+
+  if (remainingDays <= 0) {
+    return notApplicableWindow(period.dateFrom, 'До конца выбранного горизонта не осталось будущих дней.')
+  }
+
+  if (observedDays < MIN_FORECAST_OBSERVED_DAYS) {
+    return notApplicableWindow(period.dateFrom, 'Для прогноза нужно минимум 3 дня фактического темпа.')
+  }
+
+  return {
+    status: 'ready',
+    dateFrom: formatDateKey(from),
+    observedTo: formatDateKey(observedTo),
+    horizonDate: formatDateKey(horizon),
+    observedDays,
+    horizonDays,
+    remainingDays,
+    confidence: observedDays >= 7 ? 'medium' : 'low',
+    hint: null,
+  }
+}
+
+function notApplicableWindow(dateFrom: string, hint: string): ForecastWindow {
+  return {
+    status: 'not_applicable',
+    dateFrom,
+    observedTo: null,
+    horizonDate: null,
+    observedDays: 0,
+    horizonDays: 0,
+    remainingDays: 0,
+    confidence: null,
+    hint,
+  }
+}
+
+function buildPaceForecast(input: {
+  label: string
+  value: number | null
+  unit: DashboardMetric['unit']
+  sourceStatus: DashboardValueStatus
+  source: string
+  window: ForecastWindow
+}): DashboardSummary['forecasts']['revenue'] {
+  if (input.sourceStatus === 'missing' || input.value === null) {
+    return {
+      label: input.label,
+      status: 'missing',
+      value: null,
+      projectedValue: null,
+      dailyAverage: null,
+      unit: input.unit,
+      confidence: null,
+      horizonDate: input.window.horizonDate,
+      source: input.source,
+      hint: 'Нет локальных данных за выбранный период, прогноз не строится.',
+    }
+  }
+
+  if (input.window.status !== 'ready') {
+    return {
+      label: input.label,
+      status: 'not_applicable',
+      value: input.value,
+      projectedValue: null,
+      dailyAverage: null,
+      unit: input.unit,
+      confidence: null,
+      horizonDate: input.window.horizonDate,
+      source: input.source,
+      hint: input.window.hint,
+    }
+  }
+
+  const dailyAverage = input.value / input.window.observedDays
+  return {
+    label: input.label,
+    status: input.sourceStatus === 'ready' ? 'ready' : 'partial',
+    value: input.value,
+    projectedValue: dailyAverage * input.window.horizonDays,
+    dailyAverage,
+    unit: input.unit,
+    confidence: input.window.confidence,
+    horizonDate: input.window.horizonDate,
+    source: input.source,
+    hint: `Простая проекция: средний дневной темп за ${input.window.observedDays} дн. умножен на ${input.window.horizonDays} дн.`,
+  }
+}
+
+async function buildPlanForecast(
+  wbAccountId: string,
+  period: DashboardPeriod,
+  plan: DashboardPlanSummary,
+  window: ForecastWindow,
+): Promise<DashboardSummary['forecasts']['planCompletion']> {
+  if (plan.activePlans === 0 || plan.status === 'not_applicable') {
+    return emptyPlanForecast('not_applicable', window, 'На выбранный период нет активного плана продаж.')
+  }
+
+  if (window.status !== 'ready' || !window.observedTo || !window.horizonDate) {
+    return {
+      ...emptyPlanForecast(window.status, window, window.hint),
+      plannedUnits: plan.plannedUnits,
+      factUnits: plan.factUnits,
+    }
+  }
+
+  const from = parseDateKey(period.dateFrom)
+  const observedTo = parseDateKey(window.observedTo)
+  const horizon = parseDateKey(window.horizonDate)
+  const plans = await prisma.salesPlan.findMany({
+    where: {
+      wbAccountId,
+      dateFrom: { lte: horizon },
+      dateTo: { gte: from },
+    },
+    include: { items: true },
+  })
+
+  if (plans.length === 0) {
+    return emptyPlanForecast('not_applicable', window, 'На горизонте прогноза нет активного плана продаж.')
+  }
+
+  const nmIds = Array.from(new Set(plans.flatMap((item) => item.items.map((planItem) => planItem.nmId))))
+  const sales = nmIds.length > 0
+    ? await prisma.wbSale.findMany({
+        where: {
+          wbAccountId,
+          nmId: { in: nmIds },
+          isReturn: false,
+          date: { gte: from, lte: observedTo },
+        },
+        select: { id: true },
+      })
+    : []
+
+  let plannedUnits = 0
+  for (const salesPlan of plans) {
+    const overlapFrom = salesPlan.dateFrom > from ? salesPlan.dateFrom : from
+    const overlapTo = salesPlan.dateTo < horizon ? salesPlan.dateTo : horizon
+    const planDays = inclusiveDays(salesPlan.dateFrom, salesPlan.dateTo)
+    const overlapDays = inclusiveDays(overlapFrom, overlapTo)
+    const share = planDays > 0 ? overlapDays / planDays : 0
+
+    for (const item of salesPlan.items) {
+      plannedUnits += item.plannedQty * share
+    }
+  }
+
+  const factUnits = sales.length
+  const currentDailyUnits = factUnits / window.observedDays
+  const forecastUnits = currentDailyUnits * window.horizonDays
+  const unitsNeeded = Math.max(0, plannedUnits - factUnits)
+  const requiredDailyUnits = window.remainingDays > 0 ? unitsNeeded / window.remainingDays : null
+  const forecastCompletionPercent = plannedUnits > 0 ? (forecastUnits / plannedUnits) * 100 : null
+  const status = plan.status === 'ready' ? 'ready' : plan.status === 'missing' ? 'missing' : 'partial'
+
+  return {
+    status,
+    plannedUnits,
+    factUnits,
+    forecastUnits,
+    forecastCompletionPercent,
+    currentDailyUnits,
+    requiredDailyUnits,
+    unitsNeeded,
+    confidence: window.confidence,
+    horizonDate: window.horizonDate,
+    source: 'SalesPlan + WbSale',
+    hint: 'Прогноз плана строится по текущему среднему темпу выкупов и плану на оставшийся горизонт.',
+  }
+}
+
+function emptyPlanForecast(
+  status: DashboardValueStatus,
+  window: ForecastWindow,
+  hint: string | null,
+): DashboardSummary['forecasts']['planCompletion'] {
+  return {
+    status,
+    plannedUnits: null,
+    factUnits: null,
+    forecastUnits: null,
+    forecastCompletionPercent: null,
+    currentDailyUnits: null,
+    requiredDailyUnits: null,
+    unitsNeeded: null,
+    confidence: null,
+    horizonDate: window.horizonDate,
+    source: 'SalesPlan + WbSale',
+    hint,
+  }
+}
+
+function buildStockForecast(
+  stocks: DashboardSummary['stocks'],
+  window: ForecastWindow,
+): DashboardSummary['forecasts']['stockDepletion'] {
+  if (stocks.status === 'missing') {
+    return {
+      status: 'missing',
+      lowStockCount: 0,
+      outOfStockCount: 0,
+      overstockCount: 0,
+      noDemandCount: 0,
+      earliestDaysUntilZero: null,
+      stockNeeded: null,
+      productsAtRisk: [],
+      confidence: null,
+      horizonDate: window.horizonDate,
+      source: 'StockSnapshot + WbSale',
+      hint: 'Нет локального снимка остатков WB.',
+    }
+  }
+
+  const riskItems = stocks.items
+    .filter((item) => item.risk === 'out_of_stock' || item.risk === 'low_stock')
+    .sort((a, b) => (a.daysUntilZero ?? 0) - (b.daysUntilZero ?? 0) || a.quantity - b.quantity)
+    .slice(0, 5)
+  const positiveDays = stocks.items
+    .map((item) => item.daysUntilZero)
+    .filter((value): value is number => value !== null && value >= 0)
+  const earliestDaysUntilZero = positiveDays.length > 0 ? Math.min(...positiveDays) : null
+  const productsAtRisk = riskItems.map((item) => {
+    const dailySales = item.daysUntilZero && item.daysUntilZero > 0 ? item.quantity / item.daysUntilZero : null
+    const stockNeeded = dailySales && window.status === 'ready'
+      ? Math.max(0, Math.ceil(dailySales * window.horizonDays - item.quantity))
+      : null
+
+    return {
+      nmId: item.nmId,
+      vendorCode: item.vendorCode,
+      title: item.title,
+      quantity: item.quantity,
+      daysUntilZero: item.daysUntilZero,
+      stockNeeded,
+    }
+  })
+  const stockNeeded = productsAtRisk.reduce((sum, item) => sum + (item.stockNeeded ?? 0), 0)
+
+  return {
+    status: window.status === 'ready' || riskItems.length > 0 ? 'ready' : 'not_applicable',
+    lowStockCount: stocks.lowStockCount,
+    outOfStockCount: stocks.outOfStockCount,
+    overstockCount: stocks.overstockCount,
+    noDemandCount: stocks.productsWithStockNoSales,
+    earliestDaysUntilZero,
+    stockNeeded: window.status === 'ready' ? stockNeeded : null,
+    productsAtRisk,
+    confidence: window.status === 'ready' ? window.confidence : 'low',
+    horizonDate: window.horizonDate,
+    source: 'StockSnapshot + WbSale',
+    hint: window.status === 'ready'
+      ? 'Потребность в пополнении считается только для товаров, где известен темп продаж и дни до нуля.'
+      : 'Текущий риск остатков показан без прогноза потребности, потому что горизонт периода закрыт или слишком короткий.',
+  }
+}
+
+function buildActionRecommendations(input: {
+  accountId: string
+  dateFrom: string
+  dateTo: string
+  problemCenter: DashboardSummary['problemCenter']
+  forecasts: DashboardSummary['forecasts']
+  stocks: DashboardSummary['stocks']
+  generatedAt: string
+}): ActionRecommendation[] {
+  const recommendations = new Map<string, ActionRecommendation>()
+  const add = (recommendation: ActionRecommendation) => {
+    const current = recommendations.get(recommendation.id)
+    if (!current || actionSeverityRank(recommendation.severity) > actionSeverityRank(current.severity)) {
+      recommendations.set(recommendation.id, recommendation)
+    }
+  }
+
+  for (const insight of input.problemCenter.insights) {
+    add({
+      id: `action:${insight.category}`,
+      severity: insight.severity,
+      category: insight.category,
+      title: recommendationTitle(insight.category, insight.title),
+      description: insight.description,
+      metric: insight.metric,
+      href: insight.href,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  const planForecast = input.forecasts.planCompletion
+  if (
+    (planForecast.status === 'ready' || planForecast.status === 'partial')
+    && planForecast.forecastCompletionPercent !== null
+    && planForecast.forecastCompletionPercent < WEAK_PLAN_COMPLETION_PERCENT
+  ) {
+    add({
+      id: 'action:plan-adjustment',
+      severity: planForecast.forecastCompletionPercent < 75 ? 'critical' : 'warning',
+      category: 'plan_adjustment',
+      title: 'Скорректировать план или темп продаж',
+      description: 'При текущем темпе выбранный план может не выйти на цель. Проверьте товары, цены, рекламу и дневной темп.',
+      metric: `${formatNumber(planForecast.forecastCompletionPercent, 0)}%`,
+      href: withAccount('/sales-plan', input.accountId),
+      createdAt: input.generatedAt,
+    })
+  }
+
+  if (input.stocks.overstockCount > 0) {
+    add({
+      id: 'action:overstock',
+      severity: 'warning',
+      category: 'overstock',
+      title: 'Проверить избыточные остатки',
+      description: 'Есть товары, где запас сильно выше текущего темпа продаж. Проверьте спрос, хранение и промо-план.',
+      metric: `${input.stocks.overstockCount} поз.`,
+      href: `${withAccount('/stocks', input.accountId)}&risk=overstock`,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  if (input.stocks.productsWithStockNoSales > 0) {
+    add({
+      id: 'action:no-demand',
+      severity: 'info',
+      category: 'no_demand',
+      title: 'Разобрать товар с остатком без продаж',
+      description: 'Есть остатки, но по ним не видно недавних продаж. Проверьте карточку, цену, видимость и план продвижения.',
+      metric: `${input.stocks.productsWithStockNoSales} поз.`,
+      href: `${withAccount('/stocks', input.accountId)}&risk=no_sales`,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  return Array.from(recommendations.values())
+    .sort(compareRecommendations)
+    .slice(0, 8)
+}
+
+function recommendationTitle(category: ActionRecommendationCategory, fallback: string): string {
+  if (category === 'sync_failed') return 'Проверить сбои синхронизации'
+  if (category === 'data_stale') return 'Обновить данные перед решениями'
+  if (category === 'missing_cost_price') return 'Заполнить себестоимость'
+  if (category === 'negative_margin') return 'Разобрать отрицательную прибыль'
+  if (category === 'high_drr') return 'Снизить или проверить высокий ДРР'
+  if (category === 'inefficient_campaign') return 'Проверить рекламу без заказов'
+  if (category === 'campaign_without_recent_stats') return 'Обновить статистику активной рекламы'
+  if (category === 'out_of_stock') return 'Пополнить товары без остатка'
+  if (category === 'low_stock') return 'Подготовить пополнение остатков'
+  if (category === 'unanswered_review_question') return 'Ответить на отзывы и вопросы'
+  if (category === 'high_return_rate') return 'Проверить товары с высокими возвратами'
+  return fallback
+}
+
+function compareRecommendations(a: ActionRecommendation, b: ActionRecommendation): number {
+  return actionSeverityRank(b.severity) - actionSeverityRank(a.severity)
+    || actionCategoryRank(a.category) - actionCategoryRank(b.category)
+    || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' })
+}
+
+function actionSeverityRank(severity: DashboardIssueSeverity): number {
+  if (severity === 'critical') return 3
+  if (severity === 'warning') return 2
+  return 1
+}
+
+function actionCategoryRank(category: ActionRecommendationCategory): number {
+  const ranks: Record<ActionRecommendationCategory, number> = {
+    sync_failed: 1,
+    no_recent_report_data: 2,
+    data_stale: 3,
+    plan_adjustment: 4,
+    negative_margin: 5,
+    high_drr: 6,
+    inefficient_campaign: 7,
+    out_of_stock: 8,
+    low_stock: 9,
+    high_return_rate: 10,
+    missing_cost_price: 11,
+    overstock: 12,
+    no_demand: 13,
+    high_logistics_share: 14,
+    high_storage_share: 15,
+    campaign_without_recent_stats: 16,
+    product_without_stock_data: 17,
+    unanswered_review_question: 18,
+  }
+  return ranks[category]
 }
 
 async function getFreshnessSummary(
@@ -1176,6 +1704,17 @@ function addDays(value: Date, days: number): Date {
   return next
 }
 
+function minDate(a: Date, b: Date): Date {
+  return a < b ? a : b
+}
+
 function inclusiveDays(from: Date, to: Date): number {
   return Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1)
+}
+
+function formatNumber(value: number, digits = 0): string {
+  return new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  }).format(value)
 }

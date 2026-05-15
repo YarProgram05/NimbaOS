@@ -56,6 +56,12 @@ Implemented:
   - Advertising campaign rankings read persisted `AdCampaignStat`, prefer `source="total"` rows, and fall back to placement rows when total rows are absent.
   - Problem center now surfaces high logistics share, high storage share, high return rate, inefficient campaigns, and active campaigns without recent stats.
   - The home screen now shows compact financial breakdown, sales/funnel metrics, campaign lists to inspect, and expanded product risk panels.
+- Phases 6-7 are implemented as dashboard forecasts and deterministic recommendations.
+  - Extended `DashboardSummary` with `forecasts` and `recommendations`.
+  - Forecasts are simple explainable projections from local persisted data: financial report values, plan facts, current stocks, and persisted advertising stats.
+  - Closed or too-short periods return explicit `not_applicable` forecast statuses instead of fake precision.
+  - The home screen now includes a compact "Forecast and pace" panel and uses `summary.recommendations` as the primary Focus/action center.
+  - Recommendations remain deterministic and explainable; no automated destructive WB actions were added.
 
 Important changes from the original plan:
 
@@ -73,7 +79,7 @@ Outdated or deferred parts:
 - Any dashboard implementation that rebuilds action/focus items directly in `src/app/(dashboard)/page.tsx` is outdated; new rules should go into `src/lib/services/dashboard-problem-center.ts`.
 - Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are now backed by Phase 3-4 data sources.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
-- Forecasts, recommendation engine, dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
+- Dashboard exports, stock history, and FBS/seller-warehouse inventory remain future phases.
 
 ## Purpose
 

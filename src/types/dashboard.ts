@@ -14,6 +14,7 @@ export type DashboardMetricUnit = 'rub' | 'percent' | 'count'
 export type DashboardValueStatus = 'ready' | 'partial' | 'missing' | 'not_applicable'
 export type DashboardComputeMode = 'on_demand'
 export type DashboardIssueSeverity = 'info' | 'warning' | 'critical'
+export type DashboardForecastConfidence = 'low' | 'medium'
 export type DashboardIssueCategory =
   | 'sync_failed'
   | 'data_stale'
@@ -30,6 +31,12 @@ export type DashboardIssueCategory =
   | 'unanswered_review_question'
   | 'low_stock'
   | 'out_of_stock'
+
+export type ActionRecommendationCategory =
+  | DashboardIssueCategory
+  | 'overstock'
+  | 'no_demand'
+  | 'plan_adjustment'
 
 export type DashboardFreshnessDomain =
   | SyncJobKind
@@ -232,6 +239,81 @@ export interface DashboardInsight {
   createdAt: string
 }
 
+export interface DashboardForecastMetric {
+  label: string
+  status: DashboardValueStatus
+  value: number | null
+  projectedValue: number | null
+  dailyAverage: number | null
+  unit: DashboardMetricUnit
+  confidence: DashboardForecastConfidence | null
+  horizonDate: string | null
+  source: string
+  hint: string | null
+}
+
+export interface DashboardPlanForecast {
+  status: DashboardValueStatus
+  plannedUnits: number | null
+  factUnits: number | null
+  forecastUnits: number | null
+  forecastCompletionPercent: number | null
+  currentDailyUnits: number | null
+  requiredDailyUnits: number | null
+  unitsNeeded: number | null
+  confidence: DashboardForecastConfidence | null
+  horizonDate: string | null
+  source: string
+  hint: string | null
+}
+
+export interface DashboardStockForecastProduct {
+  nmId: number
+  vendorCode: string
+  title: string | null
+  quantity: number
+  daysUntilZero: number | null
+  stockNeeded: number | null
+}
+
+export interface DashboardStockForecast {
+  status: DashboardValueStatus
+  lowStockCount: number
+  outOfStockCount: number
+  overstockCount: number
+  noDemandCount: number
+  earliestDaysUntilZero: number | null
+  stockNeeded: number | null
+  productsAtRisk: DashboardStockForecastProduct[]
+  confidence: DashboardForecastConfidence | null
+  horizonDate: string | null
+  source: string
+  hint: string | null
+}
+
+export interface DashboardForecasts {
+  revenue: DashboardForecastMetric
+  operatingProfit: DashboardForecastMetric
+  advertisingSpend: DashboardForecastMetric
+  planCompletion: DashboardPlanForecast
+  stockDepletion: DashboardStockForecast
+  dailySalesPace: DashboardForecastMetric
+  unitsNeeded: DashboardForecastMetric
+  stockNeeded: DashboardForecastMetric
+  productsRequiringPlanAdjustment: DashboardProductSnapshot[]
+}
+
+export interface ActionRecommendation {
+  id: string
+  severity: DashboardIssueSeverity
+  category: ActionRecommendationCategory
+  title: string
+  description: string
+  metric: string | null
+  href: string
+  createdAt: string
+}
+
 export interface DashboardSourceMapping {
   widget: string
   sources: string[]
@@ -258,6 +340,8 @@ export interface DashboardSummary {
   advertising: DashboardAdvertisingSummary
   stocks: StocksSummary
   feedback: FeedbackSummary
+  forecasts: DashboardForecasts
+  recommendations: ActionRecommendation[]
   products: {
     status: DashboardValueStatus
     topProfit: DashboardProductSnapshot[]

@@ -194,6 +194,30 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
           <section className="old-money-panel rounded-md p-4">
             <PanelHeader
+              label="Прогноз"
+              title="Прогноз и темп"
+              href={salesPlanHref}
+              icon={<LineChart className="h-5 w-5 text-primary" />}
+            />
+            <StatusLine
+              status={forecastPanelStatus(summary)}
+              hint={forecastPanelHint(summary)}
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <MiniMetric label="Выручка к горизонту" value={formatForecastMetric(summary.forecasts.revenue)} />
+              <MiniMetric label="ОП к горизонту" value={formatForecastMetric(summary.forecasts.operatingProfit)} />
+              <MiniMetric label="Реклама к горизонту" value={formatForecastMetric(summary.forecasts.advertisingSpend)} />
+              <MiniMetric label="План к горизонту" value={formatOptionalPercent(summary.forecasts.planCompletion.forecastCompletionPercent)} />
+              <MiniMetric label="Темп, шт./день" value={formatOptionalNumber(summary.forecasts.dailySalesPace.value, 1)} />
+              <MiniMetric label="Нужно, шт./день" value={formatOptionalNumber(summary.forecasts.unitsNeeded.dailyAverage, 1)} />
+              <MiniMetric label="Пополнение, шт." value={formatOptionalNumber(summary.forecasts.stockNeeded.value, 0)} />
+              <MiniMetric label="Горизонт" value={formatForecastHorizon(summary)} />
+            </div>
+            <ProgressBar value={summary.forecasts.planCompletion.forecastCompletionPercent} />
+          </section>
+
+          <section className="old-money-panel rounded-md p-4">
+            <PanelHeader
               label="Продажи"
               title="Заказы, выкуп и воронка"
               href={salesPlanHref}
@@ -339,7 +363,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               icon={<AlertTriangle className="h-5 w-5 text-primary" />}
             />
             <div className="mt-3 space-y-2">
-              {summary.problemCenter.insights.length === 0 ? (
+              {summary.recommendations.length === 0 ? (
                 <Link
                   href={syncHref}
                   className="flex items-start justify-between gap-3 rounded-md border bg-secondary/40 p-3 text-sm transition-colors hover:bg-secondary"
@@ -350,7 +374,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   </span>
                   <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 </Link>
-              ) : summary.problemCenter.insights.map((item) => (
+              ) : summary.recommendations.map((item) => (
                 <Link
                   key={item.id}
                   href={item.href}
@@ -645,6 +669,39 @@ function severityText(severity: DashboardIssueSeverity): string {
   if (severity === 'critical') return 'критично'
   if (severity === 'warning') return 'требует внимания'
   return 'инфо'
+}
+
+function forecastPanelStatus(summary: DashboardSummary): DashboardValueStatus {
+  const statuses = [
+    summary.forecasts.revenue.status,
+    summary.forecasts.operatingProfit.status,
+    summary.forecasts.planCompletion.status,
+    summary.forecasts.stockDepletion.status,
+  ]
+  if (statuses.some((status) => status === 'ready')) return 'ready'
+  if (statuses.some((status) => status === 'partial')) return 'partial'
+  if (statuses.some((status) => status === 'missing')) return 'missing'
+  return 'not_applicable'
+}
+
+function forecastPanelHint(summary: DashboardSummary): string | null {
+  return summary.forecasts.planCompletion.hint
+    ?? summary.forecasts.revenue.hint
+    ?? summary.forecasts.stockDepletion.hint
+}
+
+function formatForecastMetric(metric: DashboardSummary['forecasts']['revenue']): string {
+  if (metric.projectedValue === null) return statusText(metric.status)
+  if (metric.unit === 'rub') return formatRub(metric.projectedValue)
+  if (metric.unit === 'percent') return formatPercent(metric.projectedValue)
+  return formatNumber(metric.projectedValue, 0)
+}
+
+function formatForecastHorizon(summary: DashboardSummary): string {
+  const horizon = summary.forecasts.planCompletion.horizonDate
+    ?? summary.forecasts.revenue.horizonDate
+    ?? summary.forecasts.stockDepletion.horizonDate
+  return horizon ? formatDate(horizon) : 'Нет прогноза'
 }
 
 function formatMetricValue(metric: DashboardMetric): string {

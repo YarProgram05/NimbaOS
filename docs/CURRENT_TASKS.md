@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-6-7
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phases 6-7 are implemented as explainable forecasts and deterministic recommendations. The dashboard summary now exposes forecast projections, plan pace, stock depletion helpers, and prioritized action recommendations; the home screen shows a compact forecast/pace panel and Focus uses `summary.recommendations`.
+Next step: Verify visually with representative account data, especially current-month active plans, missing reports, stale sync sources, and stock risk cases.
+Related files: `src/types/dashboard.ts`, `src/lib/services/dashboard-summary.ts`, `src/app/(dashboard)/page.tsx`, `docs/DASHBOARD_ANALYTICS_ROADMAP.md`
+Risks: Forecasts are simple pace projections from local persisted data, not statistical forecasts. Closed or too-short periods intentionally degrade to `not_applicable`.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-5
 
 Status: Done at code level
