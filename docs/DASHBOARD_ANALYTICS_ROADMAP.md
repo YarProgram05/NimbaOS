@@ -49,6 +49,13 @@ Implemented:
   - Added template selection in answer dialogs and manual text entry for single replies.
   - Added bulk replies for unanswered reviews with row selection, "select all by current filter", confirmation, and mixed-rating warning.
   - Auto-replies, reject, and mark-viewed actions remain intentionally absent.
+- Phase 5 is implemented as an existing analytics upgrade.
+  - Extended `DashboardSummary` with financial breakdown, sales/funnel analytics, product risk slices, and advertising campaign impact lists.
+  - Financial and product values reuse `calculateReport`, so dashboard breakdown metrics stay aligned with `/reports` for the same account and period.
+  - Sales analytics read persisted `WbOrder`, `WbSale`, and `WbFunnelStat` only.
+  - Advertising campaign rankings read persisted `AdCampaignStat`, prefer `source="total"` rows, and fall back to placement rows when total rows are absent.
+  - Problem center now surfaces high logistics share, high storage share, high return rate, inefficient campaigns, and active campaigns without recent stats.
+  - The home screen now shows compact financial breakdown, sales/funnel metrics, campaign lists to inspect, and expanded product risk panels.
 
 Important changes from the original plan:
 

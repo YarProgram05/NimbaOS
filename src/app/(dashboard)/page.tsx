@@ -157,6 +157,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <div className="grid content-start gap-3 xl:order-none">
           <section className="old-money-panel rounded-md p-4">
             <PanelHeader
+              label="Финансы"
+              title="Расшифровка отчета"
+              href={reportsHref}
+              icon={<LineChart className="h-5 w-5 text-primary" />}
+            />
+            <StatusLine status={summary.financialBreakdown.status} hint={summary.financialBreakdown.hint} />
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <MiniMetric label="К перечислению" value={formatOptionalRub(summary.financialBreakdown.toTransfer)} />
+              <MiniMetric label="Рентабельность" value={formatOptionalPercent(summary.financialBreakdown.rentability)} />
+              <MiniMetric label="Логистика" value={formatOptionalRub(summary.financialBreakdown.logistics)} />
+              <MiniMetric label="Хранение" value={formatOptionalRub(summary.financialBreakdown.storage)} />
+              <MiniMetric label="Налоги" value={formatOptionalRub(summary.financialBreakdown.taxes)} />
+              <MiniMetric label="Штрафы" value={formatOptionalRub(summary.financialBreakdown.penalties)} />
+              <MiniMetric label="Приемка" value={formatOptionalRub(summary.financialBreakdown.acceptance)} />
+              <MiniMetric label="Возвраты" value={formatOptionalPercent(summary.financialBreakdown.returnRate)} />
+            </div>
+          </section>
+
+          <section className="old-money-panel rounded-md p-4">
+            <PanelHeader
               label="План-факт"
               title="Активные планы продаж"
               href={salesPlanHref}
@@ -174,6 +194,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
           <section className="old-money-panel rounded-md p-4">
             <PanelHeader
+              label="Продажи"
+              title="Заказы, выкуп и воронка"
+              href={salesPlanHref}
+              icon={<Target className="h-5 w-5 text-primary" />}
+            />
+            <StatusLine status={summary.salesAnalytics.status} hint={summary.salesAnalytics.hint} />
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <MiniMetric label="Заказы" value={formatOptionalNumber(summary.salesAnalytics.orders, 0)} />
+              <MiniMetric label="Продажи" value={formatOptionalNumber(summary.salesAnalytics.sales, 0)} />
+              <MiniMetric label="Возвраты" value={formatOptionalNumber(summary.salesAnalytics.returns, 0)} />
+              <MiniMetric label="Отмены" value={formatOptionalNumber(summary.salesAnalytics.cancellations, 0)} />
+              <MiniMetric label="Выкуп" value={formatOptionalPercent(summary.salesAnalytics.buyoutPercent)} />
+              <MiniMetric label="Средняя цена" value={formatOptionalRub(summary.salesAnalytics.averagePrice)} />
+              <MiniMetric label="В корзину" value={formatOptionalPercent(summary.salesAnalytics.funnel.addToCartConversion)} />
+              <MiniMetric label="Корзина-заказ" value={formatOptionalPercent(summary.salesAnalytics.funnel.cartToOrderConversion)} />
+            </div>
+          </section>
+
+          <section className="old-money-panel rounded-md p-4">
+            <PanelHeader
               label="Реклама"
               title="Сводка по сохраненной статистике"
               href={advertisingHref}
@@ -185,7 +225,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <MiniMetric label="CTR" value={formatOptionalPercent(summary.advertising.ctr)} />
               <MiniMetric label="CPC" value={formatOptionalRub(summary.advertising.cpc)} />
               <MiniMetric label="Заказы" value={formatOptionalNumber(summary.advertising.orders, 0)} />
+              <MiniMetric label="Кампаний" value={String(summary.advertising.campaigns)} />
+              <MiniMetric label="Расход без заказов" value={formatOptionalRub(summary.advertising.spendWithoutOrders)} />
+              <MiniMetric label="В корзину" value={formatOptionalNumber(summary.advertising.cartAdds, 0)} />
+              <MiniMetric label="DRR" value={formatOptionalPercent(summary.advertising.drr)} />
             </div>
+            <CampaignRows
+              title="Кампании к проверке"
+              rows={summary.advertising.inefficientCampaigns}
+              empty="Кампаний с расходом без заказов за период нет."
+            />
+            <CampaignRows
+              title="Нет свежей статистики"
+              rows={summary.advertising.campaignsWithoutRecentStats}
+              empty="Активные кампании выглядят покрытыми свежей статистикой."
+              stale
+            />
           </section>
 
           <section className="old-money-panel rounded-md p-4">
@@ -238,6 +293,38 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               rows={summary.products.risks}
               href={reportsHref}
               empty={summary.products.hint ?? 'Критичных товаров по текущим правилам нет.'}
+              risk
+            />
+            <ProductPanel
+              title="Высокая логистика"
+              rows={summary.products.highLogisticsShare}
+              href={reportsHref}
+              empty={summary.products.hint ?? 'Товаров с высокой долей логистики нет.'}
+              metric="logistics"
+              risk
+            />
+            <ProductPanel
+              title="Высокое хранение"
+              rows={summary.products.highStorageShare}
+              href={reportsHref}
+              empty={summary.products.hint ?? 'Товаров с высокой долей хранения нет.'}
+              metric="storage"
+              risk
+            />
+            <ProductPanel
+              title="Нет себестоимости"
+              rows={summary.products.missingCostPrice}
+              href={`/references?${accountQuery}`}
+              empty={summary.products.hint ?? 'Товаров без себестоимости в продажах нет.'}
+              metric="cost"
+              risk
+            />
+            <ProductPanel
+              title="Высокие возвраты"
+              rows={summary.products.highReturnRate}
+              href={reportsHref}
+              empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
+              metric="returns"
               risk
             />
           </section>
@@ -322,7 +409,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               icon={<TrendingUp className="h-5 w-5 text-primary" />}
             />
             <div className="mt-3">
-              <ProductRows rows={summary.products.topRevenue} empty={summary.products.hint ?? 'Выручки по товарам за период нет.'} />
+              <ProductRows rows={summary.products.topRevenue} empty={summary.products.hint ?? 'Выручки по товарам за период нет.'} metric="revenue" />
             </div>
           </section>
         </div>
@@ -389,18 +476,22 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
+type ProductRowsMetric = 'profit' | 'revenue' | 'logistics' | 'storage' | 'returns' | 'cost'
+
 function ProductPanel({
   title,
   rows,
   href,
   empty,
   risk = false,
+  metric = 'profit',
 }: {
   title: string
   rows: DashboardProductSnapshot[]
   href: string
   empty: string
   risk?: boolean
+  metric?: ProductRowsMetric
 }) {
   return (
     <section className="old-money-panel rounded-md p-4">
@@ -411,7 +502,7 @@ function ProductPanel({
         icon={risk ? <AlertTriangle className="h-5 w-5 text-primary" /> : <TrendingUp className="h-5 w-5 text-primary" />}
       />
       <div className="mt-3">
-        <ProductRows rows={rows} empty={empty} risk={risk} />
+        <ProductRows rows={rows} empty={empty} risk={risk} metric={metric} />
       </div>
     </section>
   )
@@ -421,10 +512,12 @@ function ProductRows({
   rows,
   empty,
   risk = false,
+  metric = 'profit',
 }: {
   rows: DashboardProductSnapshot[]
   empty: string
   risk?: boolean
+  metric?: ProductRowsMetric
 }) {
   if (rows.length === 0) {
     return <p className="rounded-md border bg-secondary/40 p-3 text-sm text-muted-foreground">{empty}</p>
@@ -440,12 +533,70 @@ function ProductRows({
           </div>
           <div className="text-right">
             <p className={risk ? 'text-sm font-semibold text-destructive' : 'text-sm font-semibold'}>
-              {formatRub(row.operatingProfit)}
+              {productMetricValue(row, metric)}
             </p>
-            <p className="text-xs text-muted-foreground">ДРР {formatPercent(row.drr)}</p>
+            <p className="text-xs text-muted-foreground">{productMetricHint(row, metric)}</p>
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function productMetricValue(row: DashboardProductSnapshot, metric: ProductRowsMetric): string {
+  if (metric === 'revenue') return formatRub(row.revenue)
+  if (metric === 'logistics') return formatPercent(row.logisticsShare)
+  if (metric === 'storage') return formatPercent(row.storageShare)
+  if (metric === 'returns') return formatPercent(row.returnRate)
+  if (metric === 'cost') return formatOptionalRub(row.costPrice)
+  return formatRub(row.operatingProfit)
+}
+
+function productMetricHint(row: DashboardProductSnapshot, metric: ProductRowsMetric): string {
+  if (metric === 'revenue') return `ОП ${formatRub(row.operatingProfit)}`
+  if (metric === 'logistics') return `логистика ${formatRub(row.logistics)}`
+  if (metric === 'storage') return `хранение ${formatRub(row.storage)}`
+  if (metric === 'returns') return `${formatNumber(row.returns, 0)} возвратов`
+  if (metric === 'cost') return 'нет себестоимости'
+  return `ДРР ${formatPercent(row.drr)}`
+}
+
+function CampaignRows({
+  title,
+  rows,
+  empty,
+  stale = false,
+}: {
+  title: string
+  rows: DashboardSummary['advertising']['inefficientCampaigns']
+  empty: string
+  stale?: boolean
+}) {
+  return (
+    <div className="mt-4">
+      <p className="metric-label">{title}</p>
+      {rows.length === 0 ? (
+        <p className="mt-2 rounded-md border bg-secondary/40 p-3 text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <div className="mt-2 divide-y">
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{row.name}</p>
+                <p className="truncate text-xs text-muted-foreground">ID {row.advertId}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold">
+                  {stale ? (row.lastStatDate ? formatDate(row.lastStatDate) : 'Нет данных') : formatRub(row.spend)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {stale ? 'последняя статистика' : `${formatOptionalNumber(row.orders, 0)} заказов`}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

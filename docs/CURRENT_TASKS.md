@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-DASHBOARD-ANALYTICS-PHASE-5
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 5 is implemented as an existing analytics upgrade: financial breakdown, sales/funnel metrics, expanded product risk slices, advertising campaign impact lists, and new problem-center issue categories.
+Next step: Verify dashboard visually with representative account data and compare financial breakdown values against `/reports` for the same period.
+Related files: `src/types/dashboard.ts`, `src/lib/services/dashboard-summary.ts`, `src/lib/services/dashboard-problem-center.ts`, `src/app/(dashboard)/page.tsx`, `docs/DASHBOARD_ANALYTICS_ROADMAP.md`
+Risks: Advertising campaign rankings depend on persisted `AdCampaignStat`; stale or missing ad stats should be handled by sync freshness/problem-center issues rather than live WB reads.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-4
 
 Status: Done at code level

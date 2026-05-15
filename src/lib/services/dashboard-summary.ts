@@ -5,9 +5,11 @@ import { calculateReport } from '@/lib/services/report-calculator'
 import { getFeedbackSummary } from '@/lib/services/feedback'
 import { getStocksSummary } from '@/lib/services/stocks'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
-import type { ReportData } from '@/types/reports'
+import type { ReportData, ReportRow } from '@/types/reports'
 import type {
+  DashboardAdvertisingCampaignSnapshot,
   DashboardAdvertisingSummary,
+  DashboardFinancialBreakdown,
   DashboardFreshnessDomain,
   DashboardFreshnessItem,
   DashboardIssueSeverity,
@@ -16,12 +18,19 @@ import type {
   DashboardPeriodPreset,
   DashboardPlanSummary,
   DashboardProductSnapshot,
+  DashboardSalesAnalytics,
   DashboardSummary,
   DashboardSummaryRequest,
   DashboardValueStatus,
 } from '@/types/dashboard'
 
 const DASHBOARD_SUMMARY_CACHE_TTL_MS = 60_000
+const HIGH_LOGISTICS_SHARE_PERCENT = 15
+const HIGH_STORAGE_SHARE_PERCENT = 5
+const HIGH_RETURN_RATE_PERCENT = 20
+const HIGH_RETURN_RATE_MIN_RETURNS = 2
+const ACTIVE_AD_STATUS = 9
+const RECENT_AD_STATS_DAYS = 3
 const dashboardSummaryCache = new Map<string, { expiresAt: number; summary: DashboardSummary }>()
 
 const SOURCE_MAP = [
@@ -230,6 +239,7 @@ export async function getDashboardSummary(
     comparisonReport,
     plan,
     advertising,
+    salesAnalytics,
     stocks,
     feedback,
     freshness,
@@ -242,6 +252,7 @@ export async function getDashboardSummary(
       : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, { preferPersistedAdStats: true }),
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
+    getSalesAnalytics(account.id, period.dateFrom, period.dateTo),
     getStocksSummary(account.id),
     getFeedbackSummary(account.id, period.dateFrom, period.dateTo),
     getFreshnessSummary(account.id, period.dateFrom, period.dateTo),
@@ -263,6 +274,7 @@ export async function getDashboardSummary(
 
   const productStatus = financialStatus
   const productRows = productStatus === 'missing' ? [] : report?.rows ?? []
+  const financialBreakdown = buildFinancialBreakdown(report, financialStatus)
   const topProfit = productRows
     .filter((row) => Number(row.operatingProfit) > 0)
     .sort((a, b) => Number(b.operatingProfit) - Number(a.operatingProfit))
@@ -273,8 +285,40 @@ export async function getDashboardSummary(
     .sort((a, b) => Number(b.sale) - Number(a.sale))
     .slice(0, 5)
     .map((row) => mapProductSnapshot(row, productStatus))
+  const negativeProfit = productRows
+    .filter((row) => Number(row.operatingProfit) < 0)
+    .sort((a, b) => Number(a.operatingProfit) - Number(b.operatingProfit))
+    .slice(0, 5)
+    .map((row) => mapProductSnapshot(row, productStatus))
+  const highLogisticsShare = productRows
+    .filter((row) => Number(row.logisticsFromSalesPercent) >= HIGH_LOGISTICS_SHARE_PERCENT)
+    .sort((a, b) => Number(b.logisticsFromSalesPercent) - Number(a.logisticsFromSalesPercent))
+    .slice(0, 5)
+    .map((row) => mapProductSnapshot(row, productStatus))
+  const highStorageShare = productRows
+    .filter((row) => Number(row.storageFromSalesPercent) >= HIGH_STORAGE_SHARE_PERCENT)
+    .sort((a, b) => Number(b.storageFromSalesPercent) - Number(a.storageFromSalesPercent))
+    .slice(0, 5)
+    .map((row) => mapProductSnapshot(row, productStatus))
+  const missingCostPrice = productRows
+    .filter((row) => Number(row.costPrice) === 0 && row.boughtWithReturns > 0)
+    .sort((a, b) => b.boughtWithReturns - a.boughtWithReturns)
+    .slice(0, 5)
+    .map((row) => mapProductSnapshot(row, productStatus))
+  const highReturnRate = productRows
+    .filter((row) => productReturnRate(row) >= HIGH_RETURN_RATE_PERCENT && row.returns >= HIGH_RETURN_RATE_MIN_RETURNS)
+    .sort((a, b) => productReturnRate(b) - productReturnRate(a))
+    .slice(0, 5)
+    .map((row) => mapProductSnapshot(row, productStatus))
   const risks = productRows
-    .filter((row) => Number(row.operatingProfit) < 0 || Number(row.drr) >= 20 || (Number(row.costPrice) === 0 && row.boughtWithReturns > 0))
+    .filter((row) =>
+      Number(row.operatingProfit) < 0
+      || Number(row.drr) >= 20
+      || Number(row.logisticsFromSalesPercent) >= HIGH_LOGISTICS_SHARE_PERCENT
+      || Number(row.storageFromSalesPercent) >= HIGH_STORAGE_SHARE_PERCENT
+      || (Number(row.costPrice) === 0 && row.boughtWithReturns > 0)
+      || (productReturnRate(row) >= HIGH_RETURN_RATE_PERCENT && row.returns >= HIGH_RETURN_RATE_MIN_RETURNS)
+    )
     .sort((a, b) => Number(a.operatingProfit) - Number(b.operatingProfit))
     .slice(0, 5)
     .map((row) => mapProductSnapshot(row, productStatus))
@@ -286,6 +330,7 @@ export async function getDashboardSummary(
     financialStatus,
     reportRowsCount,
     reportRows: productRows,
+    advertising,
     stocks,
     feedback,
     freshnessItems: freshness.items,
@@ -311,6 +356,8 @@ export async function getDashboardSummary(
       orders: metric('Заказы', orders, comparisonOrders, 'count', financialStatus, 'RealizationReport.delivered', reportHint(financialStatus)),
       buyouts: metric('Выкупы', buyouts, comparisonBuyouts, 'count', financialStatus, 'RealizationReport.boughtWithReturns', reportHint(financialStatus)),
     },
+    financialBreakdown,
+    salesAnalytics,
     plan,
     advertising: {
       ...advertising,
@@ -324,6 +371,11 @@ export async function getDashboardSummary(
       topProfit,
       topRevenue,
       risks,
+      negativeProfit,
+      highLogisticsShare,
+      highStorageShare,
+      missingCostPrice,
+      highReturnRate,
       source: 'Report calculator output from persisted data',
       hint: productStatus === 'missing' ? 'Синхронизируйте финансовый отчет за выбранный период.' : null,
     },
@@ -504,26 +556,85 @@ async function getAdvertisingSummary(
   dateFrom: string,
   dateTo: string,
 ): Promise<DashboardAdvertisingSummary> {
-  const coverage = await getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo)
-  const rows = await prisma.adCampaignStat.findMany({
-    where: {
-      date: { gte: parseDateKey(dateFrom), lte: parseDateKey(dateTo) },
-      campaign: { wbAccountId },
-    },
-    select: {
-      campaignId: true,
-      source: true,
-      views: true,
-      clicks: true,
-      spend: true,
-      orders: true,
-      cartAdds: true,
-    },
+  const from = parseDateKey(dateFrom)
+  const to = parseDateKey(dateTo)
+  const [coverage, rows, campaigns] = await Promise.all([
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo),
+    prisma.adCampaignStat.findMany({
+      where: {
+        date: { gte: from, lte: to },
+        campaign: { wbAccountId },
+      },
+      select: {
+        campaignId: true,
+        date: true,
+        source: true,
+        views: true,
+        clicks: true,
+        spend: true,
+        orders: true,
+        cartAdds: true,
+      },
+    }),
+    prisma.adCampaign.findMany({
+      where: { wbAccountId },
+      select: { id: true, advertId: true, name: true, status: true },
+    }),
+  ])
+
+  const rowsByCampaign = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const group = rowsByCampaign.get(row.campaignId) ?? []
+    group.push(row)
+    rowsByCampaign.set(row.campaignId, group)
+  }
+
+  const campaignSnapshots: DashboardAdvertisingCampaignSnapshot[] = campaigns.map((campaign) => {
+    const campaignRows = rowsByCampaign.get(campaign.id) ?? []
+    const totalRows = campaignRows.filter((row) => row.source === 'total')
+    const rowsForTotals = totalRows.length > 0 ? totalRows : campaignRows.filter((row) => row.source !== 'total')
+    const views = rowsForTotals.reduce((sum, row) => sum + row.views, 0)
+    const clicks = rowsForTotals.reduce((sum, row) => sum + row.clicks, 0)
+    const spend = rowsForTotals.reduce((sum, row) => sum + Number(row.spend), 0)
+    const orders = rowsForTotals.reduce((sum, row) => sum + row.orders, 0)
+    const cartAdds = rowsForTotals.reduce((sum, row) => sum + row.cartAdds, 0)
+    const lastStat = campaignRows.reduce<Date | null>(
+      (latest, row) => (!latest || row.date > latest ? row.date : latest),
+      null,
+    )
+
+    return {
+      id: campaign.id,
+      advertId: campaign.advertId,
+      name: campaign.name,
+      status: campaign.status,
+      spend,
+      views,
+      clicks,
+      orders,
+      cartAdds,
+      ctr: views > 0 ? (clicks / views) * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0,
+      lastStatDate: lastStat ? formatDateKey(lastStat) : null,
+      statusText: rowsForTotals.length > 0 ? 'ready' : 'missing',
+    }
   })
 
-  const totalRows = rows.filter((row) => row.source === 'total')
-  const rowsForTotals = totalRows.length > 0 ? totalRows : rows.filter((row) => row.source !== 'total')
-  const status = statusFromCoverage(coverage.isCovered, rowsForTotals.length)
+  const snapshotsWithStats = campaignSnapshots.filter((campaign) => campaign.statusText !== 'missing')
+  const status = statusFromCoverage(coverage.isCovered, snapshotsWithStats.length)
+  const staleStatsBoundary = addDays(to, -RECENT_AD_STATS_DAYS)
+  const campaignsWithoutRecentStats = campaignSnapshots
+    .filter((campaign) => {
+      if (campaign.status !== ACTIVE_AD_STATUS) return false
+      if (!campaign.lastStatDate) return true
+      return parseDateKey(campaign.lastStatDate) < staleStatsBoundary
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }))
+    .slice(0, 5)
+  const inefficientCampaigns = snapshotsWithStats
+    .filter((campaign) => campaign.spend > 0 && campaign.orders === 0)
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 5)
 
   if (status === 'missing') {
     return {
@@ -537,16 +648,20 @@ async function getAdvertisingSummary(
       cpc: null,
       drr: null,
       campaigns: 0,
+      spendWithoutOrders: null,
+      inefficientCampaigns: [],
+      campaignsWithoutRecentStats,
       source: 'AdCampaignStat',
       hint: 'Синхронизируйте статистику рекламы за выбранный период.',
     }
   }
 
-  const views = rowsForTotals.reduce((sum, row) => sum + row.views, 0)
-  const clicks = rowsForTotals.reduce((sum, row) => sum + row.clicks, 0)
-  const spend = rowsForTotals.reduce((sum, row) => sum + Number(row.spend), 0)
-  const orders = rowsForTotals.reduce((sum, row) => sum + row.orders, 0)
-  const cartAdds = rowsForTotals.reduce((sum, row) => sum + row.cartAdds, 0)
+  const views = snapshotsWithStats.reduce((sum, campaign) => sum + campaign.views, 0)
+  const clicks = snapshotsWithStats.reduce((sum, campaign) => sum + campaign.clicks, 0)
+  const spend = snapshotsWithStats.reduce((sum, campaign) => sum + campaign.spend, 0)
+  const orders = snapshotsWithStats.reduce((sum, campaign) => sum + campaign.orders, 0)
+  const cartAdds = snapshotsWithStats.reduce((sum, campaign) => sum + campaign.cartAdds, 0)
+  const spendWithoutOrders = inefficientCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0)
 
   return {
     status,
@@ -558,9 +673,98 @@ async function getAdvertisingSummary(
     ctr: views > 0 ? (clicks / views) * 100 : 0,
     cpc: clicks > 0 ? spend / clicks : 0,
     drr: null,
-    campaigns: new Set(rowsForTotals.map((row) => row.campaignId)).size,
+    campaigns: snapshotsWithStats.length,
+    spendWithoutOrders,
+    inefficientCampaigns,
+    campaignsWithoutRecentStats,
     source: 'AdCampaignStat',
-    hint: status === 'partial' ? 'Есть сохраненная статистика, но покрытие периода неполное.' : null,
+    hint: status === 'partial' ? 'Есть сохраненная статистика рекламы, но покрытие периода неполное.' : null,
+  }
+}
+
+async function getSalesAnalytics(
+  wbAccountId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<DashboardSalesAnalytics> {
+  const from = parseDateKey(dateFrom)
+  const to = parseDateKey(dateTo)
+  const [coverage, orders, sales, funnelRows] = await Promise.all([
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.SALES_PLAN_PERIOD, dateFrom, dateTo),
+    prisma.wbOrder.findMany({
+      where: { wbAccountId, date: { gte: from, lte: to } },
+      select: { finishedPrice: true, isCancel: true },
+    }),
+    prisma.wbSale.findMany({
+      where: { wbAccountId, date: { gte: from, lte: to } },
+      select: { priceWithDisc: true, isReturn: true },
+    }),
+    prisma.wbFunnelStat.findMany({
+      where: { wbAccountId, date: { gte: from, lte: to } },
+      select: {
+        openCount: true,
+        addToCartCount: true,
+        cartCount: true,
+        ordersCount: true,
+      },
+    }),
+  ])
+  const rowCount = orders.length + sales.length + funnelRows.length
+  const status = statusFromCoverage(coverage.isCovered, rowCount)
+
+  if (status === 'missing') {
+    return {
+      status,
+      orders: null,
+      sales: null,
+      returns: null,
+      cancellations: null,
+      buyoutPercent: null,
+      averagePrice: null,
+      funnel: {
+        openCount: null,
+        addToCartCount: null,
+        cartCount: null,
+        ordersCount: null,
+        addToCartConversion: null,
+        cartToOrderConversion: null,
+      },
+      source: 'WbOrder + WbSale + WbFunnelStat',
+      hint: 'Синхронизируйте продажи, заказы и воронку за выбранный период.',
+    }
+  }
+
+  const ordersCount = orders.length
+  const cancellations = orders.filter((order) => order.isCancel).length
+  const nonReturnSales = sales.filter((sale) => !sale.isReturn)
+  const returns = sales.filter((sale) => sale.isReturn).length
+  const salesAmount = nonReturnSales.reduce((sum, sale) => sum + Number(sale.priceWithDisc), 0)
+  const buyoutPercent = ordersCount > 0
+    ? Math.min(100, (nonReturnSales.length / ordersCount) * 100)
+    : null
+  const openCount = funnelRows.reduce((sum, row) => sum + row.openCount, 0)
+  const addToCartCount = funnelRows.reduce((sum, row) => sum + row.addToCartCount, 0)
+  const cartCount = funnelRows.reduce((sum, row) => sum + row.cartCount, 0)
+  const funnelOrdersCount = funnelRows.reduce((sum, row) => sum + row.ordersCount, 0)
+
+  return {
+    status,
+    orders: ordersCount,
+    sales: nonReturnSales.length,
+    returns,
+    cancellations,
+    buyoutPercent,
+    averagePrice: nonReturnSales.length > 0 ? salesAmount / nonReturnSales.length : 0,
+    funnel: {
+      openCount,
+      addToCartCount,
+      cartCount,
+      ordersCount: funnelOrdersCount,
+      addToCartConversion: openCount > 0 ? (addToCartCount / openCount) * 100 : 0,
+      cartToOrderConversion: cartCount > 0 ? (funnelOrdersCount / cartCount) * 100 : 0,
+    },
+    source: 'WbOrder + WbSale + WbFunnelStat',
+    hint: status === 'partial' ? 'Есть часть данных продаж или воронки, но период не закрыт покрытием.' : null,
   }
 }
 
@@ -800,6 +1004,64 @@ function withAccount(href: string, wbAccountId: string): string {
   return `${href}${separator}account=${wbAccountId}`
 }
 
+function buildFinancialBreakdown(
+  report: ReportData | null,
+  status: DashboardValueStatus,
+): DashboardFinancialBreakdown {
+  if (status === 'missing') {
+    return {
+      status,
+      revenue: null,
+      toTransfer: null,
+      operatingProfit: null,
+      marginality: null,
+      rentability: null,
+      taxes: null,
+      logistics: null,
+      storage: null,
+      penalties: null,
+      acceptance: null,
+      paidStorage: null,
+      selfPurchases: null,
+      externalAds: null,
+      wbAds: null,
+      returnAmount: null,
+      returnCount: null,
+      returnRate: null,
+      source: 'Report calculator',
+      hint: reportHint(status),
+    }
+  }
+
+  const summary = report?.summary
+  const returnCount = Number(summary?.returns ?? 0)
+  const boughtWithoutReturns = Number(summary?.boughtWithoutReturns ?? 0)
+  const returnsWithSpp = Number(summary?.returnsWithSpp ?? 0)
+
+  return {
+    status,
+    revenue: Number(summary?.sale ?? 0),
+    toTransfer: Number(summary?.toTransfer ?? 0),
+    operatingProfit: Number(summary?.operatingProfit ?? 0),
+    marginality: Number(summary?.marginality ?? 0),
+    rentability: Number(summary?.rentability ?? 0),
+    taxes: Number(summary?.taxes ?? 0),
+    logistics: Number(summary?.logistics ?? 0),
+    storage: Number(summary?.storageFee ?? 0),
+    penalties: Number(summary?.penalty ?? 0),
+    acceptance: Number(summary?.acceptance ?? 0),
+    paidStorage: Number(summary?.storageFee ?? 0),
+    selfPurchases: Number(summary?.selfPurchases ?? 0),
+    externalAds: Number(summary?.externalAd ?? 0),
+    wbAds: Number(summary?.adAll ?? 0),
+    returnAmount: returnsWithSpp,
+    returnCount,
+    returnRate: boughtWithoutReturns > 0 ? (returnCount / boughtWithoutReturns) * 100 : 0,
+    source: 'Report calculator',
+    hint: reportHint(status),
+  }
+}
+
 function reportMetricValue(
   report: ReportData | null,
   key: keyof ReportData['summary'],
@@ -833,18 +1095,7 @@ function metric(
 }
 
 function mapProductSnapshot(
-  row: {
-    nmId: number
-    vendorCode: string
-    brandName: string
-    subjectName: string
-    photoUrl: string | null
-    sale: string
-    operatingProfit: string
-    marginality: string
-    drr: string
-    returns: number
-  },
+  row: ReportRow,
   status: DashboardValueStatus,
 ): DashboardProductSnapshot {
   return {
@@ -854,12 +1105,24 @@ function mapProductSnapshot(
     subjectName: row.subjectName,
     photoUrl: row.photoUrl,
     revenue: Number(row.sale),
+    toTransfer: Number(row.toTransfer),
     operatingProfit: Number(row.operatingProfit),
     marginality: Number(row.marginality),
+    rentability: Number(row.rentability),
     drr: Number(row.drr),
+    logistics: Number(row.logistics),
+    logisticsShare: Number(row.logisticsFromSalesPercent),
+    storage: Number(row.storageFee),
+    storageShare: Number(row.storageFromSalesPercent),
+    costPrice: Number(row.costPrice),
     returns: row.returns,
+    returnRate: productReturnRate(row),
     status,
   }
+}
+
+function productReturnRate(row: Pick<ReportRow, 'returns' | 'boughtWithoutReturns'>): number {
+  return row.boughtWithoutReturns > 0 ? (row.returns / row.boughtWithoutReturns) * 100 : 0
 }
 
 function statusFromCoverage(isCovered: boolean, rowCount: number): DashboardValueStatus {

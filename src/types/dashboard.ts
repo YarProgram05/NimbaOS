@@ -21,6 +21,11 @@ export type DashboardIssueCategory =
   | 'no_recent_report_data'
   | 'high_drr'
   | 'negative_margin'
+  | 'high_logistics_share'
+  | 'high_storage_share'
+  | 'high_return_rate'
+  | 'inefficient_campaign'
+  | 'campaign_without_recent_stats'
   | 'product_without_stock_data'
   | 'unanswered_review_question'
   | 'low_stock'
@@ -66,11 +71,78 @@ export interface DashboardProductSnapshot {
   subjectName: string
   photoUrl: string | null
   revenue: number
+  toTransfer: number
   operatingProfit: number
   marginality: number
+  rentability: number
   drr: number
+  logistics: number
+  logisticsShare: number
+  storage: number
+  storageShare: number
+  costPrice: number
   returns: number
+  returnRate: number
   status: DashboardValueStatus
+}
+
+export interface DashboardFinancialBreakdown {
+  status: DashboardValueStatus
+  revenue: number | null
+  toTransfer: number | null
+  operatingProfit: number | null
+  marginality: number | null
+  rentability: number | null
+  taxes: number | null
+  logistics: number | null
+  storage: number | null
+  penalties: number | null
+  acceptance: number | null
+  paidStorage: number | null
+  selfPurchases: number | null
+  externalAds: number | null
+  wbAds: number | null
+  returnAmount: number | null
+  returnCount: number | null
+  returnRate: number | null
+  source: string
+  hint: string | null
+}
+
+export interface DashboardSalesAnalytics {
+  status: DashboardValueStatus
+  orders: number | null
+  sales: number | null
+  returns: number | null
+  cancellations: number | null
+  buyoutPercent: number | null
+  averagePrice: number | null
+  funnel: {
+    openCount: number | null
+    addToCartCount: number | null
+    cartCount: number | null
+    ordersCount: number | null
+    addToCartConversion: number | null
+    cartToOrderConversion: number | null
+  }
+  source: string
+  hint: string | null
+}
+
+export interface DashboardAdvertisingCampaignSnapshot {
+  id: string
+  advertId: number
+  name: string
+  status: number
+  spend: number
+  views: number
+  clicks: number
+  orders: number
+  cartAdds: number
+  ctr: number
+  cpc: number
+  lastStatDate: string | null
+  statusText: DashboardValueStatus
 }
 
 export interface DashboardPlanSummary {
@@ -96,6 +168,9 @@ export interface DashboardAdvertisingSummary {
   cpc: number | null
   drr: number | null
   campaigns: number
+  spendWithoutOrders: number | null
+  inefficientCampaigns: DashboardAdvertisingCampaignSnapshot[]
+  campaignsWithoutRecentStats: DashboardAdvertisingCampaignSnapshot[]
   source: string
   hint: string | null
 }
@@ -177,6 +252,8 @@ export interface DashboardSummary {
     orders: DashboardMetric
     buyouts: DashboardMetric
   }
+  financialBreakdown: DashboardFinancialBreakdown
+  salesAnalytics: DashboardSalesAnalytics
   plan: DashboardPlanSummary
   advertising: DashboardAdvertisingSummary
   stocks: StocksSummary
@@ -186,6 +263,11 @@ export interface DashboardSummary {
     topProfit: DashboardProductSnapshot[]
     topRevenue: DashboardProductSnapshot[]
     risks: DashboardProductSnapshot[]
+    negativeProfit: DashboardProductSnapshot[]
+    highLogisticsShare: DashboardProductSnapshot[]
+    highStorageShare: DashboardProductSnapshot[]
+    missingCostPrice: DashboardProductSnapshot[]
+    highReturnRate: DashboardProductSnapshot[]
     source: string
     hint: string | null
   }

@@ -1,4 +1,5 @@
 import type {
+  DashboardAdvertisingSummary,
   DashboardFreshnessItem,
   DashboardInsight,
   DashboardIssue,
@@ -17,7 +18,11 @@ type ProblemRow = {
   operatingProfit: string
   drr: string
   costPrice: string
+  logisticsFromSalesPercent: string
+  storageFromSalesPercent: string
   boughtWithReturns: number
+  boughtWithoutReturns: number
+  returns: number
 }
 
 interface BuildDashboardProblemCenterInput {
@@ -27,6 +32,7 @@ interface BuildDashboardProblemCenterInput {
   financialStatus: DashboardValueStatus
   reportRowsCount: number
   reportRows: ProblemRow[]
+  advertising: DashboardAdvertisingSummary
   stocks: StocksSummary
   feedback: FeedbackSummary
   freshnessItems: DashboardFreshnessItem[]
@@ -40,6 +46,7 @@ export function buildDashboardProblemCenter(
     ...buildFreshnessIssues(input),
     ...buildReportAvailabilityIssues(input),
     ...buildProductIssues(input),
+    ...buildAdvertisingIssues(input),
     ...buildStockIssues(input),
     ...buildFeedbackIssues(input),
   ]
@@ -267,6 +274,46 @@ function buildReportAvailabilityIssues(input: BuildDashboardProblemCenterInput):
   ]
 }
 
+function buildAdvertisingIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
+  const issues: DashboardIssue[] = []
+
+  for (const campaign of input.advertising.inefficientCampaigns) {
+    issues.push({
+      id: `inefficient-campaign:${campaign.id}`,
+      category: 'inefficient_campaign',
+      severity: campaign.spend >= 5000 ? 'critical' : 'warning',
+      title: `Проверить рекламу без заказов: ${campaign.name}`,
+      description: 'Кампания потратила бюджет за выбранный период, но не принесла заказов по сохраненной статистике. Проверьте ставки, карточки и релевантность размещения.',
+      href: advertisingHref(input),
+      source: 'AdCampaignStat',
+      metricLabel: 'Расход',
+      metricValue: formatRub(campaign.spend),
+      entityId: String(campaign.advertId),
+      entityLabel: campaign.name,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  for (const campaign of input.advertising.campaignsWithoutRecentStats) {
+    issues.push({
+      id: `campaign-stale-stats:${campaign.id}`,
+      category: 'campaign_without_recent_stats',
+      severity: 'warning',
+      title: `Обновить статистику кампании: ${campaign.name}`,
+      description: 'Активная рекламная кампания не имеет свежей статистики за выбранный период. Dashboard может недооценивать расход и эффективность рекламы.',
+      href: advertisingHref(input),
+      source: 'AdCampaignStat',
+      metricLabel: 'Статистика',
+      metricValue: campaign.lastStatDate ?? 'нет',
+      entityId: String(campaign.advertId),
+      entityLabel: campaign.name,
+      createdAt: input.generatedAt,
+    })
+  }
+
+  return issues.slice(0, 10)
+}
+
 function buildProductIssues(input: BuildDashboardProblemCenterInput): DashboardIssue[] {
   if (input.financialStatus === 'missing') return []
 
@@ -281,6 +328,9 @@ function buildProductIssues(input: BuildDashboardProblemCenterInput): DashboardI
     const drr = Number(row.drr)
     const costPrice = Number(row.costPrice)
     const sale = Number(row.sale)
+    const logisticsShare = Number(row.logisticsFromSalesPercent)
+    const storageShare = Number(row.storageFromSalesPercent)
+    const returnRate = row.boughtWithoutReturns > 0 ? (row.returns / row.boughtWithoutReturns) * 100 : 0
 
     if (costPrice === 0 && row.boughtWithReturns > 0) {
       issues.push({
@@ -332,6 +382,57 @@ function buildProductIssues(input: BuildDashboardProblemCenterInput): DashboardI
         createdAt: input.generatedAt,
       })
     }
+
+    if (sale > 0 && logisticsShare >= 15) {
+      issues.push({
+        id: `high-logistics:${row.nmId}`,
+        category: 'high_logistics_share',
+        severity: logisticsShare >= 25 ? 'critical' : 'warning',
+        title: `Высокая доля логистики: ${label}`,
+        description: 'Логистика занимает заметную долю от продаж. Проверьте цену, габариты, возвраты и экономику поставки.',
+        href: reportsHref(input),
+        source: 'Report calculator',
+        metricLabel: 'Логистика',
+        metricValue: `${formatNumber(logisticsShare, 1)}%`,
+        entityId: String(row.nmId),
+        entityLabel: label,
+        createdAt: input.generatedAt,
+      })
+    }
+
+    if (sale > 0 && storageShare >= 5) {
+      issues.push({
+        id: `high-storage:${row.nmId}`,
+        category: 'high_storage_share',
+        severity: storageShare >= 10 ? 'critical' : 'warning',
+        title: `Высокое хранение: ${label}`,
+        description: 'Стоимость хранения стала существенной относительно продаж. Проверьте скорость оборачиваемости и остатки по товару.',
+        href: reportsHref(input),
+        source: 'Report calculator',
+        metricLabel: 'Хранение',
+        metricValue: `${formatNumber(storageShare, 1)}%`,
+        entityId: String(row.nmId),
+        entityLabel: label,
+        createdAt: input.generatedAt,
+      })
+    }
+
+    if (returnRate >= 20 && row.returns >= 2) {
+      issues.push({
+        id: `high-return-rate:${row.nmId}`,
+        category: 'high_return_rate',
+        severity: returnRate >= 35 ? 'critical' : 'warning',
+        title: `Высокая доля возвратов: ${label}`,
+        description: 'Возвраты заметно съедают продажи. Проверьте карточку, размерную сетку, качество товара и причины негативной обратной связи.',
+        href: reportsHref(input),
+        source: 'Report calculator',
+        metricLabel: 'Возвраты',
+        metricValue: `${formatNumber(returnRate, 1)}%`,
+        entityId: String(row.nmId),
+        entityLabel: label,
+        createdAt: input.generatedAt,
+      })
+    }
   }
 
   return issues.slice(0, 30)
@@ -376,6 +477,11 @@ function insightTitle(category: DashboardIssueCategory, count: number, lead: Das
   if (category === 'no_recent_report_data') return 'Нет свежего финансового отчета'
   if (category === 'high_drr') return count === 1 ? lead.title : `Высокий ДРР: ${count} товаров`
   if (category === 'negative_margin') return count === 1 ? lead.title : `Отрицательная прибыль: ${count} товаров`
+  if (category === 'high_logistics_share') return count === 1 ? lead.title : `Высокая логистика: ${count} товаров`
+  if (category === 'high_storage_share') return count === 1 ? lead.title : `Высокое хранение: ${count} товаров`
+  if (category === 'high_return_rate') return count === 1 ? lead.title : `Высокие возвраты: ${count} товаров`
+  if (category === 'inefficient_campaign') return count === 1 ? lead.title : `Реклама без заказов: ${count} кампаний`
+  if (category === 'campaign_without_recent_stats') return count === 1 ? lead.title : `Нет свежей статистики: ${count} кампаний`
   if (category === 'product_without_stock_data') return 'Нужны данные по остаткам'
   if (category === 'unanswered_review_question') return 'Есть необработанная обратная связь'
   if (category === 'low_stock') return 'Есть риск низкого остатка'
@@ -389,6 +495,11 @@ function insightDescription(category: DashboardIssueCategory, count: number, lea
   if (category === 'no_recent_report_data') return lead.description
   if (category === 'high_drr') return 'Проверьте кампании и ставки по товарам с высокой долей рекламных расходов.'
   if (category === 'negative_margin') return 'Начните с товаров с самой низкой операционной прибылью.'
+  if (category === 'high_logistics_share') return 'Проверьте товары, где логистика стала слишком большой долей продаж.'
+  if (category === 'high_storage_share') return 'Начните с товаров, где хранение заметно давит на экономику.'
+  if (category === 'high_return_rate') return 'Проверьте товары с повышенной долей возвратов и причины недовольства покупателей.'
+  if (category === 'inefficient_campaign') return 'Кампании тратят бюджет без заказов по сохраненной статистике.'
+  if (category === 'campaign_without_recent_stats') return 'Активные кампании требуют свежей статистики для корректной оценки рекламы.'
   return lead.description
 }
 
@@ -397,7 +508,18 @@ function insightMetric(category: DashboardIssueCategory, issues: DashboardIssue[
     const total = issues.reduce((sum, issue) => sum + parseRub(issue.metricValue), 0)
     return formatRub(total)
   }
-  if (category === 'missing_cost_price' || category === 'high_drr') return `${issues.length} поз.`
+  if (
+    category === 'missing_cost_price'
+    || category === 'high_drr'
+    || category === 'high_logistics_share'
+    || category === 'high_storage_share'
+    || category === 'high_return_rate'
+  ) return `${issues.length} поз.`
+  if (category === 'inefficient_campaign') {
+    const total = issues.reduce((sum, issue) => sum + parseRub(issue.metricValue), 0)
+    return formatRub(total)
+  }
+  if (category === 'campaign_without_recent_stats') return `${issues.length} камп.`
   return issues[0]?.metricValue ?? null
 }
 
@@ -426,11 +548,16 @@ function categoryRank(category: DashboardIssueCategory): number {
     data_stale: 3,
     negative_margin: 4,
     high_drr: 5,
-    missing_cost_price: 6,
-    out_of_stock: 7,
-    low_stock: 8,
-    product_without_stock_data: 9,
-    unanswered_review_question: 10,
+    inefficient_campaign: 6,
+    high_return_rate: 7,
+    high_logistics_share: 8,
+    high_storage_share: 9,
+    missing_cost_price: 10,
+    campaign_without_recent_stats: 11,
+    out_of_stock: 12,
+    low_stock: 13,
+    product_without_stock_data: 14,
+    unanswered_review_question: 15,
   }
   return ranks[category]
 }
