@@ -54,7 +54,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
     TREND_SERIES.some((series) => point[series.key] !== null)
   )
   const showDistributions = variant === 'compact'
-  const chartHeightClass = variant === 'full' ? 'h-[420px]' : 'h-[248px]'
+  const chartHeightClass = variant === 'full' ? 'h-[432px]' : 'h-[260px]'
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsReady(true))
@@ -81,7 +81,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
               width={trendSize.width}
               height={trendSize.height}
               data={charts.trend}
-              margin={{ top: 8, right: 10, bottom: 0, left: 0 }}
+              margin={{ top: 18, right: 10, bottom: 4, left: 0 }}
             >
               <CartesianGrid
                 stroke="color-mix(in oklch, var(--border) 60%, transparent)"
@@ -102,6 +102,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
                 tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
                 tickFormatter={shortRub}
                 width={44}
+                padding={{ top: 8, bottom: 4 }}
               />
               <YAxis
                 yAxisId="count"
@@ -112,6 +113,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
                 tickFormatter={formatNumber}
                 width={34}
                 allowDecimals={false}
+                padding={{ top: 8, bottom: 4 }}
               />
               <Tooltip
                 cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}

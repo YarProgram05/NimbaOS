@@ -43,6 +43,11 @@ function lastDaysPeriod(days: number) {
   }
 }
 
+async function getConfiguredRollingDays(wbAccountId: string, kind: SyncJobKind): Promise<number> {
+  const schedules = await listSyncSchedules(wbAccountId)
+  return schedules.find((schedule) => schedule.kind === kind)?.rollingDays ?? 7
+}
+
 export async function getSyncJobRunsAction(): Promise<ActionResult<SyncJobRunRow[]>> {
   try {
     await requireSession()
@@ -339,7 +344,9 @@ export async function enqueueManualSyncAction(
   kind: SyncJobKind,
   wbAccountId: string,
 ): Promise<ActionResult<EnqueuedSyncJob>> {
-  const { dateFrom, dateTo } = lastDaysPeriod(7)
+  await requireManagerSession()
+  const rollingDays = wbAccountId ? await getConfiguredRollingDays(wbAccountId, kind) : 7
+  const { dateFrom, dateTo } = lastDaysPeriod(rollingDays)
 
   switch (kind) {
     case SYNC_JOB_KINDS.PRODUCTS_REFRESH:

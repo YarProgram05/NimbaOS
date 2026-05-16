@@ -273,7 +273,7 @@ export function SyncClient({
         <CardHeader>
           <CardTitle className="text-base">Ручной запуск</CardTitle>
           <CardDescription>
-            Запускает актуальные данные без historical/full resync. Для отчётов, плана и рекламы берётся последние 7 дней.
+            Запускает актуальные данные без historical/full resync. Для отчётов, плана и рекламы берётся период из сохранённого расписания.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
