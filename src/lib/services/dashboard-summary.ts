@@ -14,6 +14,7 @@ import type {
   DashboardFreshnessItem,
   DashboardIssueSeverity,
   DashboardMetric,
+  DashboardOverviewCharts,
   DashboardPeriod,
   DashboardPeriodPreset,
   DashboardPlanSummary,
@@ -359,6 +360,24 @@ export async function getDashboardSummary(
     stocks,
     generatedAt,
   })
+  const overviewCharts = await buildOverviewCharts({
+    accountId: account.id,
+    period,
+    financialBreakdown,
+    advertising: {
+      ...advertising,
+      drr,
+      status: mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
+    },
+    stocks,
+    feedback,
+    freshness,
+    problemCenter,
+    products: {
+      status: productStatus,
+      risks,
+    },
+  })
 
   const summary: DashboardSummary = {
     account: {
@@ -391,6 +410,7 @@ export async function getDashboardSummary(
     feedback,
     forecasts,
     recommendations,
+    overviewCharts,
     products: {
       status: productStatus,
       topProfit,
@@ -790,6 +810,179 @@ async function getSalesAnalytics(
     },
     source: 'WbOrder + WbSale + WbFunnelStat',
     hint: status === 'partial' ? 'Есть часть данных продаж или воронки, но период не закрыт покрытием.' : null,
+  }
+}
+
+type OverviewBucket = {
+  dateFrom: string
+  dateTo: string
+  label: string
+}
+
+async function buildOverviewCharts(input: {
+  accountId: string
+  period: DashboardPeriod
+  financialBreakdown: DashboardFinancialBreakdown
+  advertising: DashboardAdvertisingSummary
+  stocks: DashboardSummary['stocks']
+  feedback: DashboardSummary['feedback']
+  freshness: DashboardSummary['freshness']
+  problemCenter: DashboardSummary['problemCenter']
+  products: {
+    status: DashboardValueStatus
+    risks: DashboardProductSnapshot[]
+  }
+}): Promise<DashboardOverviewCharts> {
+  const { granularity, buckets } = buildOverviewBuckets(input.period)
+  const adSpendByBucket = await getOverviewAdSpendByBucket(input.accountId, buckets)
+  const trend = await Promise.all(buckets.map(async (bucket) => {
+    const from = parseDateKey(bucket.dateFrom)
+    const to = parseDateKey(bucket.dateTo)
+    const [coverage, rowCount] = await Promise.all([
+      getSyncCoverage(input.accountId, SYNC_JOB_KINDS.REPORTS_PERIOD, bucket.dateFrom, bucket.dateTo),
+      countReportRows(input.accountId, from, to),
+    ])
+    const status = statusFromCoverage(coverage.isCovered, rowCount)
+    const report = status === 'missing'
+      ? null
+      : await calculateReport(input.accountId, bucket.dateFrom, bucket.dateTo, { preferPersistedAdStats: true })
+
+    return {
+      label: bucket.label,
+      dateFrom: bucket.dateFrom,
+      dateTo: bucket.dateTo,
+      revenue: reportMetricValue(report, 'sale', status),
+      operatingProfit: reportMetricValue(report, 'operatingProfit', status),
+      orders: reportMetricValue(report, 'delivered', status),
+      buyouts: reportMetricValue(report, 'boughtWithReturns', status),
+      adSpend: input.advertising.status === 'missing' ? null : adSpendByBucket.get(overviewBucketKey(bucket)) ?? 0,
+      status,
+    }
+  }))
+
+  return {
+    granularity,
+    trend,
+    finance: [
+      distributionItem('to-transfer', 'К перечислению', input.financialBreakdown.toTransfer, input.financialBreakdown.status, 'positive'),
+      distributionItem('logistics', 'Логистика', input.financialBreakdown.logistics, input.financialBreakdown.status, 'warning'),
+      distributionItem('storage', 'Хранение', input.financialBreakdown.storage, input.financialBreakdown.status, 'warning'),
+      distributionItem('taxes', 'Налоги', input.financialBreakdown.taxes, input.financialBreakdown.status, 'neutral'),
+      distributionItem('wb-ads', 'WB реклама', input.financialBreakdown.wbAds ?? input.advertising.spend, input.financialBreakdown.status, 'warning'),
+    ].filter((item) => item.value > 0),
+    dataQuality: [
+      distributionItem('ready', 'Готово', input.freshness.items.filter((item) => item.status === 'ready').length, 'ready', 'positive'),
+      distributionItem('partial', 'Частично', input.freshness.items.filter((item) => item.status === 'partial').length, 'partial', 'warning'),
+      distributionItem('missing', 'Нет данных', input.freshness.items.filter((item) => item.status === 'missing').length, 'missing', 'critical'),
+      distributionItem('failed', 'Ошибки', input.freshness.failedJobs, input.freshness.failedJobs > 0 ? 'partial' : 'ready', 'critical'),
+    ],
+    risks: [
+      distributionItem('stock', 'Остатки', input.stocks.lowStockCount + input.stocks.outOfStockCount, input.stocks.status === 'ready' ? 'ready' : 'missing', 'critical'),
+      distributionItem('products', 'Товары', input.products.risks.length, input.products.status, 'warning'),
+      distributionItem('feedback', 'Отзывы/вопросы', input.feedback.negativeReviews + input.feedback.unansweredReviews + input.feedback.unansweredQuestions, input.feedback.status === 'ready' ? 'ready' : 'missing', 'warning'),
+      distributionItem('campaigns', 'Реклама', input.advertising.inefficientCampaigns.length + input.advertising.campaignsWithoutRecentStats.length, input.advertising.status, 'warning'),
+      distributionItem('actions', 'Фокус', input.problemCenter.criticalCount + input.problemCenter.warningCount, input.problemCenter.status, 'critical'),
+    ],
+  }
+}
+
+function buildOverviewBuckets(period: DashboardPeriod): { granularity: DashboardOverviewCharts['granularity']; buckets: OverviewBucket[] } {
+  const from = parseDateKey(period.dateFrom)
+  const to = parseDateKey(period.dateTo)
+  const useWeeks = period.days > 31
+  const buckets: OverviewBucket[] = []
+  let cursor = from
+
+  while (cursor <= to) {
+    const bucketFrom = cursor
+    const bucketTo = useWeeks ? minDate(addDays(cursor, 6), to) : cursor
+    buckets.push({
+      dateFrom: formatDateKey(bucketFrom),
+      dateTo: formatDateKey(bucketTo),
+      label: useWeeks
+        ? `${formatDateKey(bucketFrom).slice(5)}-${formatDateKey(bucketTo).slice(5)}`
+        : formatDateKey(bucketFrom).slice(5),
+    })
+    cursor = addDays(bucketTo, 1)
+  }
+
+  return {
+    granularity: useWeeks ? 'week' : 'day',
+    buckets,
+  }
+}
+
+function overviewBucketKey(bucket: OverviewBucket): string {
+  return `${bucket.dateFrom}:${bucket.dateTo}`
+}
+
+async function getOverviewAdSpendByBucket(
+  wbAccountId: string,
+  buckets: OverviewBucket[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  if (buckets.length === 0) return result
+
+  const from = parseDateKey(buckets[0].dateFrom)
+  const to = parseDateKey(buckets[buckets.length - 1].dateTo)
+  const rows = await prisma.adCampaignStat.findMany({
+    where: {
+      date: { gte: from, lte: to },
+      campaign: { wbAccountId },
+    },
+    select: {
+      campaignId: true,
+      date: true,
+      source: true,
+      spend: true,
+    },
+  })
+  const byDateCampaign = new Map<string, { total: number; placements: number }>()
+
+  for (const row of rows) {
+    const key = `${formatDateKey(row.date)}:${row.campaignId}`
+    const group = byDateCampaign.get(key) ?? { total: 0, placements: 0 }
+    if (row.source === 'total') {
+      group.total += Number(row.spend)
+    } else {
+      group.placements += Number(row.spend)
+    }
+    byDateCampaign.set(key, group)
+  }
+
+  const dailySpend = new Map<string, number>()
+  byDateCampaign.forEach((group, key) => {
+    const date = key.slice(0, 10)
+    dailySpend.set(date, (dailySpend.get(date) ?? 0) + (group.total > 0 ? group.total : group.placements))
+  })
+
+  for (const bucket of buckets) {
+    let sum = 0
+    let cursor = parseDateKey(bucket.dateFrom)
+    const bucketTo = parseDateKey(bucket.dateTo)
+    while (cursor <= bucketTo) {
+      sum += dailySpend.get(formatDateKey(cursor)) ?? 0
+      cursor = addDays(cursor, 1)
+    }
+    result.set(overviewBucketKey(bucket), sum)
+  }
+
+  return result
+}
+
+function distributionItem(
+  key: string,
+  label: string,
+  value: number | null,
+  status: DashboardValueStatus,
+  tone: DashboardOverviewCharts['finance'][number]['tone'],
+): DashboardOverviewCharts['finance'][number] {
+  return {
+    key,
+    label,
+    value: Math.max(0, Number(value ?? 0)),
+    status,
+    tone,
   }
 }
 

@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
+import type { ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
-  CalendarDays,
-  CheckCircle2,
+  CircleDollarSign,
   LineChart,
   MessageSquareText,
   RefreshCw,
@@ -18,6 +18,7 @@ import {
 import { authOptions } from '@/lib/auth'
 import { getDashboardSummary } from '@/lib/services/dashboard-summary'
 import type {
+  ActionRecommendation,
   DashboardIssueSeverity,
   DashboardMetric,
   DashboardPeriodPreset,
@@ -25,7 +26,8 @@ import type {
   DashboardSummary,
   DashboardValueStatus,
 } from '@/types/dashboard'
-import { DashboardExportButtons } from './dashboard-export-buttons'
+import { DashboardOverviewChartsPanel } from './dashboard-overview-charts'
+import { DashboardPeriodControls } from './dashboard-period-controls'
 
 interface DashboardPageProps {
   searchParams: Promise<{
@@ -35,14 +37,6 @@ interface DashboardPageProps {
     dateTo?: string
   }>
 }
-
-const PERIODS: { value: DashboardPeriodPreset; label: string }[] = [
-  { value: 'today', label: 'Сегодня' },
-  { value: 'yesterday', label: 'Вчера' },
-  { value: 'last7', label: '7 дней' },
-  { value: 'currentMonth', label: 'Месяц' },
-  { value: 'previousMonth', label: 'Прошлый' },
-]
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getServerSession(authOptions)
@@ -62,7 +56,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <p className="metric-label">NimbaOS</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Добавьте кабинет WB</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-            Дашборд строится только по локально сохраненным данным выбранного кабинета. Подключите кабинет в настройках, затем запустите синхронизацию.
+            Дашборд строится только по локально сохранённым данным выбранного кабинета. Подключите кабинет в настройках, затем запустите синхронизацию.
           </p>
           <Link href="/settings" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
             Открыть настройки <ArrowRight className="h-4 w-4" />
@@ -74,12 +68,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const name = session?.user?.name ?? 'Пользователь'
   const accountQuery = `account=${summary.account.id}`
-  const reportsHref = `/reports?${accountQuery}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`
-  const salesPlanHref = `/sales-plan?${accountQuery}`
-  const advertisingHref = `/advertising?${accountQuery}`
-  const stocksHref = `/stocks?${accountQuery}`
-  const reviewsHref = `/reviews?${accountQuery}`
-  const syncHref = `/sync?${accountQuery}`
+  const analyticsQuery = `${accountQuery}&period=${summary.period.preset}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`
+  const analyticsHref = `/analytics?${analyticsQuery}`
+  const chartHref = `/analytics/chart?${analyticsQuery}`
+  const financeHref = `/analytics/finance?${analyticsQuery}`
+  const advertisingHref = `/analytics/advertising?${analyticsQuery}`
+  const stocksHref = `/analytics/stocks?${analyticsQuery}`
+  const reviewsHref = `/analytics/feedback?${analyticsQuery}`
+  const dataHref = `/analytics/data?${analyticsQuery}`
   const exportRequest = {
     accountId: summary.account.id,
     period: summary.period.preset,
@@ -88,392 +84,278 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   return (
-    <div className="dashboard-page">
-      <section className="old-money-panel shrink-0 rounded-md p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div className="dashboard-page gap-3">
+      <section className="old-money-panel rounded-md p-3 sm:p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               <LineChart className="h-4 w-4 text-primary" />
               Командный центр WB
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Добро пожаловать, {name}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {summary.account.name}
-              {summary.account.sellerName ? ` - ${summary.account.sellerName}` : ''}. Период: {formatPeriod(summary)}.
-            </p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                Добро пожаловать, {name}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {summary.account.name}
+                {summary.account.sellerName ? ` - ${summary.account.sellerName}` : ''}. {formatPeriod(summary)}
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:items-end">
-            <div className="flex flex-wrap gap-1.5">
-              {PERIODS.map((period) => (
-                <Link
-                  key={period.value}
-                  href={`/?${accountQuery}&period=${period.value}`}
-                  className={[
-                    'rounded-md border px-3 py-2 text-xs font-semibold transition-colors',
-                    summary.period.preset === period.value
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'bg-card hover:bg-secondary',
-                  ].join(' ')}
-                >
-                  {period.label}
-                </Link>
-              ))}
-            </div>
-            <form
-              key={`${summary.period.dateFrom}-${summary.period.dateTo}`}
-              action="/"
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input type="hidden" name="account" value={summary.account.id} />
-              <input type="hidden" name="period" value="custom" />
-              <input
-                type="date"
-                name="dateFrom"
-                defaultValue={summary.period.dateFrom}
-                className="h-9 rounded-md border bg-card px-2 text-xs"
-                aria-label="Дата начала"
-              />
-              <input
-                type="date"
-                name="dateTo"
-                defaultValue={summary.period.dateTo}
-                className="h-9 rounded-md border bg-card px-2 text-xs"
-                aria-label="Дата окончания"
-              />
-              <button type="submit" className="h-9 rounded-md border bg-secondary px-3 text-xs font-semibold hover:bg-accent">
-                Применить
-              </button>
-              <DashboardExportButtons request={exportRequest} />
-            </form>
-          </div>
+          <DashboardPeriodControls accountId={summary.account.id} period={summary.period} exportRequest={exportRequest} />
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <CommandPill label="Сформировано" value={formatDateTime(summary.generatedAt)} />
+          <CommandPill label="Активные синхронизации" value={String(summary.freshness.activeJobs)} tone={summary.freshness.activeJobs > 0 ? 'active' : 'calm'} />
+          <CommandPill label="Критичные сигналы" value={String(summary.problemCenter.criticalCount)} tone={summary.problemCenter.criticalCount > 0 ? 'critical' : 'calm'} />
+          <CommandPill label="Предупреждения" value={String(summary.problemCenter.warningCount)} tone={summary.problemCenter.warningCount > 0 ? 'warning' : 'calm'} />
         </div>
       </section>
 
-      <section className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <KpiCard metric={summary.kpis.revenue} href={reportsHref} />
-        <KpiCard metric={summary.kpis.operatingProfit} href={reportsHref} />
-        <KpiCard metric={summary.kpis.marginality} href={reportsHref} />
-        <KpiCard metric={summary.kpis.drr} href={reportsHref} />
-        <KpiCard metric={summary.kpis.orders} href={salesPlanHref} />
-        <KpiCard metric={summary.kpis.buyouts} href={reportsHref} />
+      <section className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <KpiCard metric={summary.kpis.revenue} href={financeHref} />
+        <KpiCard metric={summary.kpis.operatingProfit} href={financeHref} />
+        <KpiCard metric={summary.kpis.marginality} href={financeHref} />
+        <KpiCard metric={summary.kpis.drr} href={financeHref} inverseTrend />
+        <KpiCard metric={summary.kpis.orders} href={chartHref} />
+        <KpiCard metric={summary.kpis.buyouts} href={chartHref} />
       </section>
 
-      <section className="dashboard-scroll grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="grid content-start gap-3 xl:order-none">
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Финансы"
-              title="Расшифровка отчета"
-              href={reportsHref}
-              icon={<LineChart className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine status={summary.financialBreakdown.status} hint={summary.financialBreakdown.hint} />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="К перечислению" value={formatOptionalRub(summary.financialBreakdown.toTransfer)} />
-              <MiniMetric label="Рентабельность" value={formatOptionalPercent(summary.financialBreakdown.rentability)} />
-              <MiniMetric label="Логистика" value={formatOptionalRub(summary.financialBreakdown.logistics)} />
-              <MiniMetric label="Хранение" value={formatOptionalRub(summary.financialBreakdown.storage)} />
-              <MiniMetric label="Налоги" value={formatOptionalRub(summary.financialBreakdown.taxes)} />
-              <MiniMetric label="Штрафы" value={formatOptionalRub(summary.financialBreakdown.penalties)} />
-              <MiniMetric label="Приемка" value={formatOptionalRub(summary.financialBreakdown.acceptance)} />
-              <MiniMetric label="Возвраты" value={formatOptionalPercent(summary.financialBreakdown.returnRate)} />
-            </div>
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="План-факт"
-              title="Активные планы продаж"
-              href={salesPlanHref}
-              icon={<Target className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine status={summary.plan.status} hint={summary.plan.hint} />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="План, шт." value={formatOptionalNumber(summary.plan.plannedUnits, 0)} />
-              <MiniMetric label="Факт, шт." value={formatOptionalNumber(summary.plan.factUnits, 0)} />
-              <MiniMetric label="Прогресс" value={formatOptionalPercent(summary.plan.progressPercent)} />
-              <MiniMetric label="Планов" value={String(summary.plan.activePlans)} />
-            </div>
-            <ProgressBar value={summary.plan.progressPercent} />
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Прогноз"
-              title="Прогноз и темп"
-              href={salesPlanHref}
-              icon={<LineChart className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine
-              status={forecastPanelStatus(summary)}
-              hint={forecastPanelHint(summary)}
-            />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="Выручка к горизонту" value={formatForecastMetric(summary.forecasts.revenue)} />
-              <MiniMetric label="ОП к горизонту" value={formatForecastMetric(summary.forecasts.operatingProfit)} />
-              <MiniMetric label="Реклама к горизонту" value={formatForecastMetric(summary.forecasts.advertisingSpend)} />
-              <MiniMetric label="План к горизонту" value={formatOptionalPercent(summary.forecasts.planCompletion.forecastCompletionPercent)} />
-              <MiniMetric label="Темп, шт./день" value={formatOptionalNumber(summary.forecasts.dailySalesPace.value, 1)} />
-              <MiniMetric label="Нужно, шт./день" value={formatOptionalNumber(summary.forecasts.unitsNeeded.dailyAverage, 1)} />
-              <MiniMetric label="Пополнение, шт." value={formatOptionalNumber(summary.forecasts.stockNeeded.value, 0)} />
-              <MiniMetric label="Горизонт" value={formatForecastHorizon(summary)} />
-            </div>
-            <ProgressBar value={summary.forecasts.planCompletion.forecastCompletionPercent} />
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Продажи"
-              title="Заказы, выкуп и воронка"
-              href={salesPlanHref}
-              icon={<Target className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine status={summary.salesAnalytics.status} hint={summary.salesAnalytics.hint} />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="Заказы" value={formatOptionalNumber(summary.salesAnalytics.orders, 0)} />
-              <MiniMetric label="Продажи" value={formatOptionalNumber(summary.salesAnalytics.sales, 0)} />
-              <MiniMetric label="Возвраты" value={formatOptionalNumber(summary.salesAnalytics.returns, 0)} />
-              <MiniMetric label="Отмены" value={formatOptionalNumber(summary.salesAnalytics.cancellations, 0)} />
-              <MiniMetric label="Выкуп" value={formatOptionalPercent(summary.salesAnalytics.buyoutPercent)} />
-              <MiniMetric label="Средняя цена" value={formatOptionalRub(summary.salesAnalytics.averagePrice)} />
-              <MiniMetric label="В корзину" value={formatOptionalPercent(summary.salesAnalytics.funnel.addToCartConversion)} />
-              <MiniMetric label="Корзина-заказ" value={formatOptionalPercent(summary.salesAnalytics.funnel.cartToOrderConversion)} />
-            </div>
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Реклама"
-              title="Сводка по сохраненной статистике"
-              href={advertisingHref}
-              icon={<BarChart3 className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine status={summary.advertising.status} hint={summary.advertising.hint} />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="Расход" value={formatOptionalRub(summary.advertising.spend)} />
-              <MiniMetric label="CTR" value={formatOptionalPercent(summary.advertising.ctr)} />
-              <MiniMetric label="CPC" value={formatOptionalRub(summary.advertising.cpc)} />
-              <MiniMetric label="Заказы" value={formatOptionalNumber(summary.advertising.orders, 0)} />
-              <MiniMetric label="Кампаний" value={String(summary.advertising.campaigns)} />
-              <MiniMetric label="Расход без заказов" value={formatOptionalRub(summary.advertising.spendWithoutOrders)} />
-              <MiniMetric label="В корзину" value={formatOptionalNumber(summary.advertising.cartAdds, 0)} />
-              <MiniMetric label="DRR" value={formatOptionalPercent(summary.advertising.drr)} />
-            </div>
-            <CampaignRows
-              title="Кампании к проверке"
-              rows={summary.advertising.inefficientCampaigns}
-              empty="Кампаний с расходом без заказов за период нет."
-            />
-            <CampaignRows
-              title="Нет свежей статистики"
-              rows={summary.advertising.campaignsWithoutRecentStats}
-              empty="Активные кампании выглядят покрытыми свежей статистикой."
-              stale
-            />
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Остатки"
-              title="Риски склада WB"
-              href={stocksHref}
-              icon={<Warehouse className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine
-              status={summary.stocks.status === 'ready' ? 'ready' : 'missing'}
-              hint={summary.stocks.syncedAt ? `Синхронизировано ${formatDateTime(summary.stocks.syncedAt)}` : 'Синхронизируйте остатки WB, чтобы видеть дефицит и излишки.'}
-            />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="Всего, шт." value={formatOptionalNumber(summary.stocks.totalUnits, 0)} />
-              <MiniMetric label="Нет остатка" value={String(summary.stocks.outOfStockCount)} />
-              <MiniMetric label="Низкий" value={String(summary.stocks.lowStockCount)} />
-              <MiniMetric label="В пути" value={formatOptionalNumber(summary.stocks.inWayToClient + summary.stocks.inWayFromClient, 0)} />
-            </div>
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Клиенты"
-              title="Отзывы и вопросы"
-              href={reviewsHref}
-              icon={<MessageSquareText className="h-5 w-5 text-primary" />}
-            />
-            <StatusLine
-              status={summary.feedback.status === 'ready' ? 'ready' : 'missing'}
-              hint={summary.feedback.syncedAt ? `Обновлено ${formatDateTime(summary.feedback.syncedAt)}` : 'Синхронизируйте отзывы и вопросы, чтобы видеть негатив и очередь без ответа.'}
-            />
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <MiniMetric label="Средняя оценка" value={formatOptionalNumber(summary.feedback.averageRating, 2)} />
-              <MiniMetric label="Негативные" value={String(summary.feedback.negativeReviews)} />
-              <MiniMetric label="Отзывы без ответа" value={String(summary.feedback.unansweredReviews)} />
-              <MiniMetric label="Вопросы без ответа" value={String(summary.feedback.unansweredQuestions)} />
-            </div>
-          </section>
-
-          <section className="grid gap-3 lg:grid-cols-2">
-            <ProductPanel
-              title="Лидеры по прибыли"
-              rows={summary.products.topProfit}
-              href={reportsHref}
-              empty={summary.products.hint ?? 'Прибыльных товаров за период нет.'}
-            />
-            <ProductPanel
-              title="Зоны риска"
-              rows={summary.products.risks}
-              href={reportsHref}
-              empty={summary.products.hint ?? 'Критичных товаров по текущим правилам нет.'}
-              risk
-            />
-            <div className="lg:col-span-2">
-              <ProductPanel
-                title="Высокие возвраты"
-                rows={summary.products.highReturnRate}
-                href={reportsHref}
-                empty={summary.products.hint ?? 'Товаров с высокой долей возвратов нет.'}
-                metric="returns"
-                risk
-              />
-            </div>
-          </section>
-        </div>
-
-        <div className="order-first grid content-start gap-3 xl:order-none">
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Фокус"
-              title="Что проверить сейчас"
-              href={syncHref}
-              icon={<AlertTriangle className="h-5 w-5 text-primary" />}
-            />
-            <div className="mt-3 space-y-2">
-              {summary.recommendations.length === 0 ? (
-                <Link
-                  href={syncHref}
-                  className="flex items-start justify-between gap-3 rounded-md border bg-secondary/40 p-3 text-sm transition-colors hover:bg-secondary"
-                >
-                  <span>
-                    <span className="block font-semibold">Данные выглядят спокойно</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">Критичных проблем по текущим источникам не найдено.</span>
-                  </span>
-                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                </Link>
-              ) : summary.recommendations.map((item) => (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className="flex items-start justify-between gap-3 rounded-md border bg-secondary/40 p-3 text-sm transition-colors hover:bg-secondary"
-                >
-                  <span>
-                    <span className="flex items-center gap-2 font-semibold">
-                      <SeverityDot severity={item.severity} />
-                      {item.title}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
-                    {item.metric}
-                    <ArrowRight className="h-4 w-4" />
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Свежесть"
-              title="Покрытие данных"
-              href={syncHref}
-              icon={<RefreshCw className="h-5 w-5 text-primary" />}
-            />
-            <div className="mt-3 divide-y">
-              {summary.freshness.items.map((item) => (
-                <div key={item.key} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <StatusDot status={item.status} />
-                      <p className="truncate text-sm font-medium">{item.label}</p>
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {item.lastCoverageSyncedAt || item.lastSuccessAt
-                        ? `обновлено ${formatDateTime(item.lastCoverageSyncedAt ?? item.lastSuccessAt)}`
-                        : item.hint ?? 'нет истории синхронизации'}
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {item.activeJobs > 0 ? `${item.activeJobs} в работе` : item.failedJobs > 0 ? `${item.failedJobs} ошибок` : statusText(item.status)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="old-money-panel rounded-md p-4">
-            <PanelHeader
-              label="Товары"
-              title="Лидеры по выручке"
-              href={reportsHref}
-              icon={<TrendingUp className="h-5 w-5 text-primary" />}
-            />
-            <div className="mt-3">
-              <ProductRows rows={summary.products.topRevenue} empty={summary.products.hint ?? 'Выручки по товарам за период нет.'} metric="revenue" />
-            </div>
-          </section>
-
-          <ProductPanel
-            title="Высокая логистика"
-            rows={summary.products.highLogisticsShare}
-            href={reportsHref}
-            empty={summary.products.hint ?? 'Товаров с высокой долей логистики нет.'}
-            metric="logistics"
-            risk
+      <section className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <section className="old-money-panel min-w-0 rounded-md p-3 sm:p-4">
+          <PanelHeader
+            label={summary.overviewCharts.granularity === 'week' ? 'Динамика по неделям' : 'Динамика по дням'}
+            title="Выручка, прибыль, заказы и реклама"
+            href={chartHref}
+            icon={<LineChart className="h-5 w-5 text-primary" />}
           />
-          <ProductPanel
-            title="Высокое хранение"
-            rows={summary.products.highStorageShare}
-            href={reportsHref}
-            empty={summary.products.hint ?? 'Товаров с высокой долей хранения нет.'}
-            metric="storage"
-            risk
-          />
-          <ProductPanel
-            title="Нет себестоимости"
-            rows={summary.products.missingCostPrice}
-            href={`/references?${accountQuery}`}
-            empty={summary.products.hint ?? 'Товаров без себестоимости в продажах нет.'}
-            metric="cost"
-            risk
-          />
-        </div>
+          <div className="mt-3">
+            <DashboardOverviewChartsPanel charts={summary.overviewCharts} />
+          </div>
+        </section>
+
+        <ActionCenterPanel summary={summary} syncHref={dataHref} />
+      </section>
+
+      <section className="grid shrink-0 gap-3 xl:grid-cols-6">
+        <OverviewCard
+          href={financeHref}
+          icon={<CircleDollarSign className="h-4 w-4" />}
+          label="Финансы"
+          title="P&L и товары"
+          status={summary.financialBreakdown.status}
+          metrics={[
+            { label: 'К перечислению', value: formatOptionalRub(summary.financialBreakdown.toTransfer) },
+            { label: 'Рентабельность', value: formatOptionalPercent(summary.financialBreakdown.rentability) },
+            { label: 'Логистика', value: formatOptionalRub(summary.financialBreakdown.logistics) },
+            { label: 'Товаров в риске', value: formatNumber(summary.products.risks.length, 0) },
+          ]}
+          rows={productRows(summary.products.topProfit, 'profit').slice(0, 2)}
+        />
+        <OverviewCard
+          href={analyticsHref}
+          icon={<Target className="h-4 w-4" />}
+          label="План"
+          title="План, прогноз и продажи"
+          status={summary.plan.status}
+          metrics={[
+            { label: 'Прогресс', value: formatOptionalPercent(summary.plan.progressPercent) },
+            { label: 'Факт, шт.', value: formatOptionalNumber(summary.plan.factUnits, 0) },
+            { label: 'Нужно/день', value: formatOptionalNumber(summary.forecasts.unitsNeeded.dailyAverage, 1) },
+            { label: 'Планов', value: String(summary.plan.activePlans) },
+          ]}
+          rows={[
+            compactRow('Прогноз плана', formatOptionalPercent(summary.forecasts.planCompletion.forecastCompletionPercent)),
+            compactRow('Темп продаж', `${formatOptionalNumber(summary.forecasts.dailySalesPace.value, 1)} шт./день`),
+          ]}
+        />
+        <OverviewCard
+          href={advertisingHref}
+          icon={<BarChart3 className="h-4 w-4" />}
+          label="Реклама"
+          title="Расходы и эффективность"
+          status={summary.advertising.status}
+          metrics={[
+            { label: 'Расход', value: formatOptionalRub(summary.advertising.spend) },
+            { label: 'DRR', value: formatOptionalPercent(summary.advertising.drr) },
+            { label: 'CTR', value: formatOptionalPercent(summary.advertising.ctr) },
+            { label: 'К проверке', value: String(summary.advertising.inefficientCampaigns.length + summary.advertising.campaignsWithoutRecentStats.length) },
+          ]}
+          rows={campaignRows(summary).slice(0, 2)}
+        />
+        <OverviewCard
+          href={stocksHref}
+          icon={<Warehouse className="h-4 w-4" />}
+          label="Остатки"
+          title="Складские риски"
+          status={summary.stocks.status === 'ready' ? 'ready' : 'missing'}
+          metrics={[
+            { label: 'Всего, шт.', value: formatNumber(summary.stocks.totalUnits, 0) },
+            { label: 'Нет остатка', value: String(summary.stocks.outOfStockCount) },
+            { label: 'Низкий', value: String(summary.stocks.lowStockCount) },
+            { label: 'В пути', value: formatNumber(summary.stocks.inWayToClient + summary.stocks.inWayFromClient, 0) },
+          ]}
+          rows={summary.forecasts.stockDepletion.productsAtRisk.slice(0, 2).map((item) => compactRow(
+            item.vendorCode || `WB ${item.nmId}`,
+            item.daysUntilZero === null ? 'нет темпа' : `${formatNumber(item.daysUntilZero, 0)} дн.`,
+          ))}
+        />
+        <OverviewCard
+          href={reviewsHref}
+          icon={<MessageSquareText className="h-4 w-4" />}
+          label="Клиенты"
+          title="Отзывы и вопросы"
+          status={summary.feedback.status === 'ready' ? 'ready' : 'missing'}
+          metrics={[
+            { label: 'Оценка', value: formatOptionalNumber(summary.feedback.averageRating, 2) },
+            { label: 'Негатив', value: String(summary.feedback.negativeReviews) },
+            { label: 'Отзывы без ответа', value: String(summary.feedback.unansweredReviews) },
+            { label: 'Вопросы без ответа', value: String(summary.feedback.unansweredQuestions) },
+          ]}
+          rows={summary.feedback.urgentItems.slice(0, 2).map((item) => compactRow(
+            item.vendorCode ?? `WB ${item.nmId}`,
+            item.rating ? `${item.rating}/5` : 'вопрос',
+          ))}
+        />
+        <OverviewCard
+          href={dataHref}
+          icon={<RefreshCw className="h-4 w-4" />}
+          label="Данные"
+          title="Свежесть и покрытие"
+          status={summary.freshness.criticalCount > 0 ? 'missing' : summary.freshness.warningCount > 0 ? 'partial' : 'ready'}
+          metrics={[
+            { label: 'Готово', value: String(summary.freshness.items.filter((item) => item.status === 'ready').length) },
+            { label: 'Частично', value: String(summary.freshness.items.filter((item) => item.status === 'partial').length) },
+            { label: 'Нет данных', value: String(summary.freshness.items.filter((item) => item.status === 'missing').length) },
+            { label: 'Ошибки', value: String(summary.freshness.failedJobs) },
+          ]}
+          rows={summary.freshness.items
+            .filter((item) => item.status !== 'ready' || item.failedJobs > 0 || item.isStale)
+            .slice(0, 2)
+            .map((item) => compactRow(item.label, item.failedJobs > 0 ? `${item.failedJobs} ошибок` : statusText(item.status)))}
+        />
       </section>
     </div>
   )
 }
 
-function KpiCard({ metric, href }: { metric: DashboardMetric; href: string }) {
-  const isPositive = (metric.changePercent ?? 0) >= 0
-  const TrendIcon = isPositive ? TrendingUp : TrendingDown
+function CommandPill({
+  label,
+  value,
+  tone = 'calm',
+}: {
+  label: string
+  value: string
+  tone?: 'calm' | 'active' | 'warning' | 'critical'
+}) {
+  const toneClass = {
+    calm: 'border-border bg-secondary/35 text-muted-foreground',
+    active: 'border-primary/30 bg-primary/10 text-primary',
+    warning: 'border-amber-600/30 bg-amber-600/10 text-amber-700',
+    critical: 'border-destructive/30 bg-destructive/10 text-destructive',
+  }[tone]
 
   return (
-    <Link href={href} className="old-money-panel rounded-md p-3 transition-colors hover:bg-secondary/60">
+    <span className={`inline-flex min-w-0 items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs ${toneClass}`}>
+      <span className="truncate text-muted-foreground">{label}</span>
+      <span className="shrink-0 font-semibold text-foreground">{value}</span>
+    </span>
+  )
+}
+
+function KpiCard({
+  metric,
+  href,
+  inverseTrend = false,
+}: {
+  metric: DashboardMetric
+  href: string
+  inverseTrend?: boolean
+}) {
+  const change = metric.changePercent
+  const isGood = change === null ? true : inverseTrend ? change <= 0 : change >= 0
+  const TrendIcon = (change ?? 0) >= 0 ? TrendingUp : TrendingDown
+
+  return (
+    <Link href={href} className="old-money-panel min-w-0 rounded-md p-3 transition-colors hover:bg-secondary/60">
       <div className="flex items-start justify-between gap-2">
-        <p className="metric-label">{metric.label}</p>
+        <p className="metric-label truncate">{metric.label}</p>
         <StatusDot status={metric.status} />
       </div>
-      <p className="mt-2 text-xl font-semibold tracking-tight">{formatMetricValue(metric)}</p>
-      <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-        {metric.changePercent === null ? (
-          <span>{metric.status === 'missing' ? 'нет данных' : 'без сравнения'}</span>
+      <p className="mt-2 truncate text-lg font-semibold tracking-tight xl:text-xl">{formatMetricValue(metric)}</p>
+      <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+        {change === null ? (
+          <span className="truncate">{metric.status === 'missing' ? 'нет данных' : 'без сравнения'}</span>
         ) : (
           <>
-            <TrendIcon className="h-3.5 w-3.5" />
-            <span>{formatSignedPercent(metric.changePercent)} к прошлому периоду</span>
+            <TrendIcon className={`h-3.5 w-3.5 ${isGood ? 'text-primary' : 'text-destructive'}`} />
+            <span className={isGood ? 'truncate text-primary' : 'truncate text-destructive'}>
+              {formatSignedPercent(change)}
+            </span>
           </>
         )}
       </div>
+    </Link>
+  )
+}
+
+function ActionCenterPanel({ summary, syncHref }: { summary: DashboardSummary; syncHref: string }) {
+  const visibleRecommendations = summary.recommendations.slice(0, 3)
+  const hiddenCount = Math.max(0, summary.recommendations.length - visibleRecommendations.length)
+
+  return (
+    <section className="old-money-panel rounded-md p-3 sm:p-4">
+      <PanelHeader
+        label="Фокус"
+        title="Что проверить сейчас"
+        href={syncHref}
+        icon={<AlertTriangle className="h-5 w-5 text-primary" />}
+      />
+      <div className="mt-3 grid gap-2">
+        {visibleRecommendations.length === 0 ? (
+          <ActionRow
+            item={{
+              id: 'calm',
+              severity: 'info',
+              category: 'data_stale',
+              title: 'Критичных сигналов нет',
+              description: 'По текущим правилам дашборда срочных действий не найдено.',
+              metric: null,
+              href: syncHref,
+              createdAt: summary.generatedAt,
+            }}
+          />
+        ) : visibleRecommendations.map((item) => (
+          <ActionRow key={item.id} item={item} />
+        ))}
+        {hiddenCount > 0 && (
+          <Link href={syncHref} className="inline-flex items-center gap-2 text-xs font-semibold text-primary">
+            Ещё {hiddenCount} рекомендаций <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function ActionRow({ item }: { item: ActionRecommendation }) {
+  return (
+    <Link
+      href={item.href}
+      className="flex min-h-[50px] items-start justify-between gap-3 rounded-md border bg-secondary/35 p-2.5 text-sm transition-colors hover:bg-secondary/70"
+    >
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 font-semibold">
+          <SeverityDot severity={item.severity} />
+          <span className="truncate">{item.title}</span>
+        </span>
+        <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{item.description}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground">
+        {item.metric}
+        <ArrowRight className="h-4 w-4" />
+      </span>
     </Link>
   )
 }
@@ -487,170 +369,77 @@ function PanelHeader({
   label: string
   title: string
   href: string
-  icon: React.ReactNode
+  icon: ReactNode
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="metric-label">{label}</p>
-        <h2 className="mt-1 text-base font-semibold">{title}</h2>
+      <div className="min-w-0">
+        <p className="metric-label truncate">{label}</p>
+        <h2 className="mt-1 truncate text-base font-semibold">{title}</h2>
       </div>
-      <Link href={href} className="flex items-center gap-2 text-xs font-semibold text-primary">
+      <Link href={href} className="flex shrink-0 items-center gap-2 text-xs font-semibold text-primary">
         {icon}
+        <span>Детализация</span>
+        <ArrowRight className="h-4 w-4" />
       </Link>
     </div>
   )
 }
 
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-secondary/40 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
-    </div>
-  )
-}
-
-type ProductRowsMetric = 'profit' | 'revenue' | 'logistics' | 'storage' | 'returns' | 'cost'
-
-function ProductPanel({
-  title,
-  rows,
+function OverviewCard({
   href,
-  empty,
-  risk = false,
-  metric = 'profit',
-}: {
-  title: string
-  rows: DashboardProductSnapshot[]
-  href: string
-  empty: string
-  risk?: boolean
-  metric?: ProductRowsMetric
-}) {
-  return (
-    <section className="old-money-panel rounded-md p-4">
-      <PanelHeader
-        label={risk ? 'Анти-топ' : 'Топ'}
-        title={title}
-        href={href}
-        icon={risk ? <AlertTriangle className="h-5 w-5 text-primary" /> : <TrendingUp className="h-5 w-5 text-primary" />}
-      />
-      <div className="mt-3">
-        <ProductRows rows={rows} empty={empty} risk={risk} metric={metric} />
-      </div>
-    </section>
-  )
-}
-
-function ProductRows({
-  rows,
-  empty,
-  risk = false,
-  metric = 'profit',
-}: {
-  rows: DashboardProductSnapshot[]
-  empty: string
-  risk?: boolean
-  metric?: ProductRowsMetric
-}) {
-  if (rows.length === 0) {
-    return <p className="rounded-md border bg-secondary/40 p-3 text-sm text-muted-foreground">{empty}</p>
-  }
-
-  return (
-    <div className="divide-y">
-      {rows.map((row) => (
-        <div key={`${row.nmId}-${row.vendorCode}`} className="flex items-center justify-between gap-3 py-2.5">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{row.vendorCode || row.nmId}</p>
-            <p className="truncate text-xs text-muted-foreground">{row.brandName || row.subjectName || `WB ${row.nmId}`}</p>
-          </div>
-          <div className="text-right">
-            <p className={risk ? 'text-sm font-semibold text-destructive' : 'text-sm font-semibold'}>
-              {productMetricValue(row, metric)}
-            </p>
-            <p className="text-xs text-muted-foreground">{productMetricHint(row, metric)}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function productMetricValue(row: DashboardProductSnapshot, metric: ProductRowsMetric): string {
-  if (metric === 'revenue') return formatRub(row.revenue)
-  if (metric === 'logistics') return formatPercent(row.logisticsShare)
-  if (metric === 'storage') return formatPercent(row.storageShare)
-  if (metric === 'returns') return formatPercent(row.returnRate)
-  if (metric === 'cost') return formatOptionalRub(row.costPrice)
-  return formatRub(row.operatingProfit)
-}
-
-function productMetricHint(row: DashboardProductSnapshot, metric: ProductRowsMetric): string {
-  if (metric === 'revenue') return `ОП ${formatRub(row.operatingProfit)}`
-  if (metric === 'logistics') return `логистика ${formatRub(row.logistics)}`
-  if (metric === 'storage') return `хранение ${formatRub(row.storage)}`
-  if (metric === 'returns') return `${formatNumber(row.returns, 0)} возвратов`
-  if (metric === 'cost') return 'нет себестоимости'
-  return `ДРР ${formatPercent(row.drr)}`
-}
-
-function CampaignRows({
+  icon,
+  label,
   title,
+  status,
+  metrics,
   rows,
-  empty,
-  stale = false,
 }: {
+  href: string
+  icon: ReactNode
+  label: string
   title: string
-  rows: DashboardSummary['advertising']['inefficientCampaigns']
-  empty: string
-  stale?: boolean
+  status: DashboardValueStatus
+  metrics: Array<{ label: string; value: string }>
+  rows: Array<{ label: string; value: string }>
 }) {
   return (
-    <div className="mt-4">
-      <p className="metric-label">{title}</p>
-      {rows.length === 0 ? (
-        <p className="mt-2 rounded-md border bg-secondary/40 p-3 text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <div className="mt-2 divide-y">
-          {rows.map((row) => (
-            <div key={row.id} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{row.name}</p>
-                <p className="truncate text-xs text-muted-foreground">ID {row.advertId}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold">
-                  {stale ? (row.lastStatDate ? formatDate(row.lastStatDate) : 'Нет данных') : formatRub(row.spend)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {stale ? 'последняя статистика' : `${formatOptionalNumber(row.orders, 0)} заказов`}
-                </p>
-              </div>
-            </div>
-          ))}
+    <Link href={href} className="old-money-panel flex min-h-[118px] flex-col rounded-md p-3 transition-colors hover:bg-secondary/60 2xl:min-h-[168px]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 rounded-md border bg-secondary/50 p-1.5 text-primary">{icon}</span>
+          <span className="min-w-0">
+            <span className="metric-label block truncate">{label}</span>
+            <span className="mt-1 block truncate text-sm font-semibold">{title}</span>
+          </span>
         </div>
-      )}
-    </div>
-  )
-}
-
-function StatusLine({ status, hint }: { status: DashboardValueStatus; hint: string | null }) {
-  return (
-    <div className="mt-3 flex items-start gap-2 rounded-md border bg-secondary/35 px-3 py-2 text-xs text-muted-foreground">
-      {status === 'ready' ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" /> : <CalendarDays className="mt-0.5 h-4 w-4 text-primary" />}
-      <span>{hint ?? statusText(status)}</span>
-    </div>
-  )
-}
-
-function ProgressBar({ value }: { value: number | null }) {
-  const width = Math.max(0, Math.min(100, value ?? 0))
-  return (
-    <div className="mt-4 h-2 rounded-full bg-secondary">
-      <div className="h-2 rounded-full bg-primary" style={{ width: `${width}%` }} />
-    </div>
+        <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-primary">
+          <span className="hidden 2xl:inline">Детализация</span>
+          <ArrowRight className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {metrics.slice(0, 4).map((metric, index) => (
+          <div key={metric.label} className={`min-w-0 rounded-md border bg-secondary/30 px-2 py-1.5 ${index > 1 ? 'hidden 2xl:block' : ''}`}>
+            <p className="truncate text-[11px] text-muted-foreground">{metric.label}</p>
+            <p className="mt-0.5 truncate text-sm font-semibold">{metric.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 hidden min-h-[43px] divide-y 2xl:block">
+        {rows.length > 0 ? rows.slice(0, 2).map((row) => (
+          <div key={`${row.label}-${row.value}`} className="flex items-center justify-between gap-3 py-1.5 text-xs">
+            <span className="truncate text-muted-foreground">{row.label}</span>
+            <span className="shrink-0 font-semibold">{row.value}</span>
+          </div>
+        )) : (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <StatusDot status={status} />
+            <span>{statusText(status)}</span>
+          </div>
+        )}
+      </div>
+    </Link>
   )
 }
 
@@ -673,46 +462,27 @@ function SeverityDot({ severity }: { severity: DashboardIssueSeverity }) {
       ? 'bg-amber-600'
       : 'bg-primary'
 
-  return <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${className}`} title={severityText(severity)} />
+  return <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${className}`} />
 }
 
-function severityText(severity: DashboardIssueSeverity): string {
-  if (severity === 'critical') return 'критично'
-  if (severity === 'warning') return 'требует внимания'
-  return 'инфо'
+type ProductRowsMetric = 'profit' | 'revenue'
+
+function productRows(rows: DashboardProductSnapshot[], metric: ProductRowsMetric) {
+  return rows.map((row) => compactRow(
+    row.vendorCode || `WB ${row.nmId}`,
+    metric === 'revenue' ? formatRub(row.revenue) : formatRub(row.operatingProfit),
+  ))
 }
 
-function forecastPanelStatus(summary: DashboardSummary): DashboardValueStatus {
-  const statuses = [
-    summary.forecasts.revenue.status,
-    summary.forecasts.operatingProfit.status,
-    summary.forecasts.planCompletion.status,
-    summary.forecasts.stockDepletion.status,
+function campaignRows(summary: DashboardSummary) {
+  return [
+    ...summary.advertising.inefficientCampaigns.map((row) => compactRow(row.name, formatRub(row.spend))),
+    ...summary.advertising.campaignsWithoutRecentStats.map((row) => compactRow(row.name, row.lastStatDate ? formatDate(row.lastStatDate) : 'нет статистики')),
   ]
-  if (statuses.some((status) => status === 'ready')) return 'ready'
-  if (statuses.some((status) => status === 'partial')) return 'partial'
-  if (statuses.some((status) => status === 'missing')) return 'missing'
-  return 'not_applicable'
 }
 
-function forecastPanelHint(summary: DashboardSummary): string | null {
-  return summary.forecasts.planCompletion.hint
-    ?? summary.forecasts.revenue.hint
-    ?? summary.forecasts.stockDepletion.hint
-}
-
-function formatForecastMetric(metric: DashboardSummary['forecasts']['revenue']): string {
-  if (metric.projectedValue === null) return statusText(metric.status)
-  if (metric.unit === 'rub') return formatRub(metric.projectedValue)
-  if (metric.unit === 'percent') return formatPercent(metric.projectedValue)
-  return formatNumber(metric.projectedValue, 0)
-}
-
-function formatForecastHorizon(summary: DashboardSummary): string {
-  const horizon = summary.forecasts.planCompletion.horizonDate
-    ?? summary.forecasts.revenue.horizonDate
-    ?? summary.forecasts.stockDepletion.horizonDate
-  return horizon ? formatDate(horizon) : 'Нет прогноза'
+function compactRow(label: string, value: string) {
+  return { label, value }
 }
 
 function formatMetricValue(metric: DashboardMetric): string {

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutGrid,
   FileText,
+  BarChart3,
   TrendingUp,
   BookOpen,
   Megaphone,
@@ -34,6 +35,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/cards', label: 'Карточки', icon: LayoutGrid },
   { href: '/reports', label: 'Отчёты', icon: FileText },
+  { href: '/analytics', label: 'Аналитика', icon: BarChart3 },
   { href: '/sales-plan', label: 'План продаж', icon: TrendingUp },
   { href: '/stocks', label: 'Остатки', icon: Warehouse },
   { href: '/reviews', label: 'Отзывы и вопросы', icon: MessageSquareText },

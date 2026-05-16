@@ -320,6 +320,34 @@ export interface DashboardSourceMapping {
   fallback: string
 }
 
+export interface DashboardOverviewTrendPoint {
+  label: string
+  dateFrom: string
+  dateTo: string
+  revenue: number | null
+  operatingProfit: number | null
+  orders: number | null
+  buyouts: number | null
+  adSpend: number | null
+  status: DashboardValueStatus
+}
+
+export interface DashboardOverviewDistributionItem {
+  key: string
+  label: string
+  value: number
+  status: DashboardValueStatus
+  tone: 'positive' | 'neutral' | 'warning' | 'critical'
+}
+
+export interface DashboardOverviewCharts {
+  granularity: 'day' | 'week'
+  trend: DashboardOverviewTrendPoint[]
+  finance: DashboardOverviewDistributionItem[]
+  dataQuality: DashboardOverviewDistributionItem[]
+  risks: DashboardOverviewDistributionItem[]
+}
+
 export interface DashboardSummary {
   account: DashboardAccount
   period: DashboardPeriod
@@ -342,6 +370,7 @@ export interface DashboardSummary {
   feedback: FeedbackSummary
   forecasts: DashboardForecasts
   recommendations: ActionRecommendation[]
+  overviewCharts: DashboardOverviewCharts
   products: {
     status: DashboardValueStatus
     topProfit: DashboardProductSnapshot[]

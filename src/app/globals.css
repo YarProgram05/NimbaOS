@@ -135,7 +135,7 @@
 @layer utilities {
   .text-balance { text-wrap: balance; }
   .dashboard-page {
-    @apply flex min-h-full flex-col gap-4;
+    @apply flex min-h-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden;
   }
   .dashboard-scroll {
     @apply min-h-0 flex-1 pr-1;

@@ -2,7 +2,7 @@
 
 ## Implementation Status
 
-Last updated: 2026-05-15.
+Last updated: 2026-05-16.
 
 Implemented:
 
@@ -68,6 +68,19 @@ Implemented:
   - The home screen now has an Excel menu with compact exports for dashboard summary, product risks, stock risks, and review/question workload.
   - Every workbook includes account, period, comparison period, sync freshness, and generation context.
   - PDF executive report remains optional and deferred.
+- Phase 9 is implemented as final dashboard UI/UX polish.
+  - The home screen now uses a denser command-center layout: command/status bar, KPI strip, first-screen trend comparison, and primary action center.
+  - Added a period-vs-comparison visual trend panel using the same `DashboardSummary` KPI values, without introducing separate formulas or fake daily data.
+  - Moved recommendations into the first desktop/mobile viewport and removed duplicate focus rendering from the lower analytics column.
+  - Kept lower analytics as compact operational panels for finance, plan/fact, forecast, sales, advertising, stock risk, feedback workload, product leaders, and product risks.
+  - Account, period, freshness, problem severity, and generated-at context are visible from the top screen.
+- Phase 10 is implemented as analytics drill-down pages and chart controls.
+  - Added a dedicated `/analytics` section with drill-down pages for chart, finance, products, advertising, stocks, feedback, and data freshness.
+  - Dashboard "Детализация" links now preserve account and period context and open the new analytics pages instead of the operational module tables.
+  - The dashboard trend chart now has a clickable legend for revenue, operating profit, orders, buyouts, and advertising spend; buyouts are rendered explicitly.
+  - The chart uses separate money/count axes, a minimal grid, and stable bucket keys for advertising spend so displayed values stay aligned with source data.
+  - The dashboard date range selector now reuses the shared calendar picker from reports.
+  - The chart legend is rendered outside the SVG plotting area so it does not overlap the Y axis or top data points.
 
 Important changes from the original plan:
 
