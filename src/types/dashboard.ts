@@ -74,6 +74,10 @@ export interface DashboardAccount {
 export interface DashboardProductSnapshot {
   nmId: number
   vendorCode: string
+  sizeLabel?: string | null
+  isSizeRow?: boolean
+  parentVendorCode?: string | null
+  sizeRows?: DashboardProductSnapshot[]
   brandName: string
   subjectName: string
   photoUrl: string | null

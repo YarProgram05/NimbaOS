@@ -107,6 +107,11 @@ export interface ReportRow {
   vendorCode: string                 // Col 3  — Артикул поставщика (с учётом переименования)
   brandName: string                  // Col 36 — Бренд
   photoUrl: string | null            // Фото товара из таблицы Products (для тултипа)
+  sizeLabel?: string | null
+  isSizeRow?: boolean
+  parentNmId?: number | null
+  parentVendorCode?: string | null
+  sizeRows?: ReportRow[]
 
   // Sales summary
   sale: string                       // Col 4  — Продажа

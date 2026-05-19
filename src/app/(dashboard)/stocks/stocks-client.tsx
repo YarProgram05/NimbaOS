@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, PackageCheck, RefreshCw, Search, Warehouse } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, PackageCheck, RefreshCw, Search, Warehouse } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { WbArticleLink } from '@/components/wb-article-link'
 import { syncStocksAction } from '@/lib/actions/stocks'
-import { TOTAL_STOCK_WAREHOUSE_VALUE, type PaginatedStocks, type StockRisk } from '@/types/stocks'
+import { TOTAL_STOCK_WAREHOUSE_VALUE, type PaginatedStocks, type StockRisk, type StockSummaryItem } from '@/types/stocks'
 
 interface StocksClientProps {
   data: PaginatedStocks
@@ -55,6 +55,7 @@ export function StocksClient({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [search, setSearch] = useState(currentSearch)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set())
   const [syncing, startSync] = useTransition()
   const totalPages = Math.ceil(data.total / data.pageSize)
 
@@ -87,6 +88,15 @@ export function StocksClient({
   function toggleSort(sortBy: string) {
     const nextDir = currentSortBy === sortBy && currentSortDir === 'asc' ? 'desc' : 'asc'
     router.push(buildUrl({ sortBy, sortDir: nextDir, page: 1 }))
+  }
+
+  function toggleExpanded(key: string) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   return (
@@ -207,21 +217,32 @@ export function StocksClient({
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row) => (
-                <tr key={`${row.nmId}-${row.warehouseName}`} className="border-t hover:bg-muted/30">
-                  <td className="px-4 py-2.5 font-medium">{row.vendorCode}</td>
-                  <td className="px-4 py-2.5"><WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} /></td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{row.brand ?? '—'}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{row.category ?? '—'}</td>
-                  <td className="px-4 py-2.5">{row.warehouseName}</td>
-                  <td className="px-4 py-2.5 font-semibold tabular-nums">{formatNumber(row.quantity)}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground tabular-nums">
-                    {formatNumber(row.inWayToClient + row.inWayFromClient)}
-                  </td>
-                  <td className="px-4 py-2.5 tabular-nums">{formatRub(row.stockValue)}</td>
-                  <td className="px-4 py-2.5"><RiskBadge risk={row.risk} /></td>
-                </tr>
-              ))}
+              {data.rows.flatMap((row) => {
+                const key = `${row.nmId}-${row.warehouseName}`
+                const isExpanded = expandedRows.has(key)
+                const children = row.sizeRows ?? []
+
+                return [
+                  <StockRow
+                    key={key}
+                    row={row}
+                    rowKey={key}
+                    canExpand={children.length > 0}
+                    isExpanded={isExpanded}
+                    onToggle={toggleExpanded}
+                  />,
+                  ...(isExpanded
+                    ? children.map((child) => (
+                      <StockRow
+                        key={`${key}-${child.sizeLabel ?? child.vendorCode}`}
+                        row={child}
+                        rowKey={`${key}-${child.sizeLabel ?? child.vendorCode}`}
+                        isChild
+                      />
+                    ))
+                    : []),
+                ]
+              })}
               {data.rows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="h-24 text-center text-muted-foreground">Нет строк под выбранные фильтры</td>
@@ -267,6 +288,54 @@ function StockMetric({ label, value, tone = 'neutral' }: { label: string; value:
       </div>
       <p className="mt-2 text-xl font-semibold tracking-tight">{value}</p>
     </div>
+  )
+}
+
+function StockRow({
+  row,
+  rowKey,
+  canExpand = false,
+  isExpanded = false,
+  isChild = false,
+  onToggle,
+}: {
+  row: StockSummaryItem
+  rowKey: string
+  canExpand?: boolean
+  isExpanded?: boolean
+  isChild?: boolean
+  onToggle?: (key: string) => void
+}) {
+  return (
+    <tr className={`border-t hover:bg-muted/30 ${isChild ? 'bg-muted/25' : ''}`}>
+      <td className={`px-4 py-2.5 font-medium ${isChild ? 'pl-9' : ''}`}>
+        <span className="inline-flex items-center gap-1">
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => onToggle?.(rowKey)}
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+              title={isExpanded ? 'Скрыть размеры' : 'Показать размеры'}
+            >
+              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <span className="h-5 w-5 shrink-0" />
+          )}
+          <span>{row.vendorCode}</span>
+        </span>
+      </td>
+      <td className="px-4 py-2.5"><WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} /></td>
+      <td className="px-4 py-2.5 text-muted-foreground">{row.brand ?? '-'}</td>
+      <td className="px-4 py-2.5 text-muted-foreground">{row.category ?? '-'}</td>
+      <td className="px-4 py-2.5">{row.warehouseName}</td>
+      <td className="px-4 py-2.5 font-semibold tabular-nums">{formatNumber(row.quantity)}</td>
+      <td className="px-4 py-2.5 text-muted-foreground tabular-nums">
+        {formatNumber(row.inWayToClient + row.inWayFromClient)}
+      </td>
+      <td className="px-4 py-2.5 tabular-nums">{formatRub(row.stockValue)}</td>
+      <td className="px-4 py-2.5"><RiskBadge risk={row.risk} /></td>
+    </tr>
   )
 }
 

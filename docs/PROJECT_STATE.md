@@ -25,6 +25,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Dashboard analytics roadmap Phase 8: dashboard management Excel exports are implemented at code level. The home dashboard exports summary, product risks, stock risks, and review/question workload from the same `DashboardSummary` values shown on screen, with account/period/freshness/generation context in each workbook.
 - Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
 - Financial reports hardening: report viewing is fast/local, the reports page uses table-only scrolling with sticky headers/totals, per-user report column order is persisted, and advertising allocation now uses WB ad update/spend history totals with corrected article-level distribution for `Реклама (баланс)` and `Реклама (все)`.
+- Seller-size drilldown: reports, product analytics lists, and `/stocks` expose expandable child rows for multi-size articles. Virtual child article labels use `vendorCode + ProductSize.techSize` (seller size from the WB card "Размер" field), with `wbSize` only as fallback.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
 ## Partially implemented
@@ -71,6 +72,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Reviews/questions sync stores read-only customer feedback from `feedbacks-api.wildberries.ru`; `/reviews` and the dashboard read only local `ProductReview` and `ProductQuestion` rows.
 - Dashboard forecasts and recommendations are computed on demand from local persisted data only. They are explainable planning helpers, not statistical prediction models or automated WB actions.
 - Dashboard exports are generated from the already computed `DashboardSummary`; exported numbers should match the dashboard for the same account and period.
+- Multi-size article detail is derived from local product sizes and per-row barcode/chrtId links where available. Ad spend remains source-level `nmId` data and is split across size rows proportionally in reports.
 - `WbAccount.lastSyncAt` is used as authoritative report sync timestamp where relevant.
 - `SyncJobRun` stores background sync status, payload, result, attempts and errors.
 - Historical re-syncs require explicit confirmation.

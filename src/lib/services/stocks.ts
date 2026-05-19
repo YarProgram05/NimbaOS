@@ -103,7 +103,12 @@ async function buildStocksData(wbAccountId: string): Promise<{
     }),
     prisma.stockItem.findMany({
       where: { snapshotId: snapshot.id },
-      include: { warehouse: true },
+      include: {
+        warehouse: true,
+        productSize: {
+          select: { techSize: true, wbSize: true, barcode: true, chrtId: true },
+        },
+      },
     }),
     prisma.costPrice.findMany({
       where: { wbAccountId },
@@ -190,6 +195,15 @@ async function buildStocksData(wbAccountId: string): Promise<{
     inWayToClient: number
     inWayFromClient: number
   }>()
+  const sizeRowGroups = new Map<string, {
+    parentKey: string
+    nmId: number
+    warehouseName: string
+    sizeLabel: string
+    quantity: number
+    inWayToClient: number
+    inWayFromClient: number
+  }>()
 
   for (const item of stockItems) {
     const key = `${item.nmId}:${item.warehouseId}`
@@ -204,16 +218,60 @@ async function buildStocksData(wbAccountId: string): Promise<{
     group.inWayToClient += item.inWayToClient
     group.inWayFromClient += item.inWayFromClient
     rowGroups.set(key, group)
+
+    if (item.productSize) {
+      const label = getSizeLabel(item.productSize.techSize, item.productSize.wbSize)
+      const sizeKey = `${key}:${item.productSize.barcode || item.productSize.chrtId || label}`
+      const sizeGroup = sizeRowGroups.get(sizeKey) ?? {
+        parentKey: key,
+        nmId: item.nmId,
+        warehouseName: item.warehouse.name,
+        sizeLabel: label,
+        quantity: 0,
+        inWayToClient: 0,
+        inWayFromClient: 0,
+      }
+      sizeGroup.quantity += item.quantity
+      sizeGroup.inWayToClient += item.inWayToClient
+      sizeGroup.inWayFromClient += item.inWayFromClient
+      sizeRowGroups.set(sizeKey, sizeGroup)
+    }
   }
 
-  const rows: StockSummaryItem[] = Array.from(rowGroups.values()).map((item) => {
+  const rows: StockSummaryItem[] = Array.from(rowGroups.entries()).map(([key, item]) => {
     const product = productByNmId.get(item.nmId)
     const totalRisk = riskByNmId.get(item.nmId) ?? { risk: 'ok' as StockRisk, daysUntilZero: null }
     const costPrice = product ? costByVendor.get(product.vendorCode) ?? 0 : 0
+    const sizeRows = Array.from(sizeRowGroups.values())
+      .filter((sizeGroup) => sizeGroup.parentKey === key)
+      .sort((a, b) => a.sizeLabel.localeCompare(b.sizeLabel, 'ru', { numeric: true }))
+      .map((sizeGroup) => ({
+        nmId: sizeGroup.nmId,
+        vendorCode: formatSizedVendorCode(product?.vendorCode ?? String(item.nmId), sizeGroup.sizeLabel),
+        sizeLabel: sizeGroup.sizeLabel,
+        isSizeRow: true,
+        parentVendorCode: product?.vendorCode ?? String(item.nmId),
+        brand: product?.brand ?? null,
+        category: product?.category ?? null,
+        title: product?.title ?? null,
+        photoUrl: product?.photoUrl ?? null,
+        warehouseName: sizeGroup.warehouseName,
+        quantity: sizeGroup.quantity,
+        inWayToClient: sizeGroup.inWayToClient,
+        inWayFromClient: sizeGroup.inWayFromClient,
+        stockValue: sizeGroup.quantity * costPrice,
+        daysUntilZero: totalRisk.daysUntilZero,
+        risk: totalRisk.risk,
+        syncedAt: snapshot.syncedAt.toISOString(),
+      }))
 
     return {
       nmId: item.nmId,
       vendorCode: product?.vendorCode ?? String(item.nmId),
+      sizeLabel: null,
+      isSizeRow: false,
+      parentVendorCode: null,
+      sizeRows: sizeRows.length > 1 ? sizeRows : undefined,
       brand: product?.brand ?? null,
       category: product?.category ?? null,
       title: product?.title ?? null,
@@ -237,6 +295,9 @@ async function buildStocksData(wbAccountId: string): Promise<{
     rows.push({
       nmId: product.nmId,
       vendorCode: product.vendorCode,
+      sizeLabel: null,
+      isSizeRow: false,
+      parentVendorCode: null,
       brand: product.brand,
       category: product.category,
       title: product.title,
@@ -345,6 +406,7 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
 
 function aggregateRowsByArticle(rows: StockSummaryItem[]): StockSummaryItem[] {
   const grouped = new Map<number, StockSummaryItem>()
+  const groupedSizeRows = new Map<number, Map<string, StockSummaryItem>>()
 
   for (const row of rows) {
     const existing = grouped.get(row.nmId)
@@ -352,15 +414,52 @@ function aggregateRowsByArticle(rows: StockSummaryItem[]): StockSummaryItem[] {
       grouped.set(row.nmId, {
         ...row,
         warehouseName: TOTAL_STOCK_WAREHOUSE_LABEL,
+        sizeRows: undefined,
       })
-      continue
+    } else {
+      existing.quantity += row.quantity
+      existing.inWayToClient += row.inWayToClient
+      existing.inWayFromClient += row.inWayFromClient
+      existing.stockValue += row.stockValue
     }
 
-    existing.quantity += row.quantity
-    existing.inWayToClient += row.inWayToClient
-    existing.inWayFromClient += row.inWayFromClient
-    existing.stockValue += row.stockValue
+    for (const sizeRow of row.sizeRows ?? []) {
+      const key = sizeRow.sizeLabel ?? sizeRow.vendorCode
+      const sizeMap = groupedSizeRows.get(row.nmId) ?? new Map<string, StockSummaryItem>()
+      const existingSize = sizeMap.get(key)
+      if (!existingSize) {
+        sizeMap.set(key, {
+          ...sizeRow,
+          warehouseName: TOTAL_STOCK_WAREHOUSE_LABEL,
+        })
+      } else {
+        existingSize.quantity += sizeRow.quantity
+        existingSize.inWayToClient += sizeRow.inWayToClient
+        existingSize.inWayFromClient += sizeRow.inWayFromClient
+        existingSize.stockValue += sizeRow.stockValue
+      }
+      groupedSizeRows.set(row.nmId, sizeMap)
+    }
+  }
+
+  for (const row of Array.from(grouped.values())) {
+    const sizeRows = Array.from(groupedSizeRows.get(row.nmId)?.values() ?? [])
+      .sort((a, b) => (a.sizeLabel ?? '').localeCompare(b.sizeLabel ?? '', 'ru', { numeric: true }))
+    row.sizeRows = sizeRows.length > 1 ? sizeRows : undefined
   }
 
   return Array.from(grouped.values())
+}
+
+function getSizeLabel(techSize: string | null | undefined, wbSize: string | null | undefined): string {
+  const wb = (wbSize ?? '').trim()
+  const tech = (techSize ?? '').trim()
+  return tech || wb || 'без размера'
+}
+
+function formatSizedVendorCode(vendorCode: string, label: string): string {
+  const base = vendorCode.trim()
+  const suffix = label.trim()
+  if (!suffix) return base
+  return base ? `${base} ${suffix}` : suffix
 }

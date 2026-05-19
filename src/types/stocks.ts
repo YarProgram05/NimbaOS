@@ -33,6 +33,10 @@ export interface StockSyncResult {
 export interface StockSummaryItem {
   nmId: number
   vendorCode: string
+  sizeLabel?: string | null
+  isSizeRow?: boolean
+  parentVendorCode?: string | null
+  sizeRows?: StockSummaryItem[]
   brand: string | null
   category: string | null
   title: string | null

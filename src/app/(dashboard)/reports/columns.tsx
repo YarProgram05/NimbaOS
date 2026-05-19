@@ -1,4 +1,5 @@
 import type { ColumnDef, SortingFn } from '@tanstack/react-table'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { ReportRow, ColumnGroup, ColumnGroupId } from '@/types/reports'
 import { WbArticleLink } from '@/components/wb-article-link'
 
@@ -53,9 +54,30 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     accessorKey: 'nmId',
     header: 'Арт. ВБ',
     size: 110,
-    cell: ({ row }) => (
-      <WbArticleLink nmId={row.original.nmId} photoUrl={row.original.photoUrl} />
-    ),
+    cell: ({ row }) => {
+      const canExpand = row.getCanExpand()
+      const isSizeRow = row.original.isSizeRow
+
+      return (
+        <span className={`flex items-center gap-1 ${isSizeRow ? 'pl-5' : ''}`}>
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={row.getToggleExpandedHandler()}
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+              title={row.getIsExpanded() ? 'Скрыть размеры' : 'Показать размеры'}
+            >
+              {row.getIsExpanded()
+                ? <ChevronDown className="h-3.5 w-3.5" />
+                : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <span className="h-5 w-5 shrink-0" />
+          )}
+          <WbArticleLink nmId={row.original.nmId} photoUrl={row.original.photoUrl} />
+        </span>
+      )
+    },
     meta: { group: 'identity', tooltip: 'Артикул товара в системе Wildberries (nmId)' },
   },
   {

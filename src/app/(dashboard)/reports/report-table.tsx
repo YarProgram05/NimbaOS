@@ -4,11 +4,13 @@ import { useState, useRef, useEffect } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
+  getExpandedRowModel,
   getSortedRowModel,
   flexRender,
   type VisibilityState,
   type SortingState,
   type ColumnOrderState,
+  type ExpandedState,
 } from '@tanstack/react-table'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { saveReportColumnOrder } from '@/lib/actions/reports'
@@ -37,6 +39,7 @@ const FROZEN_COUNT = 3 // nmId, subjectName, vendorCode
 
 export function ReportTable({ rows, summary, columnVisibility, groupBy, initialColumnOrder }: ReportTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
+  const [expanded, setExpanded] = useState<ExpandedState>({})
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() => normalizeColumnOrder(initialColumnOrder))
   const didMount = useRef(false)
 
@@ -61,8 +64,11 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
     columns: reportColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: { columnVisibility, sorting, columnOrder },
+    getExpandedRowModel: getExpandedRowModel(),
+    getSubRows: (row) => row.sizeRows ?? [],
+    state: { columnVisibility, sorting, columnOrder, expanded },
     onSortingChange: setSorting,
+    onExpandedChange: setExpanded,
     onColumnOrderChange: setColumnOrder,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
@@ -202,6 +208,7 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
           ) : (
             table.getRowModel().rows.map((row, rowIdx) => {
               const isGroupRow = groupBy && row.original.nmId === -1
+              const isSizeRow = row.original.isSizeRow
               // Sticky (frozen) cells use border-t so each row "owns" its top border.
               // Because sticky cells are painted in DOM order (later rows on top),
               // border-b on frozen cells gets covered by the next row's background.
@@ -215,7 +222,9 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
                   className={
                     isGroupRow
                       ? 'bg-secondary font-semibold'
-                      : 'transition-colors hover:bg-secondary/55'
+                      : isSizeRow
+                        ? 'bg-muted/25 transition-colors hover:bg-secondary/55'
+                        : 'transition-colors hover:bg-secondary/55'
                   }
                 >
                   {row.getVisibleCells().map((cell, idx) => {
@@ -226,8 +235,8 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
                         className={[
                           'whitespace-nowrap px-3 py-1.5',
                           isFrozen
-                            ? `${frozenBorder} sticky z-10 ${isGroupRow ? 'bg-secondary' : 'bg-card'}`
-                            : `border-b border-r ${isGroupRow ? 'bg-secondary/80' : 'bg-card'}`,
+                            ? `${frozenBorder} sticky z-10 ${isGroupRow ? 'bg-secondary' : isSizeRow ? 'bg-muted' : 'bg-card'}`
+                            : `border-b border-r ${isGroupRow ? 'bg-secondary/80' : isSizeRow ? 'bg-muted/40' : 'bg-card'}`,
                         ].join(' ')}
                         style={{
                           width: cell.column.getSize(),

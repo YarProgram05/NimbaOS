@@ -285,7 +285,7 @@ export function DetailPanel({
 export function ProductList({
   rows,
   value,
-  empty = 'Нет товаров для этого блока',
+  empty = '\u041d\u0435\u0442 \u0442\u043e\u0432\u0430\u0440\u043e\u0432 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u0431\u043b\u043e\u043a\u0430',
 }: {
   rows: DashboardProductSnapshot[]
   value: (row: DashboardProductSnapshot) => string
@@ -296,28 +296,57 @@ export function ProductList({
   return (
     <div className="grid gap-2">
       {rows.map((row) => (
-        <div key={`${row.nmId}-${row.vendorCode}`} className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-secondary/25 p-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            {row.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={row.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md border object-cover" />
-            ) : (
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-card text-xs text-muted-foreground">
-                WB
-              </span>
-            )}
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{row.vendorCode || `WB ${row.nmId}`}</p>
-              <p className="truncate text-xs text-muted-foreground">{row.brandName || 'Бренд не указан'} · {row.subjectName || 'Категория не указана'}</p>
-            </div>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-sm font-semibold">{value(row)}</p>
-            <p className="text-[11px] text-muted-foreground">WB {row.nmId}</p>
-          </div>
-        </div>
+        <ProductListItem key={`${row.nmId}-${row.vendorCode}`} row={row} value={value} />
       ))}
     </div>
+  )
+}
+
+function ProductListItem({
+  row,
+  value,
+}: {
+  row: DashboardProductSnapshot
+  value: (row: DashboardProductSnapshot) => string
+}) {
+  const content = (
+    <div className={`flex min-w-0 items-center justify-between gap-3 rounded-md border bg-secondary/25 p-2.5 ${row.isSizeRow ? 'ml-4' : ''}`}>
+      <div className="flex min-w-0 items-center gap-2">
+        {row.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={row.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md border object-cover" />
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-card text-xs text-muted-foreground">
+            WB
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{row.vendorCode || `WB ${row.nmId}`}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {row.brandName || '\u0411\u0440\u0435\u043d\u0434 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'} · {row.subjectName || '\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430'}
+          </p>
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-semibold">{value(row)}</p>
+        <p className="text-[11px] text-muted-foreground">WB {row.nmId}</p>
+      </div>
+    </div>
+  )
+
+  if (!row.sizeRows?.length) return content
+
+  return (
+    <details>
+      <summary className="list-none cursor-pointer marker:hidden">
+        {content}
+      </summary>
+      <div className="mt-1 grid gap-1.5">
+        {row.sizeRows.map((sizeRow) => (
+          <ProductListItem key={`${sizeRow.nmId}-${sizeRow.vendorCode}`} row={sizeRow} value={value} />
+        ))}
+      </div>
+    </details>
   )
 }
 

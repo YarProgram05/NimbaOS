@@ -108,7 +108,7 @@ export async function exportReportXlsx(
     })
     const allRows = [...data.rows, data.summary]
 
-    const headers: (keyof ReportRow)[] = [
+    const headers = [
       'nmId', 'subjectName', 'vendorCode', 'brandName',
       'sale', 'toTransfer', 'totalToPay', 'operatingProfit', 'operatingProfitUnit', 'operatingProfitShare', 'avgPrice',
       'boughtWithReturns', 'buyoutPercent', 'boughtWithoutReturns', 'returns',
@@ -122,10 +122,10 @@ export async function exportReportXlsx(
       'salesReturnsNoSpp', 'salesWithSpp', 'returnsWithSpp', 'salesNoSpp', 'returnsNoSpp',
       'commissionOnSale', 'commissionOnReturn', 'deductions',
       'salesToTransfer', 'returnsToTransfer', 'acquiringOnSale', 'tags', 'acquiringOnReturn',
-    ]
+    ] as const satisfies readonly (keyof ReportRow)[]
 
-    const headerLabels: Record<keyof ReportRow, string> = {
-      nmId: 'Артикул ВБ', subjectName: 'Категория', vendorCode: 'Артикул', brandName: 'Бренд', photoUrl: '',
+    const headerLabels: Record<(typeof headers)[number], string> = {
+      nmId: 'Артикул ВБ', subjectName: 'Категория', vendorCode: 'Артикул', brandName: 'Бренд',
       sale: 'Продажа', toTransfer: 'К перечислению', totalToPay: 'Итого к оплате',
       operatingProfit: 'ОП', operatingProfitUnit: 'ОП ед.', operatingProfitShare: '% от ОП', avgPrice: 'Цена ср.',
       boughtWithReturns: 'Выкуплено', buyoutPercent: 'Выкуп %', boughtWithoutReturns: 'Без возврата', returns: 'Возвраты',

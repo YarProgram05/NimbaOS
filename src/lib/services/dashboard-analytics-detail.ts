@@ -97,6 +97,10 @@ function mapProductSnapshot(
   return {
     nmId: row.nmId,
     vendorCode: row.vendorCode,
+    sizeLabel: row.sizeLabel ?? null,
+    isSizeRow: row.isSizeRow ?? false,
+    parentVendorCode: row.parentVendorCode ?? null,
+    sizeRows: row.sizeRows?.map((sizeRow) => mapProductSnapshot(sizeRow, status)),
     brandName: row.brandName,
     subjectName: row.subjectName,
     photoUrl: row.photoUrl,

@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-SELLER-SIZE-DRILLDOWN
+
+Status: Done at code level
+Priority: High
+Description: Reports, product analytics lists, and `/stocks` now expose expandable child rows for multi-size WB articles. Child rows use a virtual `vendorCode + seller size` label; seller size (`techSize`, the "Размер" field in WB cards) has priority over Russian size (`wbSize`).
+Next step: Verify with a real WB1/Nimba multi-size article after the next report/stock sync.
+Related files: `src/lib/services/report-calculator.ts`, `src/app/(dashboard)/reports`, `src/lib/services/stocks.ts`, `src/app/(dashboard)/stocks`, `src/app/(dashboard)/analytics/analytics-shared.tsx`
+Risks: WB advertising is still received by `nmId`, so report child rows distribute ad spend proportionally by sales within the article.
+
 ### TASK-DASHBOARD-ANALYTICS-PHASE-8
 
 Status: Done at code level

@@ -21,6 +21,30 @@ type AdNmStatRow = {
   spend: { toString(): string }
 }
 
+interface SizeMeta {
+  key: string
+  label: string
+  techSize: string
+  wbSize: string | null
+  barcode: string | null
+  chrtId: number | null
+}
+
+interface ReferenceTotals {
+  externalAd: number
+  selfPurchaseCost: number
+  selfPurchaseAmount: number
+  selfPurchaseCashback: number
+}
+
+interface RowIdentity {
+  sizeLabel?: string | null
+  isSizeRow?: boolean
+  parentNmId?: number | null
+  parentVendorCode?: string | null
+  displayVendorCode?: string
+}
+
 interface CalculateReportOptions {
   preferPersistedAdStats?: boolean
   preferLiveAdCostTotals?: boolean
@@ -95,11 +119,20 @@ export async function calculateReport(
       }),
       prisma.product.findMany({
         where: { wbAccountId },
-        select: { nmId: true, vendorCode: true, category: true, brand: true, photoUrl: true },
+        select: {
+          nmId: true,
+          vendorCode: true,
+          category: true,
+          brand: true,
+          photoUrl: true,
+          sizes: {
+            select: { techSize: true, wbSize: true, barcode: true, chrtId: true },
+          },
+        },
       }),
       prisma.paidStorage.findMany({
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
-        select: { nmId: true, cost: true, fetchedAt: true },
+        select: { nmId: true, chrtId: true, barcode: true, cost: true, fetchedAt: true },
       }),
       prisma.adCampaignNmStat.findMany({
         where: {
@@ -145,6 +178,9 @@ export async function calculateReport(
   const nmVendorMap = new Map<number, string>()
   const vendorNmMap = new Map<string, number>()
   const productMetaMap = new Map<number, { subjectName: string; brandName: string; photoUrl: string | null }>()
+  const productSizesByNm = new Map<number, SizeMeta[]>()
+  const sizeByBarcode = new Map<string, SizeMeta>()
+  const sizeByChrtId = new Map<string, SizeMeta>()
   for (const p of products) {
     if (p.vendorCode) nmVendorMap.set(p.nmId, p.vendorCode)
     if (p.vendorCode && !vendorNmMap.has(p.vendorCode)) vendorNmMap.set(p.vendorCode, p.nmId)
@@ -153,6 +189,22 @@ export async function calculateReport(
       brandName: p.brand ?? '',
       photoUrl: p.photoUrl ?? null,
     })
+    const sizes = p.sizes.map((size) => {
+      const label = sizeLabel(size.techSize, size.wbSize)
+      return {
+        key: size.barcode ? `barcode:${size.barcode}` : size.chrtId ? `chrt:${size.chrtId}` : `size:${label}`,
+        label,
+        techSize: size.techSize,
+        wbSize: size.wbSize,
+        barcode: size.barcode,
+        chrtId: size.chrtId,
+      }
+    })
+    productSizesByNm.set(p.nmId, sizes)
+    for (const size of sizes) {
+      if (size.barcode) sizeByBarcode.set(`${p.nmId}:${size.barcode}`, size)
+      if (size.chrtId) sizeByChrtId.set(`${p.nmId}:${size.chrtId}`, size)
+    }
   }
 
   const taxRate = d(account.taxRate)
@@ -162,9 +214,15 @@ export async function calculateReport(
   )
 
   const paidStorageByNm = new Map<number, number>()
+  const paidStorageBySize = new Map<string, number>()
   for (const ps of paidStorageRows) {
     if (ps.nmId === 0) continue
     paidStorageByNm.set(ps.nmId, (paidStorageByNm.get(ps.nmId) ?? 0) + d(ps.cost))
+    const size = resolveSizeMeta(ps.nmId, ps.barcode, ps.chrtId, sizeByBarcode, sizeByChrtId)
+    if (size) {
+      const key = `${ps.nmId}:${size.key}`
+      paidStorageBySize.set(key, (paidStorageBySize.get(key) ?? 0) + d(ps.cost))
+    }
   }
 
   const adSpendByNm = await buildAdSpendByNm({
@@ -253,12 +311,70 @@ export async function calculateReport(
       adSpendByNm.get(nmId)?.all ?? 0,
     )
 
+    const parentVendorCode = row.vendorCode
+    const sizeGroups = groupRowsBySize(nmId, group, sizeByBarcode, sizeByChrtId)
+    const shouldExposeSizes = sizeGroups.length > 1 || (productSizesByNm.get(nmId)?.length ?? 0) > 1
+    if (shouldExposeSizes && sizeGroups.length > 0) {
+      const referenceTotals = calculateReferenceTotals(row)
+      const childBases = sizeGroups.map((sizeGroup) => groupBasis(sizeGroup.rows))
+      const totalSaleBasis = childBases.reduce((sum, basis) => sum + basis.sale, 0)
+      const totalQtyBasis = childBases.reduce((sum, basis) => sum + basis.boughtWithReturns, 0)
+      const totalDeliveredBasis = childBases.reduce((sum, basis) => sum + basis.delivered, 0)
+      const actualStorageTotal = sizeGroups.reduce(
+        (sum, sizeGroup) => sum + (paidStorageBySize.get(`${nmId}:${sizeGroup.size.key}`) ?? 0),
+        0,
+      )
+      const undistributedStorage = Math.max(0, extraStorage - actualStorageTotal)
+
+      row.sizeRows = sizeGroups.map((sizeGroup, index) => {
+        const basis = childBases[index]
+        const saleShare = shareOf(basis.sale, totalSaleBasis, sizeGroups.length, index)
+        const qtyShare = shareOf(basis.boughtWithReturns, totalQtyBasis, sizeGroups.length, index)
+        const deliveredShare = shareOf(basis.delivered, totalDeliveredBasis, sizeGroups.length, index)
+        const actualStorage = paidStorageBySize.get(`${nmId}:${sizeGroup.size.key}`)
+        const childStorage = (actualStorage ?? 0) + undistributedStorage * deliveredShare
+        const childVendorCode = formatSizedVendorCode(parentVendorCode, sizeGroup.size.label)
+
+        return calculateGroup(
+          nmId,
+          sizeGroup.rows,
+          costMap,
+          new Map(),
+          new Map(),
+          overrideMap,
+          taxRate,
+          nmVendorMap,
+          productMetaMap,
+          childStorage,
+          usePaidStorage,
+          (adSpendByNm.get(nmId)?.balance ?? 0) * saleShare,
+          (adSpendByNm.get(nmId)?.all ?? 0) * saleShare,
+          {
+            sizeLabel: sizeGroup.size.label,
+            isSizeRow: true,
+            parentNmId: nmId,
+            parentVendorCode,
+            displayVendorCode: childVendorCode,
+          },
+          {
+            externalAd: referenceTotals.externalAd * saleShare,
+            selfPurchaseCost: referenceTotals.selfPurchaseCost * qtyShare,
+            selfPurchaseAmount: referenceTotals.selfPurchaseAmount * qtyShare,
+            selfPurchaseCashback: referenceTotals.selfPurchaseCashback * qtyShare,
+          },
+        )
+      })
+    }
+
     totalOP += Number(row.operatingProfit)
     reportRows.push(row)
   }
 
   for (const row of reportRows) {
     row.operatingProfitShare = safeDivide(Number(row.operatingProfit) * 100, totalOP, 2)
+    for (const sizeRow of row.sizeRows ?? []) {
+      sizeRow.operatingProfitShare = safeDivide(Number(sizeRow.operatingProfit) * 100, totalOP, 2)
+    }
   }
 
   reportRows.sort((a, b) => Number(b.sale) - Number(a.sale))
@@ -297,6 +413,8 @@ function calculateGroup(
   skipRealizationStorage = false,
   adBalance = 0,
   adAll = adBalance,
+  identity: RowIdentity = {},
+  referenceTotals?: ReferenceTotals,
 ): ReportRow {
   const vendorCodes = new Set<string>()
   const productMeta = nmId > 0 ? productMetaMap.get(nmId) : undefined
@@ -393,29 +511,33 @@ function calculateGroup(
   const totalAcquiring = acquiringOnSale - acquiringOnReturn
 
   let costPriceTotal = 0
-  let spTotalAmount = 0
-  let spTotalCashback = 0
-  let extAdTotal = 0
+  let spTotalAmount = referenceTotals?.selfPurchaseAmount ?? 0
+  let spTotalCashback = referenceTotals?.selfPurchaseCashback ?? 0
+  let extAdTotal = referenceTotals?.externalAd ?? 0
 
   const vcArray = resolvedVendorCodes.size > 0 ? Array.from(resolvedVendorCodes) : Array.from(vendorCodes)
   for (const vendorCode of vcArray) {
     const unitCost = costMap.get(vendorCode) ?? 0
     costPriceTotal += unitCost * boughtWithReturns
 
-    const sp = spMap.get(vendorCode)
-    if (sp) {
-      spTotalAmount += sp.amount
-      spTotalCashback += sp.cashback
-    }
+    if (!referenceTotals) {
+      const sp = spMap.get(vendorCode)
+      if (sp) {
+        spTotalAmount += sp.amount
+        spTotalCashback += sp.cashback
+      }
 
-    extAdTotal += extAdMap.get(vendorCode) ?? 0
+      extAdTotal += extAdMap.get(vendorCode) ?? 0
+    }
   }
 
-  let selfPurchaseCost = 0
-  for (const vendorCode of vcArray) {
-    const sp = spMap.get(vendorCode)
-    const unitCost = costMap.get(vendorCode) ?? 0
-    if (sp) selfPurchaseCost += sp.quantity * unitCost
+  let selfPurchaseCost = referenceTotals?.selfPurchaseCost ?? 0
+  if (!referenceTotals) {
+    for (const vendorCode of vcArray) {
+      const sp = spMap.get(vendorCode)
+      const unitCost = costMap.get(vendorCode) ?? 0
+      if (sp) selfPurchaseCost += sp.quantity * unitCost
+    }
   }
 
   const taxes = Math.max(0, sale * (taxRate / 100))
@@ -456,7 +578,7 @@ function calculateGroup(
 
   const primaryVendorCode = (resolvedVendorCodes.size > 0 ? resolvedVendorCodes : vendorCodes).values().next().value ?? ''
   const override = overrideMap.get(primaryVendorCode)
-  const displayVendorCode = override?.localName ?? primaryVendorCode
+  const displayVendorCode = identity.displayVendorCode ?? override?.localName ?? primaryVendorCode
 
   return {
     nmId,
@@ -464,6 +586,10 @@ function calculateGroup(
     vendorCode: displayVendorCode,
     brandName,
     photoUrl,
+    sizeLabel: identity.sizeLabel ?? null,
+    isSizeRow: identity.isSizeRow ?? false,
+    parentNmId: identity.parentNmId ?? null,
+    parentVendorCode: identity.parentVendorCode ?? null,
 
     sale: fmt(sale),
     toTransfer: fmt(toTransfer),
@@ -521,6 +647,111 @@ function calculateGroup(
     acquiringOnSale: fmt(acquiringOnSale),
     tags: '',
     acquiringOnReturn: fmt(acquiringOnReturn),
+  }
+}
+
+function sizeLabel(techSize: string | null | undefined, wbSize: string | null | undefined): string {
+  const wb = (wbSize ?? '').trim()
+  const tech = (techSize ?? '').trim()
+  return tech || wb || 'без размера'
+}
+
+function resolveSizeMeta(
+  nmId: number,
+  barcode: string | null | undefined,
+  chrtId: number | null | undefined,
+  sizeByBarcode: Map<string, SizeMeta>,
+  sizeByChrtId: Map<string, SizeMeta>,
+): SizeMeta | null {
+  if (barcode) {
+    const byBarcode = sizeByBarcode.get(`${nmId}:${barcode}`)
+    if (byBarcode) return byBarcode
+  }
+  if (chrtId) {
+    const byChrtId = sizeByChrtId.get(`${nmId}:${chrtId}`)
+    if (byChrtId) return byChrtId
+  }
+  if (barcode) {
+    return {
+      key: `barcode:${barcode}`,
+      label: barcode,
+      techSize: barcode,
+      wbSize: null,
+      barcode,
+      chrtId: null,
+    }
+  }
+  return null
+}
+
+function groupRowsBySize(
+  nmId: number,
+  rows: DbRow[],
+  sizeByBarcode: Map<string, SizeMeta>,
+  sizeByChrtId: Map<string, SizeMeta>,
+): Array<{ size: SizeMeta; rows: DbRow[] }> {
+  const grouped = new Map<string, { size: SizeMeta; rows: DbRow[] }>()
+
+  for (const row of rows) {
+    const size = resolveSizeMeta(nmId, row.barcode, null, sizeByBarcode, sizeByChrtId)
+    if (!size) continue
+
+    const existing = grouped.get(size.key) ?? { size, rows: [] }
+    existing.rows.push(row)
+    grouped.set(size.key, existing)
+  }
+
+  return Array.from(grouped.values()).sort((left, right) =>
+    left.size.label.localeCompare(right.size.label, 'ru', { numeric: true }),
+  )
+}
+
+function groupBasis(rows: DbRow[]): { sale: number; boughtWithReturns: number; delivered: number } {
+  let sale = 0
+  let salesCount = 0
+  let returnsCount = 0
+  let cancellationsCount = 0
+
+  for (const row of rows) {
+    const isSale = row.docTypeName === DOC_SALE
+    const isReturn = row.docTypeName === DOC_RETURN
+    if (isSale || isReturn) {
+      const retailWithDisc = d(row.retailPriceWithDisc)
+      const sppFactor = 1 - d(row.ppvzSppPrc) / 100
+      const signed = retailWithDisc * sppFactor
+      sale += isSale ? signed : -signed
+      if (isSale) salesCount += row.quantity
+      else returnsCount += row.quantity
+    } else if (row.supplierOperName === OPERATION_LOGISTICS && row.bonusTypeName === BONUS_TO_CLIENT_CANCEL) {
+      cancellationsCount++
+    }
+  }
+
+  return {
+    sale: Math.max(0, sale),
+    boughtWithReturns: Math.max(0, salesCount - returnsCount),
+    delivered: Math.max(0, salesCount + cancellationsCount),
+  }
+}
+
+function shareOf(value: number, total: number, count: number, index: number): number {
+  if (total > 0) return value / total
+  return count > 0 ? 1 / count : index === 0 ? 1 : 0
+}
+
+function formatSizedVendorCode(vendorCode: string, label: string): string {
+  const base = vendorCode.trim()
+  const suffix = label.trim()
+  if (!suffix) return base
+  return base ? `${base} ${suffix}` : suffix
+}
+
+function calculateReferenceTotals(row: ReportRow): ReferenceTotals {
+  return {
+    externalAd: Number(row.externalAd),
+    selfPurchaseCost: Number(row.selfPurchaseCost),
+    selfPurchaseAmount: Number(row.selfPurchaseAmount),
+    selfPurchaseCashback: Number(row.cashbackDistributions),
   }
 }
 
