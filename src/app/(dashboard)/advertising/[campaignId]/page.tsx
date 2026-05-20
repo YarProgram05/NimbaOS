@@ -7,7 +7,7 @@ import { CampaignDetailClient } from './campaign-detail-client'
 
 interface CampaignDetailPageProps {
   params: Promise<{ campaignId: string }>
-  searchParams: Promise<{ account?: string }>
+  searchParams: Promise<{ account?: string; dateFrom?: string; dateTo?: string }>
 }
 
 export default async function CampaignDetailPage({
@@ -18,7 +18,7 @@ export default async function CampaignDetailPage({
   if (!session) redirect('/login')
 
   const { campaignId } = await params
-  const { account } = await searchParams
+  const { account, dateFrom, dateTo } = await searchParams
 
   const result = await getCampaignDetailAction(campaignId)
 
@@ -42,6 +42,8 @@ export default async function CampaignDetailPage({
     <CampaignDetailClient
       campaign={result.data}
       accountParam={account || result.data.wbAccountId}
+      initialDateFrom={dateFrom}
+      initialDateTo={dateTo}
     />
   )
 }

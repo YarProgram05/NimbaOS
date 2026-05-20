@@ -1,5 +1,25 @@
 # Bugs and Incidents
 
+## BUG-007: Advertising period stayed partial after account-wide stats sync
+
+Status:
+Fixed
+
+Symptoms:
+Dashboard/data freshness could still show incomplete advertising coverage after a full selected-period advertising stats sync.
+
+Affected area:
+Background sync coverage, dashboard freshness, advertising analytics.
+
+Investigation:
+The worker wrote campaign stats but did not mark `SyncDataCoverage` for account-wide `advertising.stats` jobs. Single-campaign syncs also needed to stay excluded from account-wide coverage.
+
+Fix:
+Account-wide advertising stats jobs now mark coverage only after all campaign stats finish without errors. Single-campaign syncs update rows but do not mark the full account period as complete.
+
+Related files:
+`src/lib/queue/sync-processor.ts`, `src/lib/services/dashboard-summary.ts`, `src/app/(dashboard)/analytics/advertising/page.tsx`
+
 ## BUG-006: Advertising stats/clusters failed in worker for null stats and >30-day cluster periods
 
 Status:

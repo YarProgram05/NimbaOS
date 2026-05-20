@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-20 - Advertising sync coverage and active campaign analytics
+
+### Summary
+
+Fixed advertising stats coverage so account-wide successful syncs mark the selected period as complete, while single-campaign syncs no longer imply full account coverage. Dashboard period/account changes now show immediate loading feedback and use local persisted report/ad data for faster navigation. Advertising analytics now lists campaigns with actual activity in the selected period, shows spend per campaign, and links each campaign to its stats tab with the same period preselected.
+
+### Files changed
+
+`src/lib/queue/sync-processor.ts`, `src/lib/services/dashboard-summary.ts`, `src/types/dashboard.ts`, dashboard period/loading UI, account/date controls, `/analytics/advertising`, and `/advertising/[campaignId]` stats period plumbing.
+
+### Commands run
+
+`npm run type-check`, `npm run build`, local browser smoke for dashboard period loading and advertising analytics campaign links.
+
+### Result
+
+Checks pass. Manual account-wide advertising stats syncs for both active WB accounts were queued and processed by the local worker; the advertising analytics page now exposes period-active campaign spend and deep links into campaign statistics.
+
 ## 2026-05-14 - Financial reports accuracy and table UX
 
 ### Summary

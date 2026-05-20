@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getSyncCoverage } from '@/lib/sync/coverage'
 import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
-import { calculateReport, REPORT_CALCULATION_OPTIONS } from '@/lib/services/report-calculator'
+import { calculateReport } from '@/lib/services/report-calculator'
 import { getFeedbackSummary } from '@/lib/services/feedback'
 import { getStocksSummary } from '@/lib/services/stocks'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
@@ -36,6 +36,10 @@ const ACTIVE_AD_STATUS = 9
 const RECENT_AD_STATS_DAYS = 3
 const MIN_FORECAST_OBSERVED_DAYS = 3
 const WEAK_PLAN_COMPLETION_PERCENT = 90
+const DASHBOARD_REPORT_OPTIONS = {
+  preferPersistedAdStats: true,
+  preferLiveAdCostTotals: false,
+}
 const dashboardSummaryCache = new Map<string, { expiresAt: number; summary: DashboardSummary }>()
 
 const SOURCE_MAP = [
@@ -251,10 +255,10 @@ export async function getDashboardSummary(
   ] = await Promise.all([
     financialStatus === 'missing'
       ? Promise.resolve(null)
-      : calculateReport(account.id, period.dateFrom, period.dateTo, REPORT_CALCULATION_OPTIONS),
+      : calculateReport(account.id, period.dateFrom, period.dateTo, DASHBOARD_REPORT_OPTIONS),
     comparisonFinancialStatus === 'missing'
       ? Promise.resolve(null)
-      : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, REPORT_CALCULATION_OPTIONS),
+      : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, DASHBOARD_REPORT_OPTIONS),
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
     getSalesAnalytics(account.id, period.dateFrom, period.dateTo),
@@ -665,6 +669,15 @@ async function getAdvertisingSummary(
   })
 
   const snapshotsWithStats = campaignSnapshots.filter((campaign) => campaign.statusText !== 'missing')
+  const activeCampaigns = snapshotsWithStats
+    .filter((campaign) =>
+      campaign.spend > 0
+      || campaign.views > 0
+      || campaign.clicks > 0
+      || campaign.orders > 0
+      || campaign.cartAdds > 0
+    )
+    .sort((a, b) => b.spend - a.spend || b.views - a.views || a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }))
   const status = statusFromCoverage(coverage.isCovered, snapshotsWithStats.length)
   const staleStatsBoundary = addDays(to, -RECENT_AD_STATS_DAYS)
   const campaignsWithoutRecentStats = campaignSnapshots
@@ -676,7 +689,7 @@ async function getAdvertisingSummary(
     .sort((a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }))
     .slice(0, 5)
   const inefficientCampaigns = snapshotsWithStats
-    .filter((campaign) => campaign.spend > 0 && campaign.orders === 0)
+    .filter((campaign) => campaign.spend >= 1 && campaign.orders === 0)
     .sort((a, b) => b.spend - a.spend)
     .slice(0, 5)
 
@@ -693,6 +706,7 @@ async function getAdvertisingSummary(
       drr: null,
       campaigns: 0,
       spendWithoutOrders: null,
+      activeCampaigns: [],
       inefficientCampaigns: [],
       campaignsWithoutRecentStats,
       source: 'AdCampaignStat',
@@ -719,6 +733,7 @@ async function getAdvertisingSummary(
     drr: null,
     campaigns: snapshotsWithStats.length,
     spendWithoutOrders,
+    activeCampaigns,
     inefficientCampaigns,
     campaignsWithoutRecentStats,
     source: 'AdCampaignStat',
@@ -843,7 +858,7 @@ async function buildOverviewCharts(input: {
     const status = statusFromCoverage(coverage.isCovered, rowCount)
     const report = status === 'missing'
       ? null
-      : await calculateReport(input.accountId, bucket.dateFrom, bucket.dateTo, REPORT_CALCULATION_OPTIONS)
+      : await calculateReport(input.accountId, bucket.dateFrom, bucket.dateTo, DASHBOARD_REPORT_OPTIONS)
 
     return {
       label: bucket.label,

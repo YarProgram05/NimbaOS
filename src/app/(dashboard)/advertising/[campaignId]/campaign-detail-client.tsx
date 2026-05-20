@@ -33,6 +33,8 @@ import { LogTab } from './log-tab'
 interface CampaignDetailClientProps {
   campaign: AdCampaignDetail
   accountParam: string
+  initialDateFrom?: string
+  initialDateTo?: string
 }
 
 function formatMoney(value: string | null): string {
@@ -54,6 +56,8 @@ function formatBidType(value: string | null): string {
 export function CampaignDetailClient({
   campaign: initialCampaign,
   accountParam,
+  initialDateFrom,
+  initialDateTo,
 }: CampaignDetailClientProps) {
   const router = useRouter()
   const [campaign, setCampaign] = useState(initialCampaign)
@@ -303,7 +307,7 @@ export function CampaignDetailClient({
         </TabsList>
 
         <TabsContent value="stats">
-          <StatsTab campaignId={campaign.id} />
+          <StatsTab campaignId={campaign.id} initialDateFrom={initialDateFrom} initialDateTo={initialDateTo} />
         </TabsContent>
 
         <TabsContent value="clusters">

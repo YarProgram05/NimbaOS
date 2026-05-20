@@ -22,6 +22,7 @@ interface DateRangePickerProps {
   value: DateRange
   onChange: (range: DateRange) => void
   className?: string
+  disabled?: boolean
 }
 
 const PRESETS: { label: string; getRange: () => DateRange }[] = [
@@ -56,7 +57,7 @@ const PRESETS: { label: string; getRange: () => DateRange }[] = [
   },
 ]
 
-export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, className, disabled = false }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [tempRange, setTempRange] = useState<DateRange | undefined>(value)
 
@@ -80,7 +81,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   return (
     <Popover open={open} onOpenChange={handleOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className={cn('min-w-60 justify-start gap-2', className)}>
+        <Button variant="outline" className={cn('min-w-60 justify-start gap-2', className)} disabled={disabled}>
           <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
           <span>{label}</span>
         </Button>
@@ -107,6 +108,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
                 <button
                   key={preset.label}
                   onClick={() => setTempRange(preset.getRange())}
+                  disabled={disabled}
                   className={cn(
                     'text-sm text-left px-3 py-2 rounded-md hover:bg-accent transition-colors cursor-pointer',
                     isActive && 'bg-accent font-medium',
@@ -132,10 +134,10 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
             />
 
             <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={disabled}>
                 Отмена
               </Button>
-              <Button size="sm" onClick={handleApply} disabled={!tempRange?.from}>
+              <Button size="sm" onClick={handleApply} disabled={disabled || !tempRange?.from}>
                 Применить
               </Button>
             </div>

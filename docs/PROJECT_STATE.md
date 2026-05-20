@@ -27,6 +27,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
 - Financial reports hardening: report viewing is fast/local, the reports page uses table-only scrolling with sticky headers/totals, per-user report column order is persisted, and advertising allocation now uses WB ad update/spend history totals with corrected article-level distribution for `Реклама (баланс)` and `Реклама (все)`.
 - Dashboard/report parity: dashboard and analytics report-derived KPI values now use the same report calculation options as `/reports`, so DRR, WB ad spend, OP, margin, and related product risk slices match the financial report for the same account and period.
+- Advertising analytics follow-up: account-wide advertising stats sync marks `SyncDataCoverage` only after all campaign stats complete successfully; dashboard navigation uses local persisted data for faster period changes; `/analytics/advertising` lists period-active campaigns with spend and links into each campaign's stats tab with the same period preselected.
 - Seller-size drilldown: reports, product analytics lists, and `/stocks` expose expandable child rows for multi-size articles. Virtual child article labels use `vendorCode + ProductSize.techSize` (seller size from the WB card "Размер" field), with `wbSize` only as fallback.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
@@ -68,6 +69,7 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - WB realization reports and paid storage are cached locally.
 - Sales plan reads orders/sales/funnel from local DB after sync.
 - Advertising stats are cached by campaign/date/source and by campaign/date/source/nmId where WB returns article-level stats.
+- Advertising stats coverage is account-wide: single-campaign resyncs update rows but do not mark the whole account period as complete.
 - Financial report ad totals should not rely only on persisted `fullstats` nm rows; WB ad update/spend history is the authoritative total source for `Реклама (все)`, with balance distributed from the same allocation map.
 - Dashboard and analytics report-derived values should continue to call the shared report calculation options rather than choosing a separate ad-spend mode.
 - Advertising cluster sync stores one aggregate row set per selected period, while WB requests are chunked internally to satisfy the API's 30-day limit.

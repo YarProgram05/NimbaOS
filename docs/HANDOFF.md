@@ -6,6 +6,13 @@ NimbaOS находится после dashboard analytics Phase 8 exports на �
 
 ## Latest session summary
 
+Advertising analytics and sync coverage on 2026-05-20:
+- fixed account-wide advertising stats coverage marking after successful full-account sync;
+- made dashboard period/account navigation visibly responsive and faster by using local persisted data;
+- added `/analytics/advertising` active-campaign list with per-campaign spend and links to campaign stats;
+- campaign stats links preserve the selected analytics period;
+- verified with `npm run type-check`, `npm run build`, and local browser smoke.
+
 Dashboard analytics Phase 8 on 2026-05-15:
 - implemented dashboard management Excel exports from the existing `DashboardSummary`;
 - added workbooks for dashboard summary, product risks, stock risks, and review/question workload;
@@ -106,6 +113,8 @@ Phase 8 реализована поверх существующего dirty wor
 - Не автоматизировать WB-changing actions.
 
 ## Last updated
+
+2026-05-20 - Advertising sync coverage, faster dashboard period changes, and active campaign analytics links.
 
 2026-05-15 - Dashboard analytics Phase 8 Excel exports.
 

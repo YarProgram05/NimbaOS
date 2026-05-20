@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
@@ -31,9 +31,25 @@ export function DashboardPeriodControls({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
   const range: DateRange = {
     from: new Date(period.dateFrom),
     to: new Date(period.dateTo),
+  }
+
+  function navigate(params: URLSearchParams) {
+    startTransition(() => {
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    })
+  }
+
+  function handlePresetChange(preset: DashboardPeriodPreset) {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('account', accountId)
+    params.set('period', preset)
+    params.delete('dateFrom')
+    params.delete('dateTo')
+    navigate(params)
   }
 
   function handleRangeChange(nextRange: DateRange) {
@@ -46,7 +62,7 @@ export function DashboardPeriodControls({
     params.set('period', 'custom')
     params.set('dateFrom', dateFrom)
     params.set('dateTo', dateTo)
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    navigate(params)
   }
 
   return (
@@ -55,19 +71,29 @@ export function DashboardPeriodControls({
         {PERIODS.map((item) => (
           <Button
             key={item.value}
-            asChild
+            type="button"
             size="sm"
             variant={period.preset === item.value ? 'default' : 'outline'}
             className="h-8 px-3 text-xs"
+            disabled={isPending}
+            onClick={() => handlePresetChange(item.value)}
           >
-            <Link href={`/?account=${accountId}&period=${item.value}`}>{item.label}</Link>
+            {item.label}
           </Button>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <DateRangePicker value={range} onChange={handleRangeChange} className="h-9 min-w-[250px] text-xs" />
+        <DateRangePicker
+          value={range}
+          onChange={handleRangeChange}
+          className="h-9 min-w-[250px] text-xs"
+          disabled={isPending}
+        />
         <DashboardExportButtons request={exportRequest} />
       </div>
+      {isPending && (
+        <p className="text-xs font-medium text-muted-foreground">Обновляем период...</p>
+      )}
     </div>
   )
 }

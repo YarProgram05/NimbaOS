@@ -1,5 +1,6 @@
 'use client'
 
+import { useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import {
@@ -15,6 +16,7 @@ export function AccountSelector() {
   const { accounts, selectedId, selectAccount } = useAccount()
   const router = useRouter()
   const pathname = usePathname()
+  const [isPending, startTransition] = useTransition()
 
   function handleSelect(id: string) {
     selectAccount(id)
@@ -22,7 +24,9 @@ export function AccountSelector() {
     const params = new URLSearchParams(window.location.search)
     params.set('account', id)
     params.delete('page')
-    router.push(`${pathname}?${params.toString()}`)
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
   }
 
   if (accounts === null) {
@@ -47,7 +51,7 @@ export function AccountSelector() {
   const effectiveSelectedId = selectedId ?? accounts[0]?.id
 
   return (
-    <Select value={effectiveSelectedId} onValueChange={handleSelect}>
+    <Select value={effectiveSelectedId} onValueChange={handleSelect} disabled={isPending}>
       <SelectTrigger className="w-full border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground shadow-sm">
         <SelectValue placeholder="Выберите кабинет" />
       </SelectTrigger>

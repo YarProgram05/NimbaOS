@@ -230,6 +230,7 @@ async function runSalesPlanJob(data: Extract<SyncJobData, { kind: typeof SYNC_JO
 
 async function runAdvertisingStatsJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_KINDS.ADVERTISING_STATS }>) {
   const { dateFrom, dateTo } = resolvePeriod(data)
+  const isAccountWideSync = !data.campaignId && !data.advertId
   const campaigns = data.campaignId && data.advertId
     ? [{ id: data.campaignId, advertId: data.advertId }]
     : await prisma.adCampaign.findMany({
@@ -239,23 +240,44 @@ async function runAdvertisingStatsJob(data: Extract<SyncJobData, { kind: typeof 
       })
 
   const results = []
+  const errors: Array<{ campaignId: string; advertId: number; message: string }> = []
   for (const campaign of campaigns) {
-    results.push({
-      campaignId: campaign.id,
-      advertId: campaign.advertId,
-      result: await syncAdStats({
-        wbAccountId: data.wbAccountId,
+    try {
+      results.push({
         campaignId: campaign.id,
         advertId: campaign.advertId,
-        dateFrom,
-        dateTo,
-      }),
-    })
+        result: await syncAdStats({
+          wbAccountId: data.wbAccountId,
+          campaignId: campaign.id,
+          advertId: campaign.advertId,
+          dateFrom,
+          dateTo,
+        }),
+      })
+    } catch (error) {
+      if (error instanceof WbRateLimitError) throw error
+      errors.push({
+        campaignId: campaign.id,
+        advertId: campaign.advertId,
+        message: error instanceof Error ? error.message : 'Unknown advertising stats error',
+      })
+    }
+  }
+
+  if (isAccountWideSync && errors.length === 0) {
+    await markSyncCoverage(
+      data.wbAccountId,
+      SYNC_JOB_KINDS.ADVERTISING_STATS,
+      dateFrom,
+      dateTo,
+    )
   }
 
   return {
     period: { dateFrom, dateTo },
     campaigns: results,
+    errors: errors.length,
+    campaignErrors: errors,
   }
 }
 

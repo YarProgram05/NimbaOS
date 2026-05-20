@@ -4,10 +4,10 @@
 
 ### TASK-P8-SYNC-ERRORS
 
-Status: Partially fixed; live smoke pending  
+Status: Mostly fixed; broader live smoke pending  
 Priority: High  
-Description: Phase 8 background sync still needs live verification after WB API long rate limits. Fixed code-level issues seen in worker: ad stats numeric overflow, null `fullstats` responses, and advertising cluster periods above WB's 30-day limit. `/sync` supports deleting non-running queue/history items.  
-Next step: Run one read-only smoke per job type after WB retry windows clear; old failed history rows can remain as audit history.  
+Description: Phase 8 background sync still needs broader live verification after WB API long rate limits. Fixed code-level issues seen in worker: ad stats numeric overflow, null `fullstats` responses, advertising cluster periods above WB's 30-day limit, and missing account-wide advertising coverage marking. `/sync` supports deleting non-running queue/history items.  
+Next step: Run one read-only smoke per remaining job type after WB retry windows clear; old failed history rows can remain as audit history.  
 Related files: `docs/BUGS_AND_INCIDENTS.md`, `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-ad-clusters.ts`, `src/lib/sync/job-runs.ts`, `src/app/(dashboard)/sync`  
 Risks: Do not spam WB sync buttons while a same-kind job is queued/running; respect retry windows.
 
@@ -38,6 +38,15 @@ Related files: `src/lib/wb-api/advertising.ts`, `src/lib/services/sync-ad-stats.
 Risks: Не ждать долгий retry в интерактивном UI; не запускать управляющие рекламные действия без подтверждения.
 
 ## Done recently
+
+### TASK-ADVERTISING-COVERAGE-ACTIVE-CAMPAIGNS
+
+Status: Done
+Priority: High
+Description: Account-wide advertising stats sync now marks coverage only after all campaigns finish without errors. Dashboard period/account changes show immediate loading feedback and avoid live WB calls. `/analytics/advertising` lists campaigns with actual period activity, shows spend per campaign, and links to `/advertising/[campaignId]` with the same stats period preselected.
+Next step: Use the active-campaign list to verify spend coverage after future historical advertising syncs.
+Related files: `src/lib/queue/sync-processor.ts`, `src/lib/services/dashboard-summary.ts`, `src/types/dashboard.ts`, `src/app/(dashboard)/analytics/advertising/page.tsx`, `src/app/(dashboard)/advertising/[campaignId]`, `src/app/(dashboard)/dashboard-period-controls.tsx`
+Risks: Old failed sync rows are audit history; judge new sync health by new `SyncJobRun` rows and `SyncDataCoverage`.
 
 ### TASK-REPORT-DASHBOARD-PARITY
 

@@ -180,6 +180,7 @@ export interface DashboardAdvertisingSummary {
   drr: number | null
   campaigns: number
   spendWithoutOrders: number | null
+  activeCampaigns: DashboardAdvertisingCampaignSnapshot[]
   inefficientCampaigns: DashboardAdvertisingCampaignSnapshot[]
   campaignsWithoutRecentStats: DashboardAdvertisingCampaignSnapshot[]
   source: string

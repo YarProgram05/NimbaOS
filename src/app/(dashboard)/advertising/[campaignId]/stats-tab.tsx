@@ -25,13 +25,12 @@ import { buildCampaignMetrics, toDateString } from './ad-metrics-utils'
 
 interface StatsTabProps {
   campaignId: string
+  initialDateFrom?: string
+  initialDateTo?: string
 }
 
-export function StatsTab({ campaignId }: StatsTabProps) {
-  const [range, setRange] = useState<DateRange>({
-    from: subDays(new Date(), 29),
-    to: new Date(),
-  })
+export function StatsTab({ campaignId, initialDateFrom, initialDateTo }: StatsTabProps) {
+  const [range, setRange] = useState<DateRange>(() => initialRange(initialDateFrom, initialDateTo))
   const [rows, setRows] = useState<AdStatRow[]>([])
   const [isLoading, startLoading] = useTransition()
   const [isSyncing, startSync] = useTransition()
@@ -158,4 +157,23 @@ export function StatsTab({ campaignId }: StatsTabProps) {
       </CardContent>
     </Card>
   )
+}
+
+function initialRange(dateFrom?: string, dateTo?: string): DateRange {
+  const from = parseDateKey(dateFrom)
+  const to = parseDateKey(dateTo)
+
+  if (from) {
+    return { from, to: to ?? from }
+  }
+
+  return {
+    from: subDays(new Date(), 29),
+    to: new Date(),
+  }
+}
+
+function parseDateKey(value?: string): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  return new Date(`${value}T00:00:00`)
 }
