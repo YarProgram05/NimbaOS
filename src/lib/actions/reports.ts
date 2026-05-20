@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { enqueueReportsSyncAction } from '@/lib/actions/sync'
 import { REPORT_COLUMN_ORDER_PREFERENCE_KEY } from '@/lib/reports/preferences'
-import { calculateReport } from '@/lib/services/report-calculator'
+import { calculateReport, REPORT_CALCULATION_OPTIONS } from '@/lib/services/report-calculator'
 import {
   appendAoaSheet,
   createWorkbook,
@@ -53,9 +53,7 @@ export async function getReportData(
     await requireSession()
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
     if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
-    const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
-      preferLiveAdCostTotals: true,
-    })
+    const data = await calculateReport(wbAccountId, dateFrom, dateTo, REPORT_CALCULATION_OPTIONS)
     return { success: true, data }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки отчёта' }
@@ -103,9 +101,7 @@ export async function exportReportXlsx(
     await requireSession()
     if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
 
-    const data = await calculateReport(wbAccountId, dateFrom, dateTo, {
-      preferLiveAdCostTotals: true,
-    })
+    const data = await calculateReport(wbAccountId, dateFrom, dateTo, REPORT_CALCULATION_OPTIONS)
     const allRows = [...data.rows, data.summary]
 
     const headers = [

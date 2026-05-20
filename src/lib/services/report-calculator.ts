@@ -50,6 +50,10 @@ interface CalculateReportOptions {
   preferLiveAdCostTotals?: boolean
 }
 
+export const REPORT_CALCULATION_OPTIONS = {
+  preferLiveAdCostTotals: true,
+} satisfies CalculateReportOptions
+
 const DOC_SALE = '\u041f\u0440\u043e\u0434\u0430\u0436\u0430'
 const DOC_RETURN = '\u0412\u043e\u0437\u0432\u0440\u0430\u0442'
 const OPERATION_LOGISTICS = '\u041b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0430'

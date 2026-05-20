@@ -23,8 +23,10 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Dashboard analytics roadmap Phase 5: existing analytics upgrade is implemented at code level. Dashboard now exposes financial breakdown, sales/funnel analytics, expanded product risk slices, advertising campaign impact lists, and problem-center issues for high logistics/storage/returns plus inefficient or stale-stat campaigns. These values reuse existing local DB sources and report formulas; no new WB live reads or migrations were added.
 - Dashboard analytics roadmap Phases 6-7: forecasts and deterministic recommendations are implemented at code level. `DashboardSummary` now exposes forecast projections, plan pace, stock depletion helpers, and prioritized `ActionRecommendation` rows; the home dashboard shows a compact forecast/pace panel and uses recommendations as the primary Focus block.
 - Dashboard analytics roadmap Phase 8: dashboard management Excel exports are implemented at code level. The home dashboard exports summary, product risks, stock risks, and review/question workload from the same `DashboardSummary` values shown on screen, with account/period/freshness/generation context in each workbook.
+- Dashboard analytics roadmap Phase 9: final dashboard UI/UX polish is implemented at code level. The home screen now has a denser command-center composition with top status context, KPI strip, period-vs-comparison trend panel, first-screen action center, and compact lower operational panels without duplicate focus rendering.
 - Post-Phase-9 advertising sync hardening: worker handles null WB `fullstats` responses as empty data and splits advertising cluster requests into <=30-day chunks before aggregating for the selected period.
 - Financial reports hardening: report viewing is fast/local, the reports page uses table-only scrolling with sticky headers/totals, per-user report column order is persisted, and advertising allocation now uses WB ad update/spend history totals with corrected article-level distribution for `Реклама (баланс)` and `Реклама (все)`.
+- Dashboard/report parity: dashboard and analytics report-derived KPI values now use the same report calculation options as `/reports`, so DRR, WB ad spend, OP, margin, and related product risk slices match the financial report for the same account and period.
 - Seller-size drilldown: reports, product analytics lists, and `/stocks` expose expandable child rows for multi-size articles. Virtual child article labels use `vendorCode + ProductSize.techSize` (seller size from the WB card "Размер" field), with `wbSize` only as fallback.
 - Documentation memory system: short startup docs, index, handoff, task board, state, protocol, safety, command and data guides.
 
@@ -67,11 +69,13 @@ Phase 9 production/responsive/Excel polish is implemented at code level. Post-Ph
 - Sales plan reads orders/sales/funnel from local DB after sync.
 - Advertising stats are cached by campaign/date/source and by campaign/date/source/nmId where WB returns article-level stats.
 - Financial report ad totals should not rely only on persisted `fullstats` nm rows; WB ad update/spend history is the authoritative total source for `Реклама (все)`, with balance distributed from the same allocation map.
+- Dashboard and analytics report-derived values should continue to call the shared report calculation options rather than choosing a separate ad-spend mode.
 - Advertising cluster sync stores one aggregate row set per selected period, while WB requests are chunked internally to satisfy the API's 30-day limit.
 - Stock sync stores immutable current snapshots from WB warehouse inventory. `/stocks`, dashboard stock risks, and sales-plan add-from-stock read the latest local `StockSnapshot`.
 - Reviews/questions sync stores read-only customer feedback from `feedbacks-api.wildberries.ru`; `/reviews` and the dashboard read only local `ProductReview` and `ProductQuestion` rows.
 - Dashboard forecasts and recommendations are computed on demand from local persisted data only. They are explainable planning helpers, not statistical prediction models or automated WB actions.
 - Dashboard exports are generated from the already computed `DashboardSummary`; exported numbers should match the dashboard for the same account and period.
+- Dashboard trend UI reuses current and comparison KPI values from `DashboardSummary`; it does not add a separate time-series aggregate yet.
 - Multi-size article detail is derived from local product sizes and per-row barcode/chrtId links where available. Ad spend remains source-level `nmId` data and is split across size rows proportionally in reports.
 - `WbAccount.lastSyncAt` is used as authoritative report sync timestamp where relevant.
 - `SyncJobRun` stores background sync status, payload, result, attempts and errors.

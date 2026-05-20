@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-REPORT-DASHBOARD-PARITY
+
+Status: Done
+Priority: High
+Description: Fixed dashboard and analytics parity with the financial report for report-derived metrics. Dashboard/analytics now reuse the same report calculation options as `/reports`, including WB ad update history totals for `Реклама (все)` and derived DRR/OP/margin values. Added the analytics period picker and adjusted the sales-plan create dialog period spacing.
+Next step: No action unless a new external reconciliation mismatch appears.
+Related files: `src/lib/services/report-calculator.ts`, `src/lib/services/dashboard-summary.ts`, `src/lib/services/dashboard-analytics-detail.ts`, `src/lib/actions/reports.ts`, `src/app/(dashboard)/analytics`, `src/app/(dashboard)/sales-plan/create-plan-dialog.tsx`
+Risks: Storage logic was not changed in this fix.
+
 ### TASK-SELLER-SIZE-DRILLDOWN
 
 Status: Done at code level
@@ -47,6 +56,15 @@ Description: Reports, product analytics lists, and `/stocks` now expose expandab
 Next step: Verify with a real WB1/Nimba multi-size article after the next report/stock sync.
 Related files: `src/lib/services/report-calculator.ts`, `src/app/(dashboard)/reports`, `src/lib/services/stocks.ts`, `src/app/(dashboard)/stocks`, `src/app/(dashboard)/analytics/analytics-shared.tsx`
 Risks: WB advertising is still received by `nmId`, so report child rows distribute ad spend proportionally by sales within the article.
+
+### TASK-DASHBOARD-ANALYTICS-PHASE-9
+
+Status: Done at code level
+Priority: Medium
+Description: Dashboard analytics roadmap Phase 9 is implemented as final home-screen UI/UX polish. The dashboard now has a denser command-center layout with top account/period/status context, KPI strip, comparison trend panel, first-screen action center, and compact lower panels for finance, plan/fact, forecast, sales, advertising, stock risk, feedback, and product risks.
+Next step: Run browser smoke on desktop and mobile viewports with representative account data, checking that the first viewport is useful and there are no text overlaps.
+Related files: `src/app/(dashboard)/page.tsx`, `docs/DASHBOARD_ANALYTICS_ROADMAP.md`, `docs/PROJECT_STATE.md`
+Risks: The trend panel intentionally compares current KPI values with the comparison period; daily time-series charts remain a future aggregate/data-contract enhancement.
 
 ### TASK-DASHBOARD-ANALYTICS-PHASE-8
 

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { getSyncCoverage } from '@/lib/sync/coverage'
 import { buildDashboardProblemCenter } from '@/lib/services/dashboard-problem-center'
-import { calculateReport } from '@/lib/services/report-calculator'
+import { calculateReport, REPORT_CALCULATION_OPTIONS } from '@/lib/services/report-calculator'
 import { getFeedbackSummary } from '@/lib/services/feedback'
 import { getStocksSummary } from '@/lib/services/stocks'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
@@ -251,10 +251,10 @@ export async function getDashboardSummary(
   ] = await Promise.all([
     financialStatus === 'missing'
       ? Promise.resolve(null)
-      : calculateReport(account.id, period.dateFrom, period.dateTo, { preferPersistedAdStats: true }),
+      : calculateReport(account.id, period.dateFrom, period.dateTo, REPORT_CALCULATION_OPTIONS),
     comparisonFinancialStatus === 'missing'
       ? Promise.resolve(null)
-      : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, { preferPersistedAdStats: true }),
+      : calculateReport(account.id, comparisonPeriod.dateFrom, comparisonPeriod.dateTo, REPORT_CALCULATION_OPTIONS),
     getPlanSummary(account.id, period.dateFrom, period.dateTo),
     getAdvertisingSummary(account.id, period.dateFrom, period.dateTo),
     getSalesAnalytics(account.id, period.dateFrom, period.dateTo),
@@ -267,6 +267,7 @@ export async function getDashboardSummary(
   const operatingProfit = reportMetricValue(report, 'operatingProfit', financialStatus)
   const marginality = reportMetricValue(report, 'marginality', financialStatus)
   const drr = reportMetricValue(report, 'drr', financialStatus)
+  const adSpend = reportMetricValue(report, 'adAll', financialStatus)
   const orders = reportMetricValue(report, 'delivered', financialStatus)
   const buyouts = reportMetricValue(report, 'boughtWithReturns', financialStatus)
 
@@ -280,6 +281,12 @@ export async function getDashboardSummary(
   const productStatus = financialStatus
   const productRows = productStatus === 'missing' ? [] : report?.rows ?? []
   const financialBreakdown = buildFinancialBreakdown(report, financialStatus)
+  const advertisingSummary = mergeReportAdvertisingSummary(
+    advertising,
+    adSpend,
+    drr,
+    mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
+  )
   const topProfit = productRows
     .filter((row) => Number(row.operatingProfit) > 0)
     .sort((a, b) => Number(b.operatingProfit) - Number(a.operatingProfit))
@@ -335,7 +342,7 @@ export async function getDashboardSummary(
     financialStatus,
     reportRowsCount,
     reportRows: productRows,
-    advertising,
+    advertising: advertisingSummary,
     stocks,
     feedback,
     freshnessItems: freshness.items,
@@ -347,7 +354,7 @@ export async function getDashboardSummary(
     financialStatus,
     financialBreakdown,
     plan,
-    advertising,
+    advertising: advertisingSummary,
     stocks,
     productsRequiringPlanAdjustment: risks,
   })
@@ -364,11 +371,7 @@ export async function getDashboardSummary(
     accountId: account.id,
     period,
     financialBreakdown,
-    advertising: {
-      ...advertising,
-      drr,
-      status: mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
-    },
+    advertising: advertisingSummary,
     stocks,
     feedback,
     freshness,
@@ -401,11 +404,7 @@ export async function getDashboardSummary(
     financialBreakdown,
     salesAnalytics,
     plan,
-    advertising: {
-      ...advertising,
-      drr,
-      status: mergeStatus(advertising.status, advertisingCoverage.isCovered ? 'ready' : advertising.status),
-    },
+    advertising: advertisingSummary,
     stocks,
     feedback,
     forecasts,
@@ -834,7 +833,6 @@ async function buildOverviewCharts(input: {
   }
 }): Promise<DashboardOverviewCharts> {
   const { granularity, buckets } = buildOverviewBuckets(input.period)
-  const adSpendByBucket = await getOverviewAdSpendByBucket(input.accountId, buckets)
   const trend = await Promise.all(buckets.map(async (bucket) => {
     const from = parseDateKey(bucket.dateFrom)
     const to = parseDateKey(bucket.dateTo)
@@ -845,7 +843,7 @@ async function buildOverviewCharts(input: {
     const status = statusFromCoverage(coverage.isCovered, rowCount)
     const report = status === 'missing'
       ? null
-      : await calculateReport(input.accountId, bucket.dateFrom, bucket.dateTo, { preferPersistedAdStats: true })
+      : await calculateReport(input.accountId, bucket.dateFrom, bucket.dateTo, REPORT_CALCULATION_OPTIONS)
 
     return {
       label: bucket.label,
@@ -855,7 +853,7 @@ async function buildOverviewCharts(input: {
       operatingProfit: reportMetricValue(report, 'operatingProfit', status),
       orders: reportMetricValue(report, 'delivered', status),
       buyouts: reportMetricValue(report, 'boughtWithReturns', status),
-      adSpend: input.advertising.status === 'missing' ? null : adSpendByBucket.get(overviewBucketKey(bucket)) ?? 0,
+      adSpend: reportMetricValue(report, 'adAll', status),
       status,
     }
   }))
@@ -910,64 +908,6 @@ function buildOverviewBuckets(period: DashboardPeriod): { granularity: Dashboard
     granularity: useWeeks ? 'week' : 'day',
     buckets,
   }
-}
-
-function overviewBucketKey(bucket: OverviewBucket): string {
-  return `${bucket.dateFrom}:${bucket.dateTo}`
-}
-
-async function getOverviewAdSpendByBucket(
-  wbAccountId: string,
-  buckets: OverviewBucket[],
-): Promise<Map<string, number>> {
-  const result = new Map<string, number>()
-  if (buckets.length === 0) return result
-
-  const from = parseDateKey(buckets[0].dateFrom)
-  const to = parseDateKey(buckets[buckets.length - 1].dateTo)
-  const rows = await prisma.adCampaignStat.findMany({
-    where: {
-      date: { gte: from, lte: to },
-      campaign: { wbAccountId },
-    },
-    select: {
-      campaignId: true,
-      date: true,
-      source: true,
-      spend: true,
-    },
-  })
-  const byDateCampaign = new Map<string, { total: number; placements: number }>()
-
-  for (const row of rows) {
-    const key = `${formatDateKey(row.date)}:${row.campaignId}`
-    const group = byDateCampaign.get(key) ?? { total: 0, placements: 0 }
-    if (row.source === 'total') {
-      group.total += Number(row.spend)
-    } else {
-      group.placements += Number(row.spend)
-    }
-    byDateCampaign.set(key, group)
-  }
-
-  const dailySpend = new Map<string, number>()
-  byDateCampaign.forEach((group, key) => {
-    const date = key.slice(0, 10)
-    dailySpend.set(date, (dailySpend.get(date) ?? 0) + (group.total > 0 ? group.total : group.placements))
-  })
-
-  for (const bucket of buckets) {
-    let sum = 0
-    let cursor = parseDateKey(bucket.dateFrom)
-    const bucketTo = parseDateKey(bucket.dateTo)
-    while (cursor <= bucketTo) {
-      sum += dailySpend.get(formatDateKey(cursor)) ?? 0
-      cursor = addDays(cursor, 1)
-    }
-    result.set(overviewBucketKey(bucket), sum)
-  }
-
-  return result
 }
 
 function distributionItem(
@@ -1857,6 +1797,28 @@ function mergeStatus(a: DashboardValueStatus, b: DashboardValueStatus): Dashboar
   if (a === 'partial' || b === 'partial') return 'partial'
   if (a === 'not_applicable' || b === 'not_applicable') return 'not_applicable'
   return 'ready'
+}
+
+function mergeReportAdvertisingSummary(
+  advertising: DashboardAdvertisingSummary,
+  reportAdSpend: number | null,
+  reportDrr: number | null,
+  status: DashboardValueStatus,
+): DashboardAdvertisingSummary {
+  const spend = reportAdSpend ?? advertising.spend
+
+  return {
+    ...advertising,
+    spend,
+    drr: reportDrr,
+    cpc: spend !== null && advertising.clicks && advertising.clicks > 0
+      ? spend / advertising.clicks
+      : advertising.cpc,
+    status,
+    source: reportAdSpend !== null
+      ? `${advertising.source} + Report calculator`
+      : advertising.source,
+  }
 }
 
 function reportHint(status: DashboardValueStatus): string | null {

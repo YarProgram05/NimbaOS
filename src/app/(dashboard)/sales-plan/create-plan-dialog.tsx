@@ -113,9 +113,9 @@ export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlan
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Период</Label>
-            <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Label className="shrink-0">Период</Label>
+            <DateRangePicker value={dateRange} onChange={setDateRange} className="min-w-[250px]" />
           </div>
 
           <div className="space-y-2">

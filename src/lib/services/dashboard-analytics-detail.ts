@@ -1,4 +1,4 @@
-import { calculateReport } from '@/lib/services/report-calculator'
+import { calculateReport, REPORT_CALCULATION_OPTIONS } from '@/lib/services/report-calculator'
 import { getDashboardSummary } from '@/lib/services/dashboard-summary'
 import type { ReportRow } from '@/types/reports'
 import type {
@@ -37,9 +37,7 @@ export async function getDashboardAnalyticsDetail(
 
   const report = summary.products.status === 'missing'
     ? null
-    : await calculateReport(summary.account.id, summary.period.dateFrom, summary.period.dateTo, {
-      preferPersistedAdStats: true,
-    })
+    : await calculateReport(summary.account.id, summary.period.dateFrom, summary.period.dateTo, REPORT_CALCULATION_OPTIONS)
   const rows = report?.rows ?? []
   const status = summary.products.status
 

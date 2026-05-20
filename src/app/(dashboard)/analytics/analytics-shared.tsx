@@ -25,6 +25,7 @@ import type {
 } from '@/types/dashboard'
 import type { StockSummaryItem } from '@/types/stocks'
 import type { FeedbackWorkloadItem } from '@/types/feedback'
+import { AnalyticsPeriodPicker } from './analytics-period-picker'
 
 export interface AnalyticsPageProps {
   searchParams: Promise<{
@@ -116,9 +117,12 @@ export function AnalyticsShell({
               {summary.account.sellerName ? ` - ${summary.account.sellerName}` : ''}. {formatDate(summary.period.dateFrom)} - {formatDate(summary.period.dateTo)}. {description}
             </p>
           </div>
-          <Link href={`/?account=${summary.account.id}&period=${summary.period.preset}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`} className="inline-flex shrink-0 items-center gap-2 text-xs font-semibold text-primary">
-            На главный экран <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <AnalyticsPeriodPicker accountId={summary.account.id} period={summary.period} />
+            <Link href={`/?account=${summary.account.id}&period=${summary.period.preset}&dateFrom=${summary.period.dateFrom}&dateTo=${summary.period.dateTo}`} className="inline-flex shrink-0 items-center gap-2 text-xs font-semibold text-primary">
+              На главный экран <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
         <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {sections.map((section) => (
