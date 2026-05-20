@@ -16,11 +16,13 @@ import {
 } from '@/components/ui/card'
 import {
   exportAdStatsXlsxAction,
+  getCampaignNmStatsAction,
   getCampaignStatsAction,
   syncCampaignStatsAction,
 } from '@/lib/actions/advertising'
-import type { AdStatRow } from '@/types/advertising'
+import type { AdNmStatRow, AdStatRow } from '@/types/advertising'
 import { AdStatsGrid } from './ad-stats-grid'
+import { AdNmStatsGrid } from './ad-nm-stats-grid'
 import { buildCampaignMetrics, toDateString } from './ad-metrics-utils'
 
 interface StatsTabProps {
@@ -32,6 +34,7 @@ interface StatsTabProps {
 export function StatsTab({ campaignId, initialDateFrom, initialDateTo }: StatsTabProps) {
   const [range, setRange] = useState<DateRange>(() => initialRange(initialDateFrom, initialDateTo))
   const [rows, setRows] = useState<AdStatRow[]>([])
+  const [nmRows, setNmRows] = useState<AdNmStatRow[]>([])
   const [isLoading, startLoading] = useTransition()
   const [isSyncing, startSync] = useTransition()
   const [isExporting, startExport] = useTransition()
@@ -49,11 +52,21 @@ export function StatsTab({ campaignId, initialDateFrom, initialDateTo }: StatsTa
     if (!dateFrom || !dateTo) return
 
     startLoading(async () => {
-      const result = await getCampaignStatsAction(campaignId, dateFrom, dateTo)
-      if (result.success) {
-        setRows(result.data)
+      const [statsResult, nmStatsResult] = await Promise.all([
+        getCampaignStatsAction(campaignId, dateFrom, dateTo),
+        getCampaignNmStatsAction(campaignId, dateFrom, dateTo),
+      ])
+
+      if (statsResult.success) {
+        setRows(statsResult.data)
       } else {
-        toast.error(result.error)
+        toast.error(statsResult.error)
+      }
+
+      if (nmStatsResult.success) {
+        setNmRows(nmStatsResult.data)
+      } else {
+        toast.error(nmStatsResult.error)
       }
     })
   }, [campaignId, dateFrom, dateTo])
@@ -144,7 +157,7 @@ export function StatsTab({ campaignId, initialDateFrom, initialDateTo }: StatsTa
             <Loader2 className="h-4 w-4 animate-spin" />
             Загрузка статистики...
           </div>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && nmRows.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center">
             <h3 className="text-base font-semibold">Нет данных за выбранный период</h3>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -152,7 +165,18 @@ export function StatsTab({ campaignId, initialDateFrom, initialDateTo }: StatsTa
             </p>
           </div>
         ) : (
-          <AdStatsGrid daily={metrics.daily} totals={metrics.totals} />
+          <>
+            {rows.length > 0 && <AdStatsGrid daily={metrics.daily} totals={metrics.totals} />}
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-base font-semibold">Детализация по артикулам</h3>
+                <p className="text-sm text-muted-foreground">
+                  Расходы и рекламные метрики по каждому артикулу с продажами, заказами и воронкой за тот же период.
+                </p>
+              </div>
+              <AdNmStatsGrid rows={nmRows} />
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

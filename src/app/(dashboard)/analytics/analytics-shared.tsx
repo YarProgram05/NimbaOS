@@ -33,6 +33,7 @@ export interface AnalyticsPageProps {
     period?: DashboardPeriodPreset
     dateFrom?: string
     dateTo?: string
+    articles?: string
   }>
 }
 

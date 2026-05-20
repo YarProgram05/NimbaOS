@@ -270,6 +270,32 @@ export interface AdStatRow {
   bid: string | null
 }
 
+export interface AdNmStatRow {
+  nmId: number
+  vendorCode: string | null
+  brandName: string | null
+  subjectName: string | null
+  photoUrl: string | null
+  views: number
+  clicks: number
+  ctr: string
+  cpc: string
+  spend: string
+  orders: number
+  cartAdds: number
+  cpo: string
+  wbOrders: number
+  wbOrderRevenue: string
+  sales: number
+  salesRevenue: string
+  returns: number
+  funnelOpenCount: number
+  funnelAddToCartCount: number
+  funnelCartCount: number
+  funnelOrdersCount: number
+  funnelOrdersSum: string
+}
+
 export interface AdClusterRow {
   id: string
   cluster: string

@@ -39,6 +39,15 @@ Risks: Не ждать долгий retry в интерактивном UI; не
 
 ## Done recently
 
+### TASK-ARTICLE-CHART-AD-DRILLDOWN
+
+Status: Done at code level
+Priority: Medium
+Description: `/analytics/chart` now supports article selection, fast client-side toggling, multi-metric comparison, ad-spend bars, and a color legend for active series. Campaign stats also show per-article advertising detail with spend, clicks, carts, orders, sales, returns, and funnel metrics.
+Next step: Verify visually in an authenticated cabinet with representative article/ad data.
+Related files: `src/app/(dashboard)/analytics/chart`, `src/app/(dashboard)/advertising/[campaignId]`, `src/lib/actions/advertising.ts`, `src/types/advertising.ts`
+Risks: Article chart values depend on existing report-calculator output and synced local ad/funnel data.
+
 ### TASK-ADVERTISING-COVERAGE-ACTIVE-CAMPAIGNS
 
 Status: Done

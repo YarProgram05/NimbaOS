@@ -1,5 +1,23 @@
 # Development Log
 
+## 2026-05-20 - Article chart and advertising drill-down
+
+### Summary
+
+Added article selection to `/analytics/chart` with client-side switching, multi-metric comparison, line/bar rendering for article metrics, and a compact color legend. Campaign stats now include a per-article advertising drill-down with ad spend, clicks, carts, orders, sales, returns, and funnel metrics from local persisted data.
+
+### Files changed
+
+`src/app/(dashboard)/analytics/chart`, `src/app/(dashboard)/advertising/[campaignId]`, `src/lib/actions/advertising.ts`, and `src/types/advertising.ts`.
+
+### Commands run
+
+`npm run type-check`, `npm run lint`, `npm run build`.
+
+### Result
+
+Checks pass. The chart article picker no longer triggers server rerenders when selecting/removing articles.
+
 ## 2026-05-20 - Advertising sync coverage and active campaign analytics
 
 ### Summary

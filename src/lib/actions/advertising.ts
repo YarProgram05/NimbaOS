@@ -32,6 +32,7 @@ import type {
   AdCampaignDetail,
   AdCampaignRow,
   AdClusterRow,
+  AdNmStatRow,
   AdSource,
   AdStatRow,
   AdStatus,
@@ -185,6 +186,17 @@ function mapStatRow(row: {
   }
 }
 
+function emptyNmAggregate(nmId: number) {
+  return {
+    nmId,
+    views: 0,
+    clicks: 0,
+    spend: 0,
+    orders: 0,
+    cartAdds: 0,
+  }
+}
+
 function mapClusterRow(row: {
   id: string
   cluster: string
@@ -298,6 +310,200 @@ export async function getCampaignStatsAction(
     return { success: true, data: rows.map(mapStatRow) }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки статистики' }
+  }
+}
+
+export async function getCampaignNmStatsAction(
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<ActionResult<AdNmStatRow[]>> {
+  try {
+    await requireManagerSession()
+    if (!campaignId) return { success: false, error: 'Кампания не указана' }
+    if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
+
+    const campaign = await prisma.adCampaign.findUnique({
+      where: { id: campaignId },
+      select: { wbAccountId: true },
+    })
+    if (!campaign) return { success: false, error: 'Кампания не найдена' }
+
+    const from = parseDate(dateFrom)
+    const to = parseDate(dateTo)
+    const nmRows = await prisma.adCampaignNmStat.findMany({
+      where: {
+        campaignId,
+        date: { gte: from, lte: to },
+      },
+      orderBy: [
+        { date: 'asc' },
+        { nmId: 'asc' },
+        { source: 'asc' },
+      ],
+    })
+
+    type NmStatDbRow = (typeof nmRows)[number]
+    const rowsByDayAndNm = new Map<string, NmStatDbRow[]>()
+    for (const row of nmRows) {
+      const key = `${serializeDate(row.date)}:${row.nmId}`
+      const group = rowsByDayAndNm.get(key) ?? []
+      group.push(row)
+      rowsByDayAndNm.set(key, group)
+    }
+
+    const aggregates = new Map<number, ReturnType<typeof emptyNmAggregate>>()
+    for (const rows of Array.from(rowsByDayAndNm.values())) {
+      const totalRows = rows.filter((row) => row.source === 'total')
+      const rowsForTotals = totalRows.length > 0 ? totalRows : rows.filter((row) => row.source !== 'total')
+
+      for (const row of rowsForTotals) {
+        const aggregate = aggregates.get(row.nmId) ?? emptyNmAggregate(row.nmId)
+        aggregate.views += row.views
+        aggregate.clicks += row.clicks
+        aggregate.spend += Number(row.spend)
+        aggregate.orders += row.orders
+        aggregate.cartAdds += row.cartAdds
+        aggregates.set(row.nmId, aggregate)
+      }
+    }
+
+    const nmIds = Array.from(aggregates.keys())
+    if (nmIds.length === 0) return { success: true, data: [] }
+
+    const [products, wbOrders, wbSales, funnelRows] = await Promise.all([
+      prisma.product.findMany({
+        where: { wbAccountId: campaign.wbAccountId, nmId: { in: nmIds } },
+        select: {
+          nmId: true,
+          vendorCode: true,
+          brand: true,
+          category: true,
+          photoUrl: true,
+        },
+      }),
+      prisma.wbOrder.findMany({
+        where: {
+          wbAccountId: campaign.wbAccountId,
+          nmId: { in: nmIds },
+          date: { gte: from, lte: to },
+        },
+        select: { nmId: true, finishedPrice: true, isCancel: true },
+      }),
+      prisma.wbSale.findMany({
+        where: {
+          wbAccountId: campaign.wbAccountId,
+          nmId: { in: nmIds },
+          date: { gte: from, lte: to },
+        },
+        select: { nmId: true, priceWithDisc: true, isReturn: true },
+      }),
+      prisma.wbFunnelStat.findMany({
+        where: {
+          wbAccountId: campaign.wbAccountId,
+          nmId: { in: nmIds },
+          date: { gte: from, lte: to },
+        },
+        select: {
+          nmId: true,
+          openCount: true,
+          addToCartCount: true,
+          cartCount: true,
+          ordersCount: true,
+          ordersSumRub: true,
+        },
+      }),
+    ])
+
+    const productsByNm = new Map(products.map((product) => [product.nmId, product]))
+    const ordersByNm = new Map<number, { count: number; revenue: number }>()
+    const salesByNm = new Map<number, { sales: number; revenue: number; returns: number }>()
+    const funnelByNm = new Map<number, {
+      openCount: number
+      addToCartCount: number
+      cartCount: number
+      ordersCount: number
+      ordersSumRub: number
+    }>()
+
+    for (const order of wbOrders) {
+      if (order.isCancel) continue
+      const aggregate = ordersByNm.get(order.nmId) ?? { count: 0, revenue: 0 }
+      aggregate.count += 1
+      aggregate.revenue += Number(order.finishedPrice)
+      ordersByNm.set(order.nmId, aggregate)
+    }
+
+    for (const sale of wbSales) {
+      const aggregate = salesByNm.get(sale.nmId) ?? { sales: 0, revenue: 0, returns: 0 }
+      if (sale.isReturn) aggregate.returns += 1
+      else {
+        aggregate.sales += 1
+        aggregate.revenue += Number(sale.priceWithDisc)
+      }
+      salesByNm.set(sale.nmId, aggregate)
+    }
+
+    for (const row of funnelRows) {
+      const aggregate = funnelByNm.get(row.nmId) ?? {
+        openCount: 0,
+        addToCartCount: 0,
+        cartCount: 0,
+        ordersCount: 0,
+        ordersSumRub: 0,
+      }
+      aggregate.openCount += row.openCount
+      aggregate.addToCartCount += row.addToCartCount
+      aggregate.cartCount += row.cartCount
+      aggregate.ordersCount += row.ordersCount
+      aggregate.ordersSumRub += Number(row.ordersSumRub)
+      funnelByNm.set(row.nmId, aggregate)
+    }
+
+    const data = Array.from(aggregates.values())
+      .map((aggregate) => {
+        const product = productsByNm.get(aggregate.nmId)
+        const orderMetrics = ordersByNm.get(aggregate.nmId) ?? { count: 0, revenue: 0 }
+        const saleMetrics = salesByNm.get(aggregate.nmId) ?? { sales: 0, revenue: 0, returns: 0 }
+        const funnelMetrics = funnelByNm.get(aggregate.nmId) ?? {
+          openCount: 0,
+          addToCartCount: 0,
+          cartCount: 0,
+          ordersCount: 0,
+          ordersSumRub: 0,
+        }
+
+        return {
+          nmId: aggregate.nmId,
+          vendorCode: product?.vendorCode ?? null,
+          brandName: product?.brand ?? null,
+          subjectName: product?.category ?? null,
+          photoUrl: product?.photoUrl ?? null,
+          views: aggregate.views,
+          clicks: aggregate.clicks,
+          ctr: aggregate.views > 0 ? ((aggregate.clicks / aggregate.views) * 100).toFixed(2) : '0.00',
+          cpc: aggregate.clicks > 0 ? (aggregate.spend / aggregate.clicks).toFixed(2) : '0.00',
+          spend: aggregate.spend.toFixed(2),
+          orders: aggregate.orders,
+          cartAdds: aggregate.cartAdds,
+          cpo: aggregate.orders > 0 ? (aggregate.spend / aggregate.orders).toFixed(2) : '0.00',
+          wbOrders: orderMetrics.count,
+          wbOrderRevenue: orderMetrics.revenue.toFixed(2),
+          sales: saleMetrics.sales,
+          salesRevenue: saleMetrics.revenue.toFixed(2),
+          returns: saleMetrics.returns,
+          funnelOpenCount: funnelMetrics.openCount,
+          funnelAddToCartCount: funnelMetrics.addToCartCount,
+          funnelCartCount: funnelMetrics.cartCount,
+          funnelOrdersCount: funnelMetrics.ordersCount,
+          funnelOrdersSum: funnelMetrics.ordersSumRub.toFixed(2),
+        }
+      })
+      .sort((a, b) => Number(b.spend) - Number(a.spend) || b.views - a.views)
+
+    return { success: true, data }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки статистики по артикулам' }
   }
 }
 
