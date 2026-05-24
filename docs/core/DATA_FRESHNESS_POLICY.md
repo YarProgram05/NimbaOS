@@ -1,0 +1,67 @@
+# Data Freshness Policy
+
+Политика актуальности данных. Last updated: 2026-05-24.
+
+## Main Principle
+
+База данных является основным источником данных для аналитики, отчетов и работы агента. WB API используется как механизм синхронизации данных в базу.
+
+## Historical Data
+
+- Исторические отчеты и данные синхронизируются один раз.
+- После этого они используются из базы.
+- Не запрашивать исторические периоды через WB API, если данные уже есть в базе.
+- Если история неполная или ошибочная, зафиксировать проблему и запросить подтверждение перед пересинхронизацией.
+- Перезапись исторических данных требует явного подтверждения.
+
+## Current Data
+
+Свежие данные обновляются:
+- по расписанию;
+- кнопкой пользователя в интерфейсе;
+- при явной задаче пользователя;
+- если агент обнаружил, что нужный период отсутствует или устарел.
+
+## Before Analytics
+
+Проверить:
+1. Какие кабинеты нужны.
+2. Какой период нужен.
+3. Есть ли период в базе.
+4. Когда была последняя синхронизация.
+5. Есть ли пропущенные даты.
+6. Нужен ли incremental sync.
+7. Какой штатный sync-сервис использовать.
+
+## Freshness Signals
+
+- `WbAccount.lastSyncAt` — общий timestamp для части report sync.
+- `SyncJobRun` — очередь, статус, ошибки, attempts.
+- `SyncDataCoverage` — покрытие account/kind/date range.
+- `SyncScheduleSetting` — включенность и rolling days расписаний.
+- Domain timestamps: `fetchedAt`, `syncedAt`, `lastChangeDate`, dates in raw tables.
+
+## Data Domains
+
+- Products/cards: `products`, `product_sizes`; refresh through products sync.
+- Financial reports: `realization_reports`, `paid_storage`, references, products, ad stats.
+- Sales plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`.
+- Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`.
+- Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`.
+- Reviews/questions: `product_reviews`, `product_questions`.
+
+## API Rule
+
+- Не вызывать WB API напрямую для анализа, если данные уже есть в базе.
+- Если данных нет или они устарели, использовать существующие sync methods.
+- Не писать ad-hoc API scripts, если есть штатный механизм.
+- Аналитика строится из базы после завершения sync.
+
+## Dangerous Operations
+
+- Full historical resync.
+- Перезапись существующей истории.
+- Удаление данных.
+- Изменение WB цен, скидок, карточек, рекламы, ставок, бюджетов, остатков.
+- Массовые write operations.
+

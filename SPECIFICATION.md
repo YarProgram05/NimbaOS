@@ -1,6 +1,6 @@
 # NimbaOS — Product Specification
 
-`docs/SPECIFICATION.md` describes stable product intent and business rules. It is not a development diary. Current implementation status lives in `docs/PROJECT_STATE.md`; decisions live in `docs/DECISIONS.md`.
+`SPECIFICATION.md` describes stable product intent and business rules. It is not a development diary. Current implementation status lives in `docs/core/PROJECT_STATE.md`; decisions live in `DECISIONS.md`.
 
 ## Product goal
 
@@ -43,13 +43,14 @@ In MVP, NimbaOS includes:
 - financial reports with WB realization and paid storage data;
 - sales plan with orders, sales, funnel metrics, daily grid, Excel export;
 - advertising campaigns with campaign list, stats, clusters, breakdown, log, budget/bid/status actions;
-- basic local/dev Docker setup.
+- stock snapshots, reviews/questions, dashboard summaries and XLSX exports;
+- BullMQ background sync scheduling and sync job history;
+- basic local/dev Docker setup and VPS Docker artifacts.
 
 Post-MVP / later phases:
-- Bull MQ background sync scheduling;
-- production deployment polish;
-- broader responsive polishing and operational monitoring;
-- deeper automation and alerting.
+- production rollout execution;
+- broader operational monitoring and alerting;
+- deeper marketplace automation with explicit approval flows.
 
 ## Success criteria
 
@@ -125,13 +126,13 @@ Advertising actions are dangerous and require explicit user intent.
 
 The database is the source of truth for analytics. WB API is the mechanism for updating the database, not the primary source for every report request.
 
-See `docs/DATA_FRESHNESS_POLICY.md` for operational rules.
+See `docs/core/DATA_FRESHNESS_POLICY.md` for operational rules.
 
 ## Security rules
 
 API keys are encrypted at rest. Agents and tools must not read or print `.env` or decrypted tokens. Risky commands and WB-changing actions require explicit confirmation.
 
-See `docs/SAFETY_RULES.md`.
+See `docs/core/SAFETY_RULES.md`.
 
 ## Non-goals
 

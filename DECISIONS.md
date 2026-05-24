@@ -25,6 +25,25 @@ Related files:
 
 ---
 
+## 2026-05-24 — Documentation split into core/development/marketplace zones
+
+Status:
+Active
+
+Decision:
+Канонические стартовые документы теперь находятся в корне: `AGENTS.md`, `SPECIFICATION.md`, `DECISIONS.md`. Внутри `docs` используется единая структура из трех зон: `docs/core` для общей проектной правды, `docs/development` для агента-разработчика, `docs/marketplace` для агента-менеджера/аналитика. Старые flat `docs/*.md` сохраняются как legacy redirects/archives.
+
+Reason:
+Проекту нужны две рабочие роли без дублирования архитектуры, БД и правил безопасности. Агент должен читать только документы по типу задачи, а не весь каталог.
+
+Consequences:
+Новая сессия стартует с `AGENTS.md` и `docs/DOCS_INDEX.md`. Development и marketplace документы ссылаются на общие core-документы. Старые решения ниже сохранены; решения от 2026-05-05 о canonical `docs/AGENTS.md`, `docs/SPECIFICATION.md`, `docs/DECISIONS.md` считаются superseded этим решением.
+
+Related files:
+`AGENTS.md`, `SPECIFICATION.md`, `DECISIONS.md`, `docs/DOCS_INDEX.md`, `docs/core`, `docs/development`, `docs/marketplace`
+
+---
+
 ## 2026-05-14 - Financial report advertising uses WB spend history totals
 
 Status:
@@ -104,7 +123,7 @@ Related files:
 ## 2026-05-05 — Markdown-документация как система памяти Codex
 
 Status:
-Active
+Superseded by 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Decision:
 Новая сессия читает только `docs/AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/HANDOFF.md` и `docs/CURRENT_TASKS.md`. Остальные документы открываются только по типу задачи через `docs/DOCS_INDEX.md`.
@@ -123,7 +142,7 @@ Related files:
 ## 2026-05-05 — Product specification lives in docs/SPECIFICATION.md
 
 Status:
-Active
+Superseded by 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Decision:
 Хранить стабильную продуктовую спецификацию в `docs/SPECIFICATION.md`, а не в корне проекта.
@@ -142,7 +161,7 @@ Related files:
 ## 2026-05-05 — Agent instructions live in docs/AGENTS.md
 
 Status:
-Active
+Superseded by 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Decision:
 Хранить главный файл правил агента в `docs/AGENTS.md`, а не в корне проекта.
@@ -161,7 +180,7 @@ Related files:
 ## 2026-05-05 — Канонический журнал решений находится в docs/DECISIONS.md
 
 Status:
-Active
+Superseded by 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Decision:
 Использовать `docs/DECISIONS.md` как единственный канонический файл решений. Корневой `DECISIONS.md` не создавать, если пользователь отдельно не попросит.
@@ -192,14 +211,14 @@ Consequences:
 Перед аналитикой проверять кабинет, период, покрытие периода в БД, дату последней синхронизации и пропущенные даты. Повторная историческая синхронизация требует подтверждения.
 
 Related files:
-`docs/DATA_FRESHNESS_POLICY.md`, `docs/DATABASE_ACCESS_GUIDE.md`, `docs/SAFETY_RULES.md`
+`docs/core/DATA_FRESHNESS_POLICY.md`, `docs/core/DATABASE_ACCESS_GUIDE.md`, `docs/core/SAFETY_RULES.md`
 
 ---
 
 ## 2026-05-05 — CLAUDE.md заменён docs/AGENTS.md и docs memory system
 
 Status:
-Active
+Superseded by 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Decision:
 Удалить `CLAUDE.md` после переноса уникального смысла в `docs/AGENTS.md` и `docs/*.md`.

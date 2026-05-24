@@ -613,10 +613,10 @@ Verification:
 
 Documentation updates:
 
-- `docs/PROJECT_STATE.md` after each completed phase;
-- `docs/CURRENT_TASKS.md` for active/blocked work;
-- `docs/BUGS_AND_INCIDENTS.md` for sync/API failures;
-- `docs/DECISIONS.md` for major architecture decisions;
+- `docs/core/PROJECT_STATE.md` after each completed phase;
+- `docs/development/DEV_CURRENT_TASKS.md` for active/blocked work;
+- `docs/development/BUGS_AND_INCIDENTS.md` for sync/API failures;
+- `DECISIONS.md` for major architecture decisions;
 - `docs/DOCS_INDEX.md` when adding/removing docs.
 
 Acceptance:
