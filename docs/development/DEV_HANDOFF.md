@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-05-25: implemented `/automations` and the first automation workflow `Утренний отчет WB`. Added Prisma automation settings/account/run tables, a separate BullMQ automation queue/worker/scheduler, Google Sheets service-account runtime, daily month rollover logic for `A2:P32`, and UI for spreadsheet/account/sheet mapping plus run history.
+
 2026-05-25: corrected `Заказано руб.` calculation to include cancelled WB orders. The metric now sums all `wb_orders.finishedPrice` rows for the selected period.
 
 2026-05-25: fixed a stuck BullMQ `REPORTS_PERIOD` run after `Missing lock for job 316. moveToDelayed`. Long report syncs no longer force full orders backfill beyond 31 days; worker lock duration was increased. The stuck Galioni run was marked failed, and the prior successful run populated `Заказано руб.`.
@@ -27,6 +29,8 @@
 - WB advertising live API может возвращать 429/rate limits.
 - Raw report/ad tables могут быть тяжелыми без account/date filters.
 - `sales-plan.period` теперь может синхронизировать orders/sales без активного плана; не запускать широкий исторический диапазон без подтверждения.
+- `Утренний отчет WB` requires `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` and the target Sheet shared with the service-account email before real writes can run.
+- Automation worker/scheduler are separate from sync worker; production enablement requires Redis/PostgreSQL and explicit rollout setup.
 - Старые flat `docs/*.md` теперь legacy redirects/archives.
 
 ## Read Next If Needed
@@ -47,4 +51,4 @@
 
 ## Last Updated
 
-2026-05-25 — добавлены метрики утреннего отчета и подготовлен локальный источник данных.
+2026-05-25 - first live `Утренний отчет WB` bugs recorded as `BUG-008`; automation failure diagnostics updated; Google service-account access works after local setup.

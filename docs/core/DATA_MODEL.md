@@ -1,6 +1,6 @@
 # Data Model
 
-Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-24.
+Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-25.
 
 ## Business Keys
 
@@ -21,6 +21,9 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-24.
 - `sync_job_runs`: job kind/status/payload/result/error/attempts/timestamps.
 - `sync_schedule_settings`: per-account job schedule settings.
 - `sync_data_coverages`: account/kind/date range coverage.
+- `automation_workflow_settings`: workflow settings, schedule and config.
+- `automation_workflow_accounts`: per-workflow account-to-sheet mapping.
+- `automation_runs`: workflow run history/status/result/errors.
 
 ## Product And Reference Tables
 
@@ -66,7 +69,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-24.
 
 ## Important Indexes
 
-- Sync: `sync_job_runs(status, createdAt)`, `(kind, createdAt)`, `(wbAccountId, createdAt)`, `bullJobId`; `sync_data_coverages(wbAccountId, kind, dateFrom, dateTo)`.
+- Sync/automation: `sync_job_runs(status, createdAt)`, `(kind, createdAt)`, `(wbAccountId, createdAt)`, `bullJobId`; `sync_data_coverages(wbAccountId, kind, dateFrom, dateTo)`; `automation_runs(kind, createdAt)`, `(status, createdAt)`, `(workflowId, createdAt)`, `bullJobId`; unique automation workflow kind and account mapping.
 - Products: unique `(wbAccountId, nmId)`, indexes `nmId`, `vendorCode`, `wbAccountId`.
 - Sizes/stocks: `product_sizes(productId/chrtId/barcode)`, `stock_snapshots(wbAccountId, syncedAt)`, `stock_items(snapshotId)`, `(wbAccountId, nmId)`, `warehouseId`, `chrtId`.
 - Feedback: unique `(wbAccountId, externalId)`, indexes by `(wbAccountId, createdDate)`, `(wbAccountId, nmId)`, `(wbAccountId, isAnswered)`, `rating`.
@@ -79,4 +82,3 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-24.
 ## Potential Future Indexes/Aggregates
 
 Нужно уточнить на реальных объемах: aggregate tables/materialized views for daily account/nm sales, stock risk, ad spend, and dashboard periods may be useful if service-level aggregation becomes slow.
-

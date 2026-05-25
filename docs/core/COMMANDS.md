@@ -1,6 +1,6 @@
 # Commands
 
-Команды проекта с точки зрения безопасности. Last updated: 2026-05-24.
+Команды проекта с точки зрения безопасности. Last updated: 2026-05-25.
 
 ## Safe Inspection
 
@@ -33,7 +33,10 @@
 - `npm run worker:sync` — BullMQ worker для read-only WB sync jobs; требует Redis/PostgreSQL.
 - Sync worker uses a long lock for WB API jobs; after changing queue processor code, restart `npm run worker:sync` so lock settings and backfill limits apply.
 - `npm run sync:schedule` — применить default daily `Europe/Moscow` schedules.
+- `npm run worker:automation` — BullMQ worker для product/workflow automations; требует Redis/PostgreSQL and configured env for external integrations.
+- `npm run automation:schedule` — применить automation schedules such as `Утренний отчет WB`.
 - `/sync` — UI screen для `SyncJobRun`, schedules и safe manual current-period jobs.
+- `/automations` — UI screen для workflow settings, account-to-sheet mapping and automation run history.
 
 Не запускать sync-команды для полной истории без подтверждения пользователя.
 

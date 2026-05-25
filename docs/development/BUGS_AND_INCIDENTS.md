@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-008: Morning WB automation fill edge cases after first live run
+
+Status:
+Open
+
+Symptoms:
+First live `Утренний отчет WB` runs exposed three issues: on 2026-05-25 the daily block filled only through 2026-05-23 instead of the previous day 2026-05-24; the summary cells for `Отработано`, `Всего дней`, `Осталось` were not filled in `A43:C43`; separate manual runs took very different times, with `WB Galioni` around 142 seconds and `WB Nimba` around 988 seconds.
+
+Affected area:
+Morning WB automation workflow and Google Sheet fill contract.
+
+Steps to reproduce:
+Configure Google Sheets service-account access, run `Утренний отчет WB` manually for one account, then run it for the second account shortly after the first run completes.
+
+Investigation:
+Do not fix yet. Check target-date calculation for previous-day inclusion, add support for the plan/progress summary block at row 43, and profile Nimba execution. The long Nimba run may be caused by WB/API rate limits or by running shortly after the Galioni workflow.
+
+Fix:
+Not started.
+
+Related files:
+`src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`, `src/lib/queue/automation-processor.ts`, `docs/core/SCHEDULED_AUTOMATION.md`
+
 ## 2026-05-25 - BullMQ missing lock on report sync job 316
 
 ### Context

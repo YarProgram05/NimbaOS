@@ -46,6 +46,17 @@ enum FeedbackWriteActionStatus {
   FAILED
 }
 
+enum AutomationWorkflowKind {
+  MORNING_WB_REPORT
+}
+
+enum AutomationRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 // ─── Auth ──────────────────────────────────────────────────────
 
 model User {
@@ -131,8 +142,69 @@ model WbAccount {
   productQuestions   ProductQuestion[]
   replyTemplateGroups ReplyTemplateGroup[]
   feedbackWriteLogs  FeedbackWriteActionLog[]
+  automationAccounts AutomationWorkflowAccount[]
 
   @@map("wb_accounts")
+}
+
+model AutomationWorkflowSetting {
+  id            String                 @id @default(uuid())
+  kind          AutomationWorkflowKind @unique
+  enabled       Boolean                @default(false)
+  timeOfDay     String                 @default("10:00")
+  timezone      String                 @default("Europe/Moscow")
+  config        Json
+  lastAppliedAt DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  accounts      AutomationWorkflowAccount[]
+  runs          AutomationRun[]
+
+  @@map("automation_workflow_settings")
+}
+
+model AutomationWorkflowAccount {
+  id          String   @id @default(uuid())
+  workflowId  String
+  wbAccountId String
+  enabled     Boolean  @default(true)
+  sheetName   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workflow    AutomationWorkflowSetting @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  wbAccount   WbAccount                 @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, wbAccountId])
+  @@index([workflowId])
+  @@index([wbAccountId])
+  @@map("automation_workflow_accounts")
+}
+
+model AutomationRun {
+  id          String                 @id @default(uuid())
+  workflowId  String?
+  kind        AutomationWorkflowKind
+  status      AutomationRunStatus    @default(QUEUED)
+  source      String
+  payload     Json
+  result      Json?
+  error       String?
+  bullJobId   String?
+  attempts    Int                    @default(0)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  workflow    AutomationWorkflowSetting? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+
+  @@index([kind, createdAt])
+  @@index([status, createdAt])
+  @@index([workflowId, createdAt])
+  @@index([bullJobId])
+  @@map("automation_runs")
 }
 
 model SyncJobRun {

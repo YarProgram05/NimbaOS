@@ -12,6 +12,7 @@ import {
   MessageSquareText,
   Warehouse,
   RefreshCw,
+  Workflow,
   Settings,
   Users,
   ChevronLeft,
@@ -42,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/references', label: 'Справочники', icon: BookOpen },
   { href: '/advertising', label: 'Реклама', icon: Megaphone },
   { href: '/sync', label: 'Синхронизация', icon: RefreshCw },
+  { href: '/automations', label: 'Автоматизации', icon: Workflow },
   { href: '/settings', label: 'Настройки', icon: Settings },
 ]
 

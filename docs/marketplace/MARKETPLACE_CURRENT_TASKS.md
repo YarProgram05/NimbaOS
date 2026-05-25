@@ -37,6 +37,15 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-MORNING-WB-GALIONI-FILL
+  Status: Done
+  Priority: High
+  Description: Filled Google Sheet `Утренний отчет WB`, tab `WB Galioni`, for 2026-05-01 - 2026-05-24 from local DB-backed report data.
+  Next step: Fill 2026-05-25 only after local coverage exists; do not write zeroes for uncovered current-day data.
+  Related reports/metrics: `daily_wb_report`, `Заказано руб.`, `ДРР`, `ROMI %`, `Оборачиваемость, дн.`
+  Related cabinets: `WB Galioni (WB_2)`.
+  Risks: Current-day data may be incomplete; avoid ad-hoc WB API calls and broad historical resyncs.
+
 - ID: MKT-ORDERED-RUB-DEFINITION
   Status: Done
   Priority: High

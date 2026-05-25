@@ -6,6 +6,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Next
 
+- ID: TASK-MORNING-WB-LIVE-RUN-FIXES
+  Status: Pending
+  Priority: High
+  Description: Investigate first live `Утренний отчет WB` issues: previous-day fill stopped at 2026-05-23 instead of 2026-05-24, summary cells `A43:C43` were not filled, and Nimba manual run took about 988 seconds after Galioni completed in about 142 seconds.
+  Next step: Reproduce with a controlled target date, inspect per-step timing, and confirm whether WB/API rate limits caused the Nimba slowdown.
+  Related files: `src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`, `src/lib/queue/automation-processor.ts`.
+  Risks: Google Sheet writes affect live report; WB API rate limits can distort timing tests.
+
 - ID: TASK-P7-P8-LIVE-VERIFY
   Status: Pending
   Priority: High
@@ -33,6 +41,14 @@ No active development task is currently assigned. Pick from `Next` after reading
   Risks: Secrets, migrations, data safety.
 
 ## Done Recently
+
+- ID: TASK-AUTOMATIONS-MORNING-WB
+  Status: Done
+  Priority: High
+  Description: Added `/automations` and the first configurable workflow for daily Google Sheet filling of `Утренний отчет WB`.
+  Next step: Configure `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`, share the Sheet with the service account, restart the app/automation worker, then run `npm run worker:automation` and `npm run automation:schedule` in the target environment.
+  Related files: `src/app/(dashboard)/automations`, `src/lib/services/morning-wb-report-workflow.ts`, `src/lib/queue/automation.ts`, `prisma/schema.prisma`.
+  Risks: Google Sheets credentials/sharing are currently the blocker for real writes; WB 429 during freshness sync; no automatic archive of previous months in v1.
 
 - ID: TASK-ORDERED-RUB-INCLUDE-CANCELS
   Status: Done

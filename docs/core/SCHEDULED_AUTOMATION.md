@@ -1,10 +1,12 @@
 # Scheduled Automation
 
-Расписание и автоматизация. Last updated: 2026-05-24.
+Расписание и автоматизация. Last updated: 2026-05-25.
 
 ## Current Project Mechanism
 
-Проект использует BullMQ для фоновых sync jobs. Настройки расписания живут в `SyncScheduleSetting`, helper functions — в `src/lib/sync/schedules.ts`, запуск применения расписаний — `scripts/schedule-sync.ts`.
+Проект использует BullMQ для фоновых sync jobs. Настройки sync-расписания живут в `SyncScheduleSetting`, helper functions — в `src/lib/sync/schedules.ts`, запуск применения расписаний — `scripts/schedule-sync.ts`.
+
+Для product/workflow автоматизаций добавлена отдельная очередь `automation`. Настройки живут в `AutomationWorkflowSetting`, привязки кабинетов к вкладкам — в `AutomationWorkflowAccount`, история — в `AutomationRun`. Helper functions — `src/lib/automations/workflows.ts`, запуск применения расписаний — `scripts/schedule-automations.ts`, worker — `scripts/automation-worker.ts`.
 
 ## Daily Jobs
 
@@ -15,6 +17,7 @@
 - advertising campaigns/stats current period;
 - stocks current;
 - reviews/questions refresh.
+- `Утренний отчет WB`: daily Google Sheet fill at 10:00 Europe/Moscow from local DB-backed services after freshness checks.
 
 Не запускать full historical sync по расписанию.
 
@@ -38,6 +41,7 @@
 - Историческая синхронизация не повторяется автоматически.
 - Обновлять только свежие/недостающие даты.
 - Отчеты строить из базы и service/report layer.
+- Google Sheets writes require service-account env and Sheet sharing; formulas and plan blocks in `Утренний отчет WB` must not be overwritten.
 - Dangerous writes require human confirmation.
 
 ## Need To Clarify
@@ -45,4 +49,3 @@
 - Production schedule owner and exact cron windows.
 - Whether owner summaries should be emailed/exported automatically.
 - Required alert channels for failed sync jobs.
-

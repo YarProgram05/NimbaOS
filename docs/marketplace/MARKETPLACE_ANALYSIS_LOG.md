@@ -1,5 +1,22 @@
 # Marketplace Analysis Log
 
+## 2026-05-25 - Morning WB report fill for Galioni
+
+### Question
+Заполнить Google Sheet `Утренний отчет WB`, вкладка `WB Galioni`.
+
+### Data Used
+Локальная БД NimbaOS and DB-backed report/stock services for `WB Galioni (WB_2)`. Google Sheet structure was read before writing. No ad-hoc WB API call or full historical resync was performed.
+
+### Freshness Check
+Rows for 2026-05-01 - 2026-05-24 were covered by local financial/report data. 2026-05-25 was not covered at the time of the fill, so it was left blank. Latest stock snapshot used for turnover was synced on 2026-05-25.
+
+### Findings
+Filled daily rows 2026-05-01 - 2026-05-24 for ordered rubles, sales/buyout rubles, transfer amount, logistics, storage, turnover, cost, advertising, DRR, operating profit, taxes, tax rate, operating profit before ads, and ROMI. Existing monthly totals recalculated in the sheet.
+
+### Follow-up
+After the next local sync covers 2026-05-25, fill only the newly covered date range and re-check sheet formulas after writeback.
+
 ## 2026-05-25 - Ordered rub definition correction
 
 `Заказано руб.` must include all WB orders, including cancellations. For Galioni `2026-01-01` - `2026-05-24`, non-cancelled orders were only 1846684.89, but all orders are 2783846.47 against sales 1571692.94 (`1.77x`), which matches a buyout near 58.66%.

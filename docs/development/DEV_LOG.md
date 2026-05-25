@@ -1,5 +1,44 @@
 # Development Log
 
+## 2026-05-25 - Morning WB first live run bug notes
+
+### Summary
+Recorded first live `Утренний отчет WB` issues without fixing them: report filled through 2026-05-23 instead of 2026-05-24 on 2026-05-25, cells `A43:C43` for `Отработано / Всего дней / Осталось` were not filled, and Nimba took about 988 seconds after Galioni completed in about 142 seconds.
+
+### Files changed
+Documentation only for these bug notes: `docs/development/BUGS_AND_INCIDENTS.md`, `docs/development/DEV_CURRENT_TASKS.md`.
+
+### Result
+Added open follow-up `TASK-MORNING-WB-LIVE-RUN-FIXES` and `BUG-008`. No workflow behavior was changed for these known bugs.
+
+## 2026-05-25 - Automation run error diagnostics
+
+### Summary
+Improved diagnostics for `Утренний отчет WB` automation failures. The workflow now checks Google Sheet access before processing accounts, and run history surfaces saved per-account errors instead of only showing the failed-account count.
+
+### Files changed
+`src/lib/services/morning-wb-report-workflow.ts`, `src/lib/automations/runs.ts`, `src/lib/queue/automation-processor.ts`.
+
+### Commands run
+`npm run type-check`; checked that `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` is not configured without printing any secret values.
+
+### Result
+The latest failed manual runs were caused by missing `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`. Next real run requires adding service-account credentials and sharing the target Google Sheet with that service-account email.
+
+## 2026-05-25 - Automations and morning WB report workflow
+
+### Summary
+Implemented the new `/automations` section and the first workflow: daily filling of Google Sheet `Утренний отчет WB` at 10:00 Moscow time. The workflow supports multiple WB accounts with per-account sheet tabs, history, manual runs, and month rollover for rows `A2:P32`.
+
+### Files changed
+Prisma schema/migration, automation queue/worker/scheduler, Google Sheets runtime, morning report workflow service, `/automations` UI/actions, sidebar, package scripts/dependency, docs.
+
+### Commands run
+`npm install googleapis`; `npx prisma generate`; `npm run type-check`; `npm run build`; local dev browser smoke with Playwright CLI.
+
+### Result
+The workflow uses service-account Google Sheets access, preserves formulas in `D/K/P`, preserves totals/plans below row 32, writes only daily value columns, and uses existing read-only sync services for missing current-month freshness.
+
 ## 2026-05-25 - Ordered rub includes cancelled orders
 
 ### Summary

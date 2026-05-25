@@ -1,5 +1,7 @@
 # Project State
 
+Update 2026-05-25: `/automations` and the first workflow `Утренний отчет WB` are implemented at code level with a separate BullMQ automation queue, Google Sheets service-account runtime, and configurable account-to-sheet mapping.
+
 Update 2026-05-25: `Заказано руб.` now sums all WB order rows, including cancelled orders, to represent ordered ruble volume.
 
 Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period` now refreshes `wb_orders` for the selected report period, and orders are upserted so changed WB order sums/cancellations update local data.
@@ -20,6 +22,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 - Sales plan: CRUD, article detail, account-wide orders/sales sync, funnel sync for plan items, daily metrics, add from stock, XLSX export.
 - Advertising: campaigns, stats, nm stats, clusters, logs, XLSX export, bid/budget/status actions.
 - Background sync: BullMQ jobs, `SyncJobRun`, schedules, `/sync`, manual enqueue actions.
+- Automations: `/automations`, `AutomationWorkflowSetting`, `AutomationWorkflowAccount`, `AutomationRun`, separate automation queue, `Утренний отчет WB` Google Sheet workflow.
 - Dashboard analytics: summary, freshness, problem center, product risk, stock risk, feedback workload, forecasts, deterministic recommendations, dashboard exports.
 - Inventory: WB warehouse stock snapshots, current stock screen and turnover days.
 - Reviews/questions: read-only sync and dashboard workload.
@@ -39,7 +42,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 - Stock history charts and FBS/seller warehouse inventory.
 - Automatic marketplace recommendations that perform WB write actions; current recommendations are advisory.
 - Scheduled owner reports as a production automation.
-- Automatic Google Sheet filling for `Утренний отчет WB`; local data source is prepared, but Sheets write flow is not implemented in app.
+- Production-enabled Google Sheet automation is not configured until service-account credentials, Sheet sharing, worker and scheduler are set up in the target environment.
 
 ## Deprecated
 
@@ -54,5 +57,6 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.
 - Fresh `Заказано руб.` depends on `wb_orders`; reports may be fresher than orders/sales if `sales-plan.period` has not run.
+- `Утренний отчет WB` writes to Google Sheets only when the service account is configured and the Sheet is shared; WB freshness sync inside the workflow can still hit 429.
 - `ad_campaign_nm_stats` can be incomplete depending on WB `fullstats`; reports use corrected spend history logic where implemented.
 - Some old docs may contain historical context but should not be treated as current operating instructions unless indexed as such.

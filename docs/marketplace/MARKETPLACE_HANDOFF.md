@@ -6,6 +6,8 @@
 
 ## Last Marketplace Session Summary
 
+2026-05-25: filled Google Sheet `Утренний отчет WB`, tab `WB Galioni`, for 2026-05-01 - 2026-05-24 from local DB-backed report data. 2026-05-25 was left blank because the day was not covered yet; no ad-hoc WB API call or historical resync was performed.
+
 2026-05-25: corrected `Заказано руб.` definition. It now includes all WB orders, including cancelled rows, so the metric reflects ordered ruble volume rather than non-cancelled/fulfilled order volume.
 
 2026-05-25: fixed the ordered-rubles sync issue for morning-report prep. Report sync now refreshes the `wb_orders` source for the selected period.
@@ -14,7 +16,7 @@
 
 ## Current Safe Next Step
 
-Перед заполнением утреннего отчета выбрать период, перечитать лист `WB Galioni`, проверить coverage reports/orders/sales/ads/stocks, при необходимости запустить штатный sync, затем использовать локальные данные.
+For the next morning update, fill only newly covered dates after checking local coverage. Current sheet has Galioni values through 2026-05-24; 2026-05-25 should be filled only after report/orders/sales/ads coverage exists in the local DB.
 
 ## Active Marketplace Risks
 
@@ -40,4 +42,4 @@
 
 ## Last Updated
 
-2026-05-25 — подготовлены метрики и источник для утреннего WB-отчета.
+2026-05-25 — filled `Утренний отчет WB` / `WB Galioni` through 2026-05-24.

@@ -9,7 +9,7 @@
 - Dashboard summary/export: home dashboard, `dashboard-summary.ts`, `dashboard-export.ts`.
 - Advertising campaign exports: advertising actions and `exportAdStatsXlsxAction`.
 - Stocks and feedback screens: operational reports from local DB. Stocks include `Оборачиваемость, дн.`.
-- Morning report source: `getMorningReportData` in `src/lib/services/morning-report.ts`; DB-first source for future Google Sheet filling.
+- Morning report source: `getMorningReportData` in `src/lib/services/morning-report.ts`; automated Google Sheet filling is implemented through `/automations` and `src/lib/services/morning-wb-report-workflow.ts`.
 
 ## Data Needed
 
