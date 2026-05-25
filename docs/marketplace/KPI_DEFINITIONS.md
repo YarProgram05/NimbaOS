@@ -1,10 +1,14 @@
 # KPI Definitions
 
-Определения ключевых метрик. Last updated: 2026-05-24.
+Определения ключевых метрик. Last updated: 2026-05-25.
 
 ## Orders
 
 Что означает: оформленные заказы WB. Данные: `wb_orders`/plan services. Ошибка: считать отмененные заказы как финальные продажи без проверки.
+
+## Ordered Rub
+
+Формула: сумма `wb_orders.finishedPrice` по всем оформленным заказам за период, включая `isCancel = true`. Данные: локальная таблица `wb_orders`, синхронизируется через `reports.period` и `sales-plan.period`. Ошибка: исключать отмены и тем самым смешивать заказанную сумму с фактическими продажами/выкупами.
 
 ## Sales
 
@@ -54,6 +58,10 @@ Spend / cart adds. Помогает найти рекламу, которая п
 
 Доля рекламных расходов = ad spend / sales. В отчетах использовать project report/dashboard formulas.
 
+## ROMI
+
+Формула для NimbaOS: `(operating profit + ad spend) / ad spend * 100`, где ad spend = `Реклама (все)`. Если рекламных расходов нет, показывать `0.00`. Ошибка: сравнивать ROMI с DRR как одинаковые метрики.
+
 ## Plan/Fact
 
 Факт / план по quantity/revenue/profit. Данные: sales plans + synced sales/orders/funnel.
@@ -66,10 +74,13 @@ Spend / cart adds. Помогает найти рекламу, которая п
 
 Sales quantity or revenue divided by days with valid data. Проверять период и выбросы.
 
+## Stock Turnover Days
+
+Формула для остатков: текущий sellable stock (`quantity`) / средние не-возвратные продажи в день за последние 30 завершенных дней относительно даты снимка остатков. В пути к клиенту/от клиента не включается. Если продаж нет, показатель пустой/`Нет продаж`.
+
 ## Typical Interpretation Mistakes
 
 - Делать вывод без freshness check.
 - Сравнивать кабинеты или периоды с разным coverage.
 - Считать WB API live response источником отчета.
 - Рекомендовать price/ad changes без проверки margin, stock and card quality.
-

@@ -106,10 +106,10 @@ export async function exportReportXlsx(
 
     const headers = [
       'nmId', 'subjectName', 'vendorCode', 'brandName',
-      'sale', 'toTransfer', 'totalToPay', 'operatingProfit', 'operatingProfitUnit', 'operatingProfitShare', 'avgPrice',
+      'orderedRub', 'sale', 'toTransfer', 'totalToPay', 'operatingProfit', 'operatingProfitUnit', 'operatingProfitShare', 'avgPrice',
       'boughtWithReturns', 'buyoutPercent', 'boughtWithoutReturns', 'returns',
       'marginality', 'rentability',
-      'adBalance', 'adAll', 'drr',
+      'adBalance', 'adAll', 'drr', 'romi',
       'logistics', 'logisticsUnit', 'delivered', 'logisticsFromSalesPercent',
       'externalAd', 'selfPurchaseCost', 'cashbackDistributions', 'selfPurchaseAmount',
       'storageFromSalesPercent', 'costPrice', 'storageFee', 'acceptance', 'additionalPayment',
@@ -122,11 +122,11 @@ export async function exportReportXlsx(
 
     const headerLabels: Record<(typeof headers)[number], string> = {
       nmId: 'Артикул ВБ', subjectName: 'Категория', vendorCode: 'Артикул', brandName: 'Бренд',
-      sale: 'Продажа', toTransfer: 'К перечислению', totalToPay: 'Итого к оплате',
+      orderedRub: 'Заказано руб.', sale: 'Продажа', toTransfer: 'К перечислению', totalToPay: 'Итого к оплате',
       operatingProfit: 'ОП', operatingProfitUnit: 'ОП ед.', operatingProfitShare: '% от ОП', avgPrice: 'Цена ср.',
       boughtWithReturns: 'Выкуплено', buyoutPercent: 'Выкуп %', boughtWithoutReturns: 'Без возврата', returns: 'Возвраты',
       marginality: 'Маржинальность', rentability: 'Рентабельность',
-      adBalance: 'Реклама (баланс)', adAll: 'Реклама (все)', drr: 'ДРР %',
+      adBalance: 'Реклама (баланс)', adAll: 'Реклама (все)', drr: 'ДРР %', romi: 'ROMI %',
       logistics: 'Логистика', logisticsUnit: 'Лог. ед.', delivered: 'Доставлено', logisticsFromSalesPercent: 'Лог. от продаж %',
       externalAd: 'Внешн. реклама', selfPurchaseCost: 'Себест. самовыкупов', cashbackDistributions: 'Кэшбек', selfPurchaseAmount: 'Сумма самовыкупов',
       storageFromSalesPercent: 'Хранение %', costPrice: 'Себестоимость', storageFee: 'Хранение',

@@ -104,6 +104,15 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
 
   // ── Sales ─────────────────────────────────────────────────────────────────
   {
+    id: 'orderedRub',
+    accessorKey: 'orderedRub',
+    header: 'Заказано руб.',
+    size: 130,
+    cell: ({ getValue }) => formatRub(getValue<string>()),
+    sortingFn: numSort,
+    meta: { group: 'sales', tooltip: 'Сумма всех оформленных заказов WB = Σ finishedPrice из локальных wb_orders за выбранный период, включая отмены' },
+  },
+  {
     id: 'sale',
     accessorKey: 'sale',
     header: 'Продажа',
@@ -252,6 +261,15 @@ export const reportColumns: ColumnDef<ReportRow>[] = [
     cell: ({ getValue }) => formatPct(getValue<string>()),
     sortingFn: numSort,
     meta: { group: 'advertising', tooltip: 'ДРР = Реклама все ÷ Продажи × 100. Доля рекламных расходов в выручке' },
+  },
+  {
+    id: 'romi',
+    accessorKey: 'romi',
+    header: 'ROMI %',
+    size: 95,
+    cell: ({ getValue }) => formatPct(getValue<string>()),
+    sortingFn: numSort,
+    meta: { group: 'advertising', tooltip: 'ROMI = (ОП + Реклама все) ÷ Реклама все × 100. Если расходов на рекламу нет, показывается 0' },
   },
 
   // ── Logistics ─────────────────────────────────────────────────────────────
@@ -559,7 +577,7 @@ export const columnGroups: ColumnGroup[] = [
   {
     id: 'sales',
     label: 'Продажи',
-    columnIds: ['sale', 'toTransfer', 'totalToPay', 'operatingProfit', 'operatingProfitUnit', 'operatingProfitShare', 'avgPrice'],
+    columnIds: ['orderedRub', 'sale', 'toTransfer', 'totalToPay', 'operatingProfit', 'operatingProfitUnit', 'operatingProfitShare', 'avgPrice'],
     defaultVisible: true,
   },
   {
@@ -577,7 +595,7 @@ export const columnGroups: ColumnGroup[] = [
   {
     id: 'advertising',
     label: 'Реклама',
-    columnIds: ['adBalance', 'adAll', 'drr'],
+    columnIds: ['adBalance', 'adAll', 'drr', 'romi'],
     defaultVisible: true,
   },
   {

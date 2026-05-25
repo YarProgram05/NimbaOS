@@ -12,6 +12,7 @@ export function aggregateReportRows(
   options: AggregateReportRowsOptions = {},
 ): ReportRow {
   const totalSale = sumStr(rows, 'sale')
+  const totalOrderedRub = sumStr(rows, 'orderedRub')
   const totalToTransfer = sumStr(rows, 'toTransfer')
   const totalToPay = sumStr(rows, 'totalToPay')
   const totalOperatingProfit = sumStr(rows, 'operatingProfit')
@@ -35,6 +36,7 @@ export function aggregateReportRows(
     brandName: options.brandName ?? '',
     photoUrl: null,
 
+    orderedRub: fmt(totalOrderedRub),
     sale: fmt(totalSale),
     toTransfer: fmt(totalToTransfer),
     totalToPay: fmt(totalToPay),
@@ -56,6 +58,7 @@ export function aggregateReportRows(
     adBalance: fmt(sumStr(rows, 'adBalance')),
     adAll: fmt(totalAdAll),
     drr: safeDivide(totalAdAll * 100, totalSale),
+    romi: safeDivide((totalOperatingProfit + totalAdAll) * 100, totalAdAll),
 
     logistics: fmt(totalLogistics),
     logisticsUnit: safeDivide(totalLogistics, totalBoughtWithReturns),

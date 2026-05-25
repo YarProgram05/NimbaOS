@@ -323,6 +323,7 @@ function appendStockRowsSheet(
         'От клиента',
         'Стоимость остатков',
         'Дней до нуля',
+        'Оборачиваемость, дн.',
         'Риск',
         'Синхронизировано',
       ],
@@ -338,12 +339,13 @@ function appendStockRowsSheet(
         row.inWayFromClient,
         row.stockValue,
         row.daysUntilZero,
+        row.turnoverDays,
         stockRiskText(row.risk),
         formatDateTime(row.syncedAt),
       ]),
     ],
     {
-      widths: [14, 20, 18, 22, 34, 28, 14, 14, 14, 18, 14, 20, 22],
+      widths: [14, 20, 18, 22, 34, 28, 14, 14, 14, 18, 14, 20, 20, 22],
       columnFormats: {
         0: INTEGER_FORMAT,
         6: INTEGER_FORMAT,
@@ -351,6 +353,7 @@ function appendStockRowsSheet(
         8: INTEGER_FORMAT,
         9: RUB_FORMAT,
         10: '0.0',
+        11: '0.0',
       },
     },
   )

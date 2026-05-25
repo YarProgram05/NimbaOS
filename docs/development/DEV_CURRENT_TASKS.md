@@ -34,6 +34,38 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: TASK-ORDERED-RUB-INCLUDE-CANCELS
+  Status: Done
+  Priority: High
+  Description: Changed financial report `Заказано руб.` to sum all WB orders, including cancelled rows.
+  Next step: Refresh `/reports` and verify older periods now align with buyout ratio expectations.
+  Related files: `src/lib/services/report-calculator.ts`, `src/app/(dashboard)/reports/columns.tsx`, `src/types/reports.ts`.
+  Risks: Plan/funnel metrics may still intentionally exclude cancellations; do not conflate them with this report metric.
+
+- ID: TASK-BULLMQ-LOCK-316
+  Status: Done
+  Priority: High
+  Description: Fixed stuck `REPORTS_PERIOD` run after BullMQ lost lock on job `316`; increased worker lock and limited forced orders backfill for long report periods.
+  Next step: Refresh `/reports`; rerun sync only if a new period is needed.
+  Related files: `src/lib/queue/index.ts`, `src/lib/queue/sync-processor.ts`.
+  Risks: WB Statistics API rate limits still make very wide syncs slow.
+
+- ID: TASK-ORDERED-RUB-SYNC-FIX
+  Status: Done
+  Priority: High
+  Description: Fixed `Заказано руб.` synchronization by syncing `wb_orders` during report sync and upserting changed WB order rows.
+  Next step: Run a normal report sync for the target Galioni period, then verify `Заказано руб.` from `wb_orders.finishedPrice`.
+  Related files: `src/lib/services/sync-orders.ts`, `src/lib/queue/sync-processor.ts`, `src/lib/services/report-calculator.ts`.
+  Risks: WB Statistics orders endpoint has a 60s rate limit; avoid broad historical backfills without confirmation.
+
+- ID: TASK-MORNING-WB-METRICS
+  Status: Done
+  Priority: High
+  Description: Добавить `Заказано руб.`, `ROMI %` и `Оборачиваемость, дн.` для подготовки утреннего WB-отчета.
+  Next step: Перед заполнением Google Sheet перечитать лист `WB Galioni` и сопоставить живые заголовки.
+  Related files: `src/lib/services/report-calculator.ts`, `src/lib/services/stocks.ts`, `src/lib/services/morning-report.ts`.
+  Risks: Google Sheets read ранее уперся в 429; не заполнять таблицу без повторного readback.
+
 - ID: TASK-DOCS-3-ZONES
   Status: Done
   Priority: High

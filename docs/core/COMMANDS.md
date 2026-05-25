@@ -31,6 +31,7 @@
 ## Sync And Workers
 
 - `npm run worker:sync` — BullMQ worker для read-only WB sync jobs; требует Redis/PostgreSQL.
+- Sync worker uses a long lock for WB API jobs; after changing queue processor code, restart `npm run worker:sync` so lock settings and backfill limits apply.
 - `npm run sync:schedule` — применить default daily `Europe/Moscow` schedules.
 - `/sync` — UI screen для `SyncJobRun`, schedules и safe manual current-period jobs.
 
@@ -63,4 +64,3 @@
 - Sales plan: `src/lib/actions/sales-plan.ts`, `src/lib/services/plan-calculator.ts`.
 - Stocks: `src/lib/services/stocks.ts`, `src/lib/actions/stocks.ts`.
 - Advertising: `src/lib/actions/advertising.ts`.
-

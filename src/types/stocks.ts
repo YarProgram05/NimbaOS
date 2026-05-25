@@ -47,6 +47,7 @@ export interface StockSummaryItem {
   inWayFromClient: number
   stockValue: number
   daysUntilZero: number | null
+  turnoverDays: number | null
   risk: StockRisk
   syncedAt: string
 }
@@ -86,7 +87,7 @@ export interface GetStocksOptions {
   category?: string
   warehouse?: string
   risk?: StockRisk | 'all'
-  sortBy?: 'vendorCode' | 'nmId' | 'brand' | 'category' | 'quantity' | 'stockValue' | 'risk'
+  sortBy?: 'vendorCode' | 'nmId' | 'brand' | 'category' | 'quantity' | 'stockValue' | 'turnoverDays' | 'risk'
   sortDir?: 'asc' | 'desc'
 }
 

@@ -29,19 +29,25 @@ function riskRank(risk: StockRisk): number {
   return 5
 }
 
-function calculateRisk(quantity: number, sales30: number): { risk: StockRisk; daysUntilZero: number | null } {
-  if (quantity <= 0) return { risk: 'out_of_stock', daysUntilZero: 0 }
+function startOfDay(value: Date): Date {
+  const next = new Date(value)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function calculateRisk(quantity: number, sales30: number): { risk: StockRisk; daysUntilZero: number | null; turnoverDays: number | null } {
+  if (quantity <= 0) return { risk: 'out_of_stock', daysUntilZero: 0, turnoverDays: 0 }
 
   if (sales30 > 0) {
     const dailySales = sales30 / SALES_WINDOW_DAYS
-    const daysUntilZero = quantity / dailySales
-    if (daysUntilZero <= LOW_STOCK_DAYS) return { risk: 'low_stock', daysUntilZero }
-    if (daysUntilZero > OVERSTOCK_DAYS) return { risk: 'overstock', daysUntilZero }
-    return { risk: 'ok', daysUntilZero }
+    const turnoverDays = quantity / dailySales
+    if (turnoverDays <= LOW_STOCK_DAYS) return { risk: 'low_stock', daysUntilZero: turnoverDays, turnoverDays }
+    if (turnoverDays > OVERSTOCK_DAYS) return { risk: 'overstock', daysUntilZero: turnoverDays, turnoverDays }
+    return { risk: 'ok', daysUntilZero: turnoverDays, turnoverDays }
   }
 
-  if (quantity <= LOW_STOCK_QTY) return { risk: 'low_stock', daysUntilZero: null }
-  return { risk: 'no_sales', daysUntilZero: null }
+  if (quantity <= LOW_STOCK_QTY) return { risk: 'low_stock', daysUntilZero: null, turnoverDays: null }
+  return { risk: 'no_sales', daysUntilZero: null, turnoverDays: null }
 }
 
 function emptySummary(): StocksSummary {
@@ -85,8 +91,8 @@ async function buildStocksData(wbAccountId: string): Promise<{
     }
   }
 
-  const today = new Date()
-  const salesFrom = addDays(today, -SALES_WINDOW_DAYS)
+  const salesTo = addDays(startOfDay(snapshot.syncedAt), -1)
+  const salesFrom = addDays(salesTo, -(SALES_WINDOW_DAYS - 1))
   const [products, stockItems, costPrices, salesRows] = await Promise.all([
     prisma.product.findMany({
       where: { wbAccountId },
@@ -118,7 +124,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
       where: {
         wbAccountId,
         isReturn: false,
-        date: { gte: salesFrom, lte: today },
+        date: { gte: salesFrom, lte: salesTo },
       },
       select: { nmId: true },
     }),
@@ -159,7 +165,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
     byWarehouse.set(item.warehouseId, warehouse)
   }
 
-  const riskByNmId = new Map<number, { risk: StockRisk; daysUntilZero: number | null }>()
+  const riskByNmId = new Map<number, { risk: StockRisk; daysUntilZero: number | null; turnoverDays: number | null }>()
   let totalUnits = 0
   let stockValue = 0
   let inWayToClient = 0
@@ -240,7 +246,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
 
   const rows: StockSummaryItem[] = Array.from(rowGroups.entries()).map(([key, item]) => {
     const product = productByNmId.get(item.nmId)
-    const totalRisk = riskByNmId.get(item.nmId) ?? { risk: 'ok' as StockRisk, daysUntilZero: null }
+    const totalRisk = riskByNmId.get(item.nmId) ?? { risk: 'ok' as StockRisk, daysUntilZero: null, turnoverDays: null }
     const costPrice = product ? costByVendor.get(product.vendorCode) ?? 0 : 0
     const sizeRows = Array.from(sizeRowGroups.values())
       .filter((sizeGroup) => sizeGroup.parentKey === key)
@@ -261,6 +267,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
         inWayFromClient: sizeGroup.inWayFromClient,
         stockValue: sizeGroup.quantity * costPrice,
         daysUntilZero: totalRisk.daysUntilZero,
+        turnoverDays: totalRisk.turnoverDays,
         risk: totalRisk.risk,
         syncedAt: snapshot.syncedAt.toISOString(),
       }))
@@ -282,6 +289,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
       inWayFromClient: item.inWayFromClient,
       stockValue: item.quantity * costPrice,
       daysUntilZero: totalRisk.daysUntilZero,
+      turnoverDays: totalRisk.turnoverDays,
       risk: totalRisk.risk,
       syncedAt: snapshot.syncedAt.toISOString(),
     }
@@ -291,7 +299,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
     const total = totalsByNmId.get(product.nmId)
     if (total && (total.quantity > 0 || total.inWayToClient > 0 || total.inWayFromClient > 0)) continue
 
-    const totalRisk = riskByNmId.get(product.nmId) ?? { risk: 'out_of_stock' as StockRisk, daysUntilZero: 0 }
+    const totalRisk = riskByNmId.get(product.nmId) ?? { risk: 'out_of_stock' as StockRisk, daysUntilZero: 0, turnoverDays: 0 }
     rows.push({
       nmId: product.nmId,
       vendorCode: product.vendorCode,
@@ -308,6 +316,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
       inWayFromClient: 0,
       stockValue: 0,
       daysUntilZero: totalRisk.daysUntilZero,
+      turnoverDays: totalRisk.turnoverDays,
       risk: totalRisk.risk,
       syncedAt: snapshot.syncedAt.toISOString(),
     })
@@ -384,6 +393,7 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
     if (sortBy === 'risk') cmp = riskRank(a.risk) - riskRank(b.risk)
     else if (sortBy === 'quantity') cmp = a.quantity - b.quantity
     else if (sortBy === 'stockValue') cmp = a.stockValue - b.stockValue
+    else if (sortBy === 'turnoverDays') cmp = compareNullableNumber(a.turnoverDays, b.turnoverDays)
     else if (sortBy === 'nmId') cmp = a.nmId - b.nmId
     else cmp = String(a[sortBy] ?? '').localeCompare(String(b[sortBy] ?? ''), 'ru')
     return sortDir === 'desc' ? -cmp : cmp
@@ -402,6 +412,13 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
     categories: data.categories,
     warehouseOptions: data.warehouseOptions,
   }
+}
+
+function compareNullableNumber(left: number | null, right: number | null): number {
+  if (left === null && right === null) return 0
+  if (left === null) return 1
+  if (right === null) return -1
+  return left - right
 }
 
 function aggregateRowsByArticle(rows: StockSummaryItem[]): StockSummaryItem[] {

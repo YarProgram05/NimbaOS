@@ -1,6 +1,6 @@
 # Database Access Guide
 
-Быстрый и безопасный доступ к данным. Last updated: 2026-05-24.
+Быстрый и безопасный доступ к данным. Last updated: 2026-05-25.
 
 ## Main Rule
 
@@ -12,6 +12,7 @@
 
 - Продажи/финансы: `calculateReport` in `src/lib/services/report-calculator.ts`; UI/action layer `src/lib/actions/reports.ts`.
 - Итоги report rows: `aggregateReportRows` in `src/lib/reports/aggregate-report-rows.ts`.
+- Утренний WB-отчет: `getMorningReportData` in `src/lib/services/morning-report.ts`.
 - План/факт: `calculatePlanDetail` in `src/lib/services/plan-calculator.ts`; actions in `src/lib/actions/sales-plan.ts`.
 - Dashboard: `getDashboardSummary`, `buildDashboardProblemCenter`, `buildDashboardExport`.
 - Остатки: `getStocksSummary`, `getPaginatedStocks`.
@@ -20,9 +21,9 @@
 
 ## Table Choice By Task
 
-- Financial report: `realization_reports`, `paid_storage`, products, references, ad stats through `report-calculator`.
+- Financial report: `realization_reports`, `paid_storage`, products, references, ad stats and `wb_orders` through `report-calculator`.
 - Orders/sales/plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`, `sales_plan_items` through `plan-calculator`.
-- Stock risk: latest `stock_snapshots` + `stock_items` through stock services.
+- Stock risk/turnover: latest `stock_snapshots` + `stock_items` + recent non-return `wb_sales` through stock services.
 - Advertising efficiency: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`; prefer actions/services.
 - Prices/cards: `products`, `product_sizes`; WB API only for approved refresh/sync.
 - Feedback: `product_reviews`, `product_questions`; answer writes require confirmation.
@@ -50,9 +51,10 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 
 ## Slow Spots To Watch
 
+- `Заказано руб.` needs fresh `wb_orders.finishedPrice` for all order rows, including cancelled orders; normal `reports.period` sync now refreshes this source for the selected period.
 - Long-period `realization_reports` calculations.
+- `Заказано руб.` needs fresh `wb_orders`; check `SALES_PLAN_PERIOD` coverage for the selected period.
 - `paid_storage` joins for storage-only articles.
 - `ad_campaign_nm_stats` completeness and long-period ad allocation.
 - Dashboard summary if it grows beyond current service-level aggregation.
 - Any marketplace ad-hoc request that scans all raw rows across all accounts.
-

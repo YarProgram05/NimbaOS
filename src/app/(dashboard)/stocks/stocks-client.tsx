@@ -202,7 +202,7 @@ export function StocksClient({
         </section>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
-          <table className="min-w-[1100px] w-full">
+          <table className="min-w-[1250px] w-full">
             <thead className="sticky top-0 z-20 border-b bg-muted">
               <tr>
                 <SortableHead label="Артикул" sortBy="vendorCode" currentSortBy={currentSortBy} onClick={toggleSort} />
@@ -213,6 +213,7 @@ export function StocksClient({
                 <SortableHead label="Остаток" sortBy="quantity" currentSortBy={currentSortBy} onClick={toggleSort} />
                 <th className="px-4 py-3 text-left font-medium">В пути</th>
                 <SortableHead label="Стоимость" sortBy="stockValue" currentSortBy={currentSortBy} onClick={toggleSort} />
+                <SortableHead label="Оборачиваемость" sortBy="turnoverDays" currentSortBy={currentSortBy} onClick={toggleSort} />
                 <SortableHead label="Риск" sortBy="risk" currentSortBy={currentSortBy} onClick={toggleSort} />
               </tr>
             </thead>
@@ -245,7 +246,7 @@ export function StocksClient({
               })}
               {data.rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="h-24 text-center text-muted-foreground">Нет строк под выбранные фильтры</td>
+                  <td colSpan={10} className="h-24 text-center text-muted-foreground">Нет строк под выбранные фильтры</td>
                 </tr>
               )}
             </tbody>
@@ -334,6 +335,7 @@ function StockRow({
         {formatNumber(row.inWayToClient + row.inWayFromClient)}
       </td>
       <td className="px-4 py-2.5 tabular-nums">{formatRub(row.stockValue)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{formatTurnover(row.turnoverDays)}</td>
       <td className="px-4 py-2.5"><RiskBadge risk={row.risk} /></td>
     </tr>
   )
@@ -411,6 +413,14 @@ function formatRub(value: number): string {
     currency: 'RUB',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function formatTurnover(value: number | null): string {
+  if (value === null) return 'Нет продаж'
+  return `${new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+  }).format(value)} дн.`
 }
 
 function formatDateTime(value: string): string {

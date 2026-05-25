@@ -1,6 +1,6 @@
 # Data Freshness Policy
 
-Политика актуальности данных. Last updated: 2026-05-24.
+Политика актуальности данных. Last updated: 2026-05-25.
 
 ## Main Principle
 
@@ -44,10 +44,11 @@
 ## Data Domains
 
 - Products/cards: `products`, `product_sizes`; refresh through products sync.
-- Financial reports: `realization_reports`, `paid_storage`, references, products, ad stats.
-- Sales plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`.
+- Financial reports: `realization_reports`, `paid_storage`, references, products, ad stats, plus `wb_orders` for `Заказано руб.`; `reports.period` sync refreshes orders for the selected period.
+- For `Заказано руб.`, `reports.period` forces full orders backfill only for periods up to 31 days. Wider periods use incremental orders sync to avoid long WB Statistics API lock/rate-limit stalls.
+- Sales plan/orders: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`. `sales-plan.period` may run account-wide for orders/sales even without active sales plans.
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`.
-- Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`.
+- Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`; turnover also depends on recent non-return `wb_sales`.
 - Reviews/questions: `product_reviews`, `product_questions`.
 
 ## API Rule
@@ -64,4 +65,3 @@
 - Удаление данных.
 - Изменение WB цен, скидок, карточек, рекламы, ставок, бюджетов, остатков.
 - Массовые write operations.
-

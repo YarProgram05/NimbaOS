@@ -114,6 +114,7 @@ export interface ReportRow {
   sizeRows?: ReportRow[]
 
   // Sales summary
+  orderedRub: string                 // — Заказано руб. из всех wb_orders.finishedPrice
   sale: string                       // Col 4  — Продажа
   toTransfer: string                 // Col 5  — К перечислению
   totalToPay: string                 // Col 6  — Итого к оплате
@@ -136,6 +137,7 @@ export interface ReportRow {
   adBalance: string                  // Col 15 — Реклама (баланс)
   adAll: string                      // Col 16 — Реклама (все)
   drr: string                        // Col 17 — ДРР %
+  romi: string                       // — ROMI = (ОП + Реклама все) / Реклама все × 100
 
   // Logistics
   logistics: string                  // Col 18 — Логистика

@@ -6,16 +6,21 @@
 
 ## Last Marketplace Session Summary
 
-2026-05-24: создана marketplace-зона документации. Анализ бизнес-данных не выполнялся, WB API не вызывался, данные не менялись.
+2026-05-25: corrected `Заказано руб.` definition. It now includes all WB orders, including cancelled rows, so the metric reflects ordered ruble volume rather than non-cancelled/fulfilled order volume.
+
+2026-05-25: fixed the ordered-rubles sync issue for morning-report prep. Report sync now refreshes the `wb_orders` source for the selected period.
+
+2026-05-25: подготовлены метрики для будущего `Утренний отчет WB` по Galioni. `ДРР` уже был в фин. отчете; добавлены `Заказано руб.`, `ROMI %`, `Оборачиваемость, дн.` и локальный источник `getMorningReportData`. Google Sheet не заполнялся.
 
 ## Current Safe Next Step
 
-Перед первым бизнес-анализом выбрать кабинет и период, проверить свежесть данных по `docs/core/DATA_FRESHNESS_POLICY.md`, затем использовать `docs/marketplace/ANALYTICS_PLAYBOOK.md`.
+Перед заполнением утреннего отчета выбрать период, перечитать лист `WB Galioni`, проверить coverage reports/orders/sales/ads/stocks, при необходимости запустить штатный sync, затем использовать локальные данные.
 
 ## Active Marketplace Risks
 
 - Нельзя менять цены, карточки, рекламу, ставки или остатки без подтверждения.
 - Данные могут быть устаревшими или неполными; всегда проверять coverage.
+- Для Galioni orders/sales могут отставать от financial reports; `Заказано руб.` зависит от `wb_orders`.
 - Рекомендации должны быть осторожными, особенно при низком объеме данных.
 
 ## Read Next If Needed
@@ -35,5 +40,4 @@
 
 ## Last Updated
 
-2026-05-24 — создан marketplace handoff для новой 3-zone документации.
-
+2026-05-25 — подготовлены метрики и источник для утреннего WB-отчета.

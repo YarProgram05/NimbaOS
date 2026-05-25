@@ -7,7 +7,7 @@ import { getPaginatedStocks } from '@/lib/services/stocks'
 import { StocksClient } from './stocks-client'
 import { TOTAL_STOCK_WAREHOUSE_VALUE, type StockRisk } from '@/types/stocks'
 
-const VALID_SORT_BY = ['vendorCode', 'nmId', 'brand', 'category', 'quantity', 'stockValue', 'risk'] as const
+const VALID_SORT_BY = ['vendorCode', 'nmId', 'brand', 'category', 'quantity', 'stockValue', 'turnoverDays', 'risk'] as const
 const VALID_RISKS = ['all', 'out_of_stock', 'low_stock', 'overstock', 'ok', 'no_sales'] as const
 
 type SortBy = (typeof VALID_SORT_BY)[number]

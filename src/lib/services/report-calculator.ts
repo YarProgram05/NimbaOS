@@ -90,6 +90,7 @@ export async function calculateReport(
     products,
     paidStorageRows,
     adNmStatRows,
+    orderRows,
     adCampaigns,
     coverage,
   ] =
@@ -145,6 +146,13 @@ export async function calculateReport(
           campaign: { wbAccountId },
         },
         select: { campaignId: true, nmId: true, spend: true },
+      }),
+      prisma.wbOrder.findMany({
+        where: {
+          wbAccountId,
+          date: { gte: dfrom, lte: dto },
+        },
+        select: { nmId: true, finishedPrice: true },
       }),
       prisma.adCampaign.findMany({
         where: { wbAccountId },
@@ -216,6 +224,10 @@ export async function calculateReport(
     (sum, row) => sum + (isWbPromotionDeduction(row) ? d(row.deduction) : 0),
     0,
   )
+  const orderedRubByNm = new Map<number, number>()
+  for (const order of orderRows) {
+    orderedRubByNm.set(order.nmId, (orderedRubByNm.get(order.nmId) ?? 0) + d(order.finishedPrice))
+  }
 
   const paidStorageByNm = new Map<number, number>()
   const paidStorageBySize = new Map<string, number>()
@@ -313,6 +325,7 @@ export async function calculateReport(
       usePaidStorage,
       adSpendByNm.get(nmId)?.balance ?? 0,
       adSpendByNm.get(nmId)?.all ?? 0,
+      orderedRubByNm.get(nmId) ?? 0,
     )
 
     const parentVendorCode = row.vendorCode
@@ -353,6 +366,7 @@ export async function calculateReport(
           usePaidStorage,
           (adSpendByNm.get(nmId)?.balance ?? 0) * saleShare,
           (adSpendByNm.get(nmId)?.all ?? 0) * saleShare,
+          (orderedRubByNm.get(nmId) ?? 0) * saleShare,
           {
             sizeLabel: sizeGroup.size.label,
             isSizeRow: true,
@@ -417,6 +431,7 @@ function calculateGroup(
   skipRealizationStorage = false,
   adBalance = 0,
   adAll = adBalance,
+  orderedRub = 0,
   identity: RowIdentity = {},
   referenceTotals?: ReferenceTotals,
 ): ReportRow {
@@ -576,6 +591,7 @@ function calculateGroup(
   const marginality = safeMarginality(operatingProfit, sale)
   const rentability = safeDivide(operatingProfit * 100, costPriceTotal)
   const drr = safeDivide(totalAdAll * 100, sale)
+  const romi = safeDivide((operatingProfit + totalAdAll) * 100, totalAdAll)
   const logisticsUnit = safeDivide(totalDelivery, boughtWithReturns)
   const logisticsFromSalesPercent = safeDivideMinZero(totalDelivery * 100, sale)
   const storageFromSalesPercent = safeDivideMinZero(totalStorage * 100, sale)
@@ -595,6 +611,7 @@ function calculateGroup(
     parentNmId: identity.parentNmId ?? null,
     parentVendorCode: identity.parentVendorCode ?? null,
 
+    orderedRub: fmt(orderedRub),
     sale: fmt(sale),
     toTransfer: fmt(toTransfer),
     totalToPay: fmt(totalToPay),
@@ -614,6 +631,7 @@ function calculateGroup(
     adBalance: fmt(adBalance),
     adAll: fmt(totalAdAll),
     drr,
+    romi,
 
     logistics: fmt(totalDelivery),
     logisticsUnit,

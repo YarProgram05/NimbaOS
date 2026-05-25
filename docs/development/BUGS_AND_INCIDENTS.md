@@ -1,5 +1,19 @@
 # Bugs And Incidents
 
+## 2026-05-25 - BullMQ missing lock on report sync job 316
+
+### Context
+Manual Galioni `REPORTS_PERIOD` sync for `2026-01-01` - `2026-05-24` displayed as running for about 40 minutes. Terminal showed `Missing lock for job 316. moveToDelayed`.
+
+### Cause
+The report sync had been changed to force a full `wb_orders` backfill. For a long period this made the job much heavier on the WB Statistics endpoint, and BullMQ lost the active job lock during delayed/retry handling. Redis job state and local `SyncJobRun` diverged.
+
+### Fix
+Increased sync worker lock duration/stalled interval and limited forced orders backfill to periods up to 31 days. Stuck run `316` was marked failed; prior successful run `315` had already populated ordered rubles.
+
+### Verification
+`npm run type-check` passed. `calculateReport` for Galioni `2026-01-01` - `2026-05-24` returned `Заказано руб.` = 1846684.89, `Продажа` = 1571692.94, coverage ready.
+
 Формат новых записей:
 
 ```md
@@ -148,4 +162,3 @@ Fail fast/log/retry later policy is documented; live verification still needed.
 
 Related files:
 `src/lib/wb-api/advertising.ts`, `src/lib/wb-api/client.ts`
-

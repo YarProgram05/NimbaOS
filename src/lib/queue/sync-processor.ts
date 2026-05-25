@@ -48,6 +48,7 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
 }
 
 const SCHEDULED_START_GRACE_MINUTES = 10
+const MAX_FORCE_ORDERS_BACKFILL_DAYS = 31
 
 function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`)
@@ -61,6 +62,16 @@ function addDays(value: Date, days: number): Date {
   const next = new Date(value)
   next.setUTCDate(next.getUTCDate() + days)
   return next
+}
+
+function daysInclusive(dateFrom: string, dateTo: string): number {
+  const from = parseDate(dateFrom)
+  const to = parseDate(dateTo)
+  return Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1
+}
+
+function shouldForceOrdersBackfill(dateFrom: string, dateTo: string): boolean {
+  return daysInclusive(dateFrom, dateTo) <= MAX_FORCE_ORDERS_BACKFILL_DAYS
 }
 
 function toMoscowDate(value: Date): Date {
@@ -134,6 +145,10 @@ async function runReportsJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_
   const { dateFrom, dateTo } = resolvePeriod(data)
   const report = await syncRealizationReport(data.wbAccountId, dateFrom, dateTo)
   const storage = await syncPaidStorage(data.wbAccountId, dateFrom, dateTo)
+  const orders = await syncOrders(data.wbAccountId, dateFrom, {
+    dateTo,
+    forceFullFetch: shouldForceOrdersBackfill(dateFrom, dateTo),
+  })
   if (report.maxReportDate && report.maxReportDate >= dateFrom) {
     await markSyncCoverage(
       data.wbAccountId,
@@ -152,6 +167,7 @@ async function runReportsJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_
     period: { dateFrom, dateTo },
     report,
     paidStorage: storage,
+    orders,
   }
 }
 
@@ -161,7 +177,7 @@ async function runOnePlan(plan: {
   dateFrom: Date
   dateTo: Date
   items: Array<{ nmId: number }>
-}, requested: { dateFrom?: string; dateTo?: string; rollingDays?: number }) {
+}, requested: { dateFrom?: string; dateTo?: string; rollingDays?: number }, syncOrdersAndSales = true) {
   const period = resolvePeriod(requested)
   const requestedFrom = parseDate(period.dateFrom)
   const requestedTo = parseDate(period.dateTo)
@@ -179,8 +195,8 @@ async function runOnePlan(plan: {
   const from = formatDate(dateFrom)
   const to = formatDate(dateTo)
   const nmIds = Array.from(new Set(plan.items.map((item) => item.nmId)))
-  const orders = await syncOrders(plan.wbAccountId, from)
-  const sales = await syncSales(plan.wbAccountId, from)
+  const orders = syncOrdersAndSales ? await syncOrders(plan.wbAccountId, from, { dateTo: to }) : null
+  const sales = syncOrdersAndSales ? await syncSales(plan.wbAccountId, from) : null
   const funnel = await syncFunnel(plan.wbAccountId, nmIds, from, to)
 
   return {
@@ -193,6 +209,16 @@ async function runOnePlan(plan: {
 }
 
 async function runSalesPlanJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_KINDS.SALES_PLAN_PERIOD }>) {
+  const period = resolvePeriod(data)
+  const accountWide = data.wbAccountId
+    ? {
+        orders: await syncOrders(data.wbAccountId, period.dateFrom, {
+          dateTo: period.dateTo,
+          forceFullFetch: shouldForceOrdersBackfill(period.dateFrom, period.dateTo),
+        }),
+        sales: await syncSales(data.wbAccountId, period.dateFrom),
+      }
+    : null
   const plans = data.planId
     ? await prisma.salesPlan.findMany({
         where: { id: data.planId },
@@ -207,7 +233,7 @@ async function runSalesPlanJob(data: Extract<SyncJobData, { kind: typeof SYNC_JO
     : await prisma.salesPlan.findMany({
         where: {
           ...(data.wbAccountId ? { wbAccountId: data.wbAccountId } : {}),
-          dateTo: { gte: parseDate(resolvePeriod(data).dateFrom) },
+          dateTo: { gte: parseDate(period.dateFrom) },
         },
         select: {
           id: true,
@@ -220,10 +246,21 @@ async function runSalesPlanJob(data: Extract<SyncJobData, { kind: typeof SYNC_JO
 
   const results = []
   for (const plan of plans) {
-    results.push(await runOnePlan(plan, data))
+    results.push(await runOnePlan(plan, data, !accountWide))
+  }
+
+  if (data.wbAccountId) {
+    await markSyncCoverage(
+      data.wbAccountId,
+      SYNC_JOB_KINDS.SALES_PLAN_PERIOD,
+      period.dateFrom,
+      period.dateTo,
+    )
   }
 
   return {
+    period,
+    accountWide,
     plans: results,
   }
 }

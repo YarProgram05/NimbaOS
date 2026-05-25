@@ -1,6 +1,10 @@
 # Project State
 
-Текущее состояние NimbaOS. Last updated: 2026-05-24.
+Update 2026-05-25: `Заказано руб.` now sums all WB order rows, including cancelled orders, to represent ordered ruble volume.
+
+Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period` now refreshes `wb_orders` for the selected report period, and orders are upserted so changed WB order sums/cancellations update local data.
+
+Текущее состояние NimbaOS. Last updated: 2026-05-25.
 
 ## Current Phase
 
@@ -12,12 +16,12 @@
 - WB accounts: encrypted API keys, tax rate, seller metadata, active status, account selector через `?account=id`.
 - Product cards: sync карточек/цен, карточная таблица, price refresh/update flow.
 - References: себестоимость, самовыкупы, внешняя реклама, article overrides, reply templates.
-- Financial reports: realization, paid storage, references, products, ad spend allocation, XLSX export, sticky report table, user column order.
-- Sales plan: CRUD, article detail, orders/sales/funnel sync, daily metrics, add from stock, XLSX export.
+- Financial reports: realization, paid storage, references, products, ad spend allocation, ordered rub, ROMI, XLSX export, sticky report table, user column order.
+- Sales plan: CRUD, article detail, account-wide orders/sales sync, funnel sync for plan items, daily metrics, add from stock, XLSX export.
 - Advertising: campaigns, stats, nm stats, clusters, logs, XLSX export, bid/budget/status actions.
 - Background sync: BullMQ jobs, `SyncJobRun`, schedules, `/sync`, manual enqueue actions.
 - Dashboard analytics: summary, freshness, problem center, product risk, stock risk, feedback workload, forecasts, deterministic recommendations, dashboard exports.
-- Inventory: WB warehouse stock snapshots and current stock screen.
+- Inventory: WB warehouse stock snapshots, current stock screen and turnover days.
 - Reviews/questions: read-only sync and dashboard workload.
 - Production artifacts: Dockerfile, compose files, healthcheck, nginx example.
 - Documentation memory split: `core`, `development`, `marketplace`.
@@ -35,6 +39,7 @@
 - Stock history charts and FBS/seller warehouse inventory.
 - Automatic marketplace recommendations that perform WB write actions; current recommendations are advisory.
 - Scheduled owner reports as a production automation.
+- Automatic Google Sheet filling for `Утренний отчет WB`; local data source is prepared, but Sheets write flow is not implemented in app.
 
 ## Deprecated
 
@@ -48,6 +53,6 @@
 - Historical WB data must not be overwritten without explicit confirmation.
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.
+- Fresh `Заказано руб.` depends on `wb_orders`; reports may be fresher than orders/sales if `sales-plan.period` has not run.
 - `ad_campaign_nm_stats` can be incomplete depending on WB `fullstats`; reports use corrected spend history logic where implemented.
 - Some old docs may contain historical context but should not be treated as current operating instructions unless indexed as such.
-

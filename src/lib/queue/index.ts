@@ -127,6 +127,8 @@ export async function createSyncWorker(
   return new Worker<SyncJobData>(SYNC_QUEUE_NAME, processor, {
     connection: getRedisConnection(),
     concurrency: Number(process.env.SYNC_WORKER_CONCURRENCY ?? 1),
+    lockDuration: Number(process.env.SYNC_WORKER_LOCK_DURATION_MS ?? 15 * 60_000),
+    stalledInterval: Number(process.env.SYNC_WORKER_STALLED_INTERVAL_MS ?? 60_000),
   })
 }
 

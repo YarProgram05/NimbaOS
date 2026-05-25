@@ -37,6 +37,31 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-ORDERED-RUB-DEFINITION
+  Status: Done
+  Priority: High
+  Description: Corrected `Заказано руб.` to include all WB orders, including cancelled orders.
+  Next step: Refresh `/reports`; no new sync is required if `wb_orders` is already populated for the period.
+  Related files: `src/lib/services/report-calculator.ts`, `docs/marketplace/KPI_DEFINITIONS.md`.
+  Risks: Excluding `isCancel = true` makes ordered rubles too close to sales and contradicts buyout logic.
+
+- ID: MKT-ORDERED-RUB-SYNC-FIX
+  Status: Done
+  Priority: High
+  Description: Corrected `Заказано руб.` freshness for Galioni morning-report prep; it now refreshes through report sync.
+  Next step: Re-run the report sync for the target period before filling the Google Sheet.
+  Related files: `src/lib/services/sync-orders.ts`, `src/lib/queue/sync-processor.ts`.
+  Risks: Orders API rate limit; avoid broad historical sync without confirmation.
+
+- ID: MKT-MORNING-WB-GALIONI-PREP
+  Status: Done
+  Priority: High
+  Description: Подготовить метрики для будущего заполнения Google Sheet `Утренний отчет WB`.
+  Next step: Перечитать лист `WB Galioni`, выбрать период, проверить freshness и только потом заполнять таблицу.
+  Related reports/metrics: `daily_wb_report`, `Заказано руб.`, `ROMI %`, `Оборачиваемость, дн.`
+  Related cabinets: `WB Galioni (WB_2)`.
+  Risks: Google Sheets 429; orders/sales freshness must be checked before filling.
+
 - ID: MKT-DOCS-PLAYBOOK
   Status: Done
   Priority: High
