@@ -16,6 +16,7 @@ import { DEFAULT_SYNC_JOB_OPTIONS, SYNC_JOB_KINDS, getSyncQueue, type SyncJobDat
 import { createRunForBullJob } from '@/lib/queue/sync-jobs'
 import { WbRateLimitError } from '@/lib/wb-api/client'
 import { markSyncCoverage } from '@/lib/sync/coverage'
+import { minutesSinceMoscowScheduledTime } from '@/lib/time/moscow'
 
 class SyncSubtaskError extends Error {
   constructor(message: string) {
@@ -74,18 +75,8 @@ function shouldForceOrdersBackfill(dateFrom: string, dateTo: string): boolean {
   return daysInclusive(dateFrom, dateTo) <= MAX_FORCE_ORDERS_BACKFILL_DAYS
 }
 
-function toMoscowDate(value: Date): Date {
-  const utcMs = value.getTime() + value.getTimezoneOffset() * 60_000
-  return new Date(utcMs + 3 * 60 * 60_000)
-}
-
 function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  const moscowNow = toMoscowDate(now)
-  const scheduled = new Date(moscowNow)
-  scheduled.setHours(hours, minutes, 0, 0)
-  if (scheduled > moscowNow) scheduled.setDate(scheduled.getDate() - 1)
-  return Math.floor((moscowNow.getTime() - scheduled.getTime()) / 60_000)
+  return minutesSinceMoscowScheduledTime(timeOfDay, now)
 }
 
 async function shouldSkipScheduledJob(data: SyncJobData): Promise<string | null> {

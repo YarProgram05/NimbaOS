@@ -1,16 +1,8 @@
 import { prisma } from '@/lib/db'
 import { getSpreadsheetMetadata, getSheetValues, batchUpdateSheetValues, clearSheetValues } from '@/lib/google/sheets'
 import { ensureMorningWbReportWorkflow } from '@/lib/automations/workflows'
-import { getSyncCoverage, markSyncCoverage } from '@/lib/sync/coverage'
-import { syncAdCampaigns } from '@/lib/services/sync-ad-campaigns'
-import { syncAdStats } from '@/lib/services/sync-ad-stats'
-import { syncOrders } from '@/lib/services/sync-orders'
-import { syncPaidStorage } from '@/lib/services/sync-paid-storage'
-import { syncRealizationReport } from '@/lib/services/sync-reports'
-import { syncSales } from '@/lib/services/sync-sales'
-import { syncStocksCurrent } from '@/lib/services/sync-stocks'
+import { getSyncCoverage } from '@/lib/sync/coverage'
 import { getMorningReportData } from '@/lib/services/morning-report'
-import { WbRateLimitError } from '@/lib/wb-api/client'
 import { AUTOMATION_WORKFLOW_KINDS } from '@/types/automations'
 import { SYNC_JOB_KINDS } from '@/types/sync'
 import type { MorningReportData } from '@/lib/services/morning-report'
@@ -36,6 +28,15 @@ const HEADER_ROW = [
 
 const DAY_ROWS = 31
 const FORMULA_COLUMNS = new Set([4, 11, 16])
+const MOSCOW_TIME_ZONE = 'Europe/Moscow'
+
+interface WorkflowStepTiming {
+  name: string
+  durationMs: number
+  skipped?: boolean
+  error?: string
+  note?: string
+}
 
 interface WorkflowAccountResult {
   wbAccountId: string
@@ -43,7 +44,21 @@ interface WorkflowAccountResult {
   sheetName: string
   status: 'SUCCEEDED' | 'FAILED'
   rowsWritten: number
+  durationMs: number
+  steps: WorkflowStepTiming[]
   error?: string
+}
+
+class MorningWbReportAccountError extends Error {
+  steps: WorkflowStepTiming[]
+  durationMs: number
+
+  constructor(message: string, steps: WorkflowStepTiming[], durationMs: number) {
+    super(message)
+    this.name = 'MorningWbReportAccountError'
+    this.steps = steps
+    this.durationMs = durationMs
+  }
 }
 
 export interface MorningWbReportWorkflowResult {
@@ -54,11 +69,6 @@ export interface MorningWbReportWorkflowResult {
   accountsProcessed: number
   accountsFailed: number
   accounts: WorkflowAccountResult[]
-}
-
-function toMoscowDate(value: Date): Date {
-  const utcMs = value.getTime() + value.getTimezoneOffset() * 60_000
-  return new Date(utcMs + 3 * 60 * 60_000)
 }
 
 function parseDate(value: string): Date {
@@ -75,11 +85,22 @@ function addDays(value: Date, days: number): Date {
   return next
 }
 
+function formatDateInMoscow(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: MOSCOW_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value)
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
+  if (!year || !month || !day) throw new Error('Не удалось определить московскую дату')
+  return `${year}-${month}-${day}`
+}
+
 function getTargetDate(now = new Date()) {
-  const moscowNow = toMoscowDate(now)
-  moscowNow.setHours(0, 0, 0, 0)
-  moscowNow.setDate(moscowNow.getDate() - 1)
-  return parseDate(formatDate(moscowNow))
+  return addDays(parseDate(formatDateInMoscow(now)), -1)
 }
 
 function firstDayOfMonth(value: Date) {
@@ -156,66 +177,68 @@ function buildDailyValues(data: MorningReportData, taxRatePercent: number) {
   }
 }
 
-async function ensureReportSources(wbAccountId: string, dateFrom: string, dateTo: string) {
-  const reportCoverage = await getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, dateFrom, dateTo)
-  if (!reportCoverage.isCovered) {
-    const report = await syncRealizationReport(wbAccountId, dateFrom, dateTo)
-    await syncPaidStorage(wbAccountId, dateFrom, dateTo)
-    await syncOrders(wbAccountId, dateFrom, { dateTo, forceFullFetch: true })
-    if (report.maxReportDate && report.maxReportDate >= dateFrom) {
-      await markSyncCoverage(
-        wbAccountId,
-        SYNC_JOB_KINDS.REPORTS_PERIOD,
-        dateFrom,
-        report.maxReportDate < dateTo ? report.maxReportDate : dateTo,
-      )
-    }
-  }
+function skippedStep(name: string, note: string): WorkflowStepTiming {
+  return { name, durationMs: 0, skipped: true, note }
+}
 
-  const salesCoverage = await getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.SALES_PLAN_PERIOD, dateFrom, dateTo)
-  if (!salesCoverage.isCovered) {
-    await syncOrders(wbAccountId, dateFrom, { dateTo, forceFullFetch: true })
-    await syncSales(wbAccountId, dateFrom)
-    await markSyncCoverage(wbAccountId, SYNC_JOB_KINDS.SALES_PLAN_PERIOD, dateFrom, dateTo)
-  }
-
-  const adCoverage = await getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo)
-  if (!adCoverage.isCovered) {
-    await syncAdCampaigns(wbAccountId)
-    const campaigns = await prisma.adCampaign.findMany({
-      where: { wbAccountId },
-      select: { id: true, advertId: true },
+async function timedStep<T>(
+  steps: WorkflowStepTiming[],
+  name: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now()
+  try {
+    const result = await action()
+    steps.push({ name, durationMs: Date.now() - startedAt })
+    return result
+  } catch (error) {
+    steps.push({
+      name,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : 'Unknown error',
     })
-    const errors: string[] = []
-    for (const campaign of campaigns) {
-      try {
-        await syncAdStats({
-          wbAccountId,
-          campaignId: campaign.id,
-          advertId: campaign.advertId,
-          dateFrom,
-          dateTo,
-        })
-      } catch (error) {
-        if (error instanceof WbRateLimitError) throw error
-        errors.push(error instanceof Error ? error.message : 'Unknown advertising stats error')
-      }
-    }
-    if (errors.length > 0) {
-      throw new Error(`Не удалось обновить рекламу: ${errors.join('; ')}`)
-    }
-    await markSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo)
+    throw error
+  }
+}
+
+async function ensureReportSources(wbAccountId: string, dateFrom: string, dateTo: string) {
+  const steps: WorkflowStepTiming[] = []
+
+  const reportCoverage = await timedStep(steps, 'coverage:reports', () =>
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, dateFrom, dateTo),
+  )
+  if (!reportCoverage.isCovered) {
+    throw new Error(`Нет локального покрытия отчетных данных за ${dateFrom} - ${dateTo}; запустите sync отчетов отдельно`)
+  } else {
+    steps.push(skippedStep('sync:reports', 'DB coverage complete; external sync disabled for this workflow'))
   }
 
-  const latestSnapshot = await prisma.stockSnapshot.findFirst({
-    where: { wbAccountId },
-    select: { syncedAt: true },
-    orderBy: { syncedAt: 'desc' },
-  })
-  const target = parseDate(dateTo)
-  if (!latestSnapshot || latestSnapshot.syncedAt < target) {
-    await syncStocksCurrent(wbAccountId)
+  const adCoverage = await timedStep(steps, 'coverage:advertising', () =>
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo),
+  )
+  if (!adCoverage.isCovered) {
+    throw new Error(`Нет локального покрытия рекламы за ${dateFrom} - ${dateTo}; запустите sync рекламы отдельно`)
+  } else {
+    steps.push(skippedStep('sync:advertising', 'DB coverage complete; external sync disabled for this workflow'))
   }
+
+  const latestSnapshot = await timedStep(steps, 'db:latest-stock-snapshot', () =>
+    prisma.stockSnapshot.findFirst({
+      where: { wbAccountId },
+      select: { syncedAt: true },
+      orderBy: { syncedAt: 'desc' },
+    }),
+  )
+  const target = parseDate(dateTo)
+  if (!latestSnapshot) {
+    throw new Error('Нет локального снимка остатков; запустите sync остатков отдельно')
+  }
+  if (latestSnapshot.syncedAt < target) {
+    throw new Error(`Локальный снимок остатков устарел (${latestSnapshot.syncedAt.toISOString()}); запустите sync остатков отдельно`)
+  }
+  steps.push(skippedStep('sync:stocks-current', 'DB snapshot is fresh enough; external sync disabled for this workflow'))
+
+  return steps
 }
 
 async function prepareMonthIfNeeded(
@@ -269,36 +292,62 @@ async function writeAccountReport(params: {
   targetDate: Date
 }) {
   const { spreadsheetId, wbAccountId, sheetName, taxRatePercent, dateFrom, dateTo, targetDate } = params
-  await prepareMonthIfNeeded(spreadsheetId, sheetName, targetDate)
-  await ensureReportSources(wbAccountId, dateFrom, dateTo)
+  const steps: WorkflowStepTiming[] = []
+  const startedAt = Date.now()
+  try {
+    await timedStep(steps, 'sheet:prepare-month', () => prepareMonthIfNeeded(spreadsheetId, sheetName, targetDate))
+    steps.push(...(await ensureReportSources(wbAccountId, dateFrom, dateTo)))
 
-  const from = parseDate(dateFrom)
-  const to = parseDate(dateTo)
-  const bcValues: number[][] = []
-  const ejValues: number[][] = []
-  const loValues: number[][] = []
+    const from = parseDate(dateFrom)
+    const to = parseDate(dateTo)
+    const bcValues: number[][] = []
+    const ejValues: number[][] = []
+    const loValues: number[][] = []
 
-  for (let day = from; day <= to; day = addDays(day, 1)) {
-    const dayString = formatDate(day)
-    const data = await getMorningReportData(wbAccountId, dayString, dayString)
-    if (!data.financial.coverage.isCovered) {
-      throw new Error(`Нет покрытия финансовых данных за ${dayString}`)
+    await timedStep(steps, 'report:build-daily-values', async () => {
+      for (let day = from; day <= to; day = addDays(day, 1)) {
+        const dayString = formatDate(day)
+        const data = await getMorningReportData(wbAccountId, dayString, dayString)
+        if (!data.financial.coverage.isCovered) {
+          throw new Error(`Нет покрытия финансовых данных за ${dayString}`)
+        }
+        const values = buildDailyValues(data, taxRatePercent)
+        bcValues.push(values.bc)
+        ejValues.push(values.ej)
+        loValues.push(values.lo)
+      }
+    })
+
+    const endRow = bcValues.length + 1
+    const prefix = sheetNameA1(sheetName)
+    await timedStep(steps, 'sheet:write-daily-values', () =>
+      batchUpdateSheetValues(spreadsheetId, [
+        { range: `${prefix}!B2:C${endRow}`, values: bcValues },
+        { range: `${prefix}!E2:J${endRow}`, values: ejValues },
+        { range: `${prefix}!L2:O${endRow}`, values: loValues },
+      ]),
+    )
+
+    const workedDays = targetDate.getUTCDate()
+    const totalDays = daysInMonth(targetDate)
+    await timedStep(steps, 'sheet:write-month-progress', () =>
+      batchUpdateSheetValues(spreadsheetId, [
+        { range: `${prefix}!A43:C43`, values: [[workedDays, totalDays, totalDays - workedDays]] },
+      ]),
+    )
+
+    return {
+      rowsWritten: bcValues.length,
+      durationMs: Date.now() - startedAt,
+      steps,
     }
-    const values = buildDailyValues(data, taxRatePercent)
-    bcValues.push(values.bc)
-    ejValues.push(values.ej)
-    loValues.push(values.lo)
+  } catch (error) {
+    throw new MorningWbReportAccountError(
+      error instanceof Error ? error.message : 'Unknown morning report error',
+      steps,
+      Date.now() - startedAt,
+    )
   }
-
-  const endRow = bcValues.length + 1
-  const prefix = sheetNameA1(sheetName)
-  await batchUpdateSheetValues(spreadsheetId, [
-    { range: `${prefix}!B2:C${endRow}`, values: bcValues },
-    { range: `${prefix}!E2:J${endRow}`, values: ejValues },
-    { range: `${prefix}!L2:O${endRow}`, values: loValues },
-  ])
-
-  return bcValues.length
 }
 
 export async function runMorningWbReportWorkflow(options: { targetDate?: string } = {}): Promise<MorningWbReportWorkflowResult> {
@@ -331,8 +380,9 @@ export async function runMorningWbReportWorkflow(options: { targetDate?: string 
 
   for (const mapping of fullWorkflow.accounts) {
     if (!mapping.wbAccount.isActive) continue
+    const accountStartedAt = Date.now()
     try {
-      const rowsWritten = await writeAccountReport({
+      const accountResult = await writeAccountReport({
         spreadsheetId,
         wbAccountId: mapping.wbAccount.id,
         accountName: mapping.wbAccount.name,
@@ -347,15 +397,20 @@ export async function runMorningWbReportWorkflow(options: { targetDate?: string 
         accountName: mapping.wbAccount.name,
         sheetName: mapping.sheetName,
         status: 'SUCCEEDED',
-        rowsWritten,
+        rowsWritten: accountResult.rowsWritten,
+        durationMs: accountResult.durationMs,
+        steps: accountResult.steps,
       })
     } catch (error) {
+      const accountError = error instanceof MorningWbReportAccountError ? error : null
       results.push({
         wbAccountId: mapping.wbAccount.id,
         accountName: mapping.wbAccount.name,
         sheetName: mapping.sheetName,
         status: 'FAILED',
         rowsWritten: 0,
+        durationMs: accountError?.durationMs ?? Date.now() - accountStartedAt,
+        steps: accountError?.steps ?? [],
         error: error instanceof Error ? error.message : 'Unknown morning report error',
       })
     }

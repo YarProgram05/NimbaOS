@@ -1,8 +1,13 @@
 import { TOTAL_STOCK_WAREHOUSE_VALUE } from '@/types/stocks'
-import { calculateReport, REPORT_CALCULATION_OPTIONS } from '@/lib/services/report-calculator'
+import { calculateReport } from '@/lib/services/report-calculator'
 import { getPaginatedStocks, getStocksSummary } from '@/lib/services/stocks'
 import type { ReportData } from '@/types/reports'
 import type { PaginatedStocks, StocksSummary } from '@/types/stocks'
+
+const MORNING_REPORT_CALCULATION_OPTIONS = {
+  preferPersistedAdStats: true,
+  preferLiveAdCostTotals: false,
+}
 
 export interface MorningReportData {
   wbAccountId: string
@@ -19,7 +24,7 @@ export async function getMorningReportData(
   dateTo: string,
 ): Promise<MorningReportData> {
   const [financial, stocks, stockRows] = await Promise.all([
-    calculateReport(wbAccountId, dateFrom, dateTo, REPORT_CALCULATION_OPTIONS),
+    calculateReport(wbAccountId, dateFrom, dateTo, MORNING_REPORT_CALCULATION_OPTIONS),
     getStocksSummary(wbAccountId),
     getPaginatedStocks({
       wbAccountId,

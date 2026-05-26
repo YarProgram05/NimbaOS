@@ -48,6 +48,8 @@ const STATUS_VARIANTS: Record<AutomationRunRow['status'], 'default' | 'secondary
   FAILED: 'destructive',
 }
 
+const MOSCOW_TIME_ZONE = 'Europe/Moscow'
+
 function formatDateTime(value: string | null): string {
   if (!value) return '-'
   return format(new Date(value), 'd MMM yyyy HH:mm', { locale: ru })
@@ -61,7 +63,18 @@ function formatDuration(value: number | null): string {
 
 function formatNextRun(value: string | null): string {
   if (!value) return '-'
-  return format(new Date(value), 'd MMM HH:mm', { locale: ru })
+  const parts = new Intl.DateTimeFormat('ru-RU', {
+    timeZone: MOSCOW_TIME_ZONE,
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value))
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+
+  return `${part('day')} ${part('month')} ${part('hour')}:${part('minute')}`.trim()
 }
 
 export function AutomationsClient({

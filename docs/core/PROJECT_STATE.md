@@ -1,12 +1,16 @@
 # Project State
 
+Update 2026-05-26: `Утренний отчет WB` automation is DB-only after `BUG-010`. It no longer performs WB sync/API calls during sheet filling; missing coverage must be fixed via separate sync jobs.
+
+Update 2026-05-26: `Утренний отчет WB` automation bug `BUG-008` is fixed at code level: previous-day targeting uses the Moscow calendar date, `A43:C43` month progress cells are filled, duplicate orders sync is skipped for the same range, and run results include per-step timings.
+
 Update 2026-05-25: `/automations` and the first workflow `Утренний отчет WB` are implemented at code level with a separate BullMQ automation queue, Google Sheets service-account runtime, and configurable account-to-sheet mapping.
 
 Update 2026-05-25: `Заказано руб.` now sums all WB order rows, including cancelled orders, to represent ordered ruble volume.
 
 Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period` now refreshes `wb_orders` for the selected report period, and orders are upserted so changed WB order sums/cancellations update local data.
 
-Текущее состояние NimbaOS. Last updated: 2026-05-25.
+Текущее состояние NimbaOS. Last updated: 2026-05-26.
 
 ## Current Phase
 
@@ -57,6 +61,6 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.
 - Fresh `Заказано руб.` depends on `wb_orders`; reports may be fresher than orders/sales if `sales-plan.period` has not run.
-- `Утренний отчет WB` writes to Google Sheets only when the service account is configured and the Sheet is shared; WB freshness sync inside the workflow can still hit 429.
+- `Утренний отчет WB` writes to Google Sheets only when the service account is configured and the Sheet is shared; it is DB-only and must fail fast instead of calling WB sync/API services.
 - `ad_campaign_nm_stats` can be incomplete depending on WB `fullstats`; reports use corrected spend history logic where implemented.
 - Some old docs may contain historical context but should not be treated as current operating instructions unless indexed as such.

@@ -1,6 +1,6 @@
 # Scheduled Automation
 
-Расписание и автоматизация. Last updated: 2026-05-25.
+Расписание и автоматизация. Last updated: 2026-05-26.
 
 ## Current Project Mechanism
 
@@ -17,7 +17,7 @@
 - advertising campaigns/stats current period;
 - stocks current;
 - reviews/questions refresh.
-- `Утренний отчет WB`: daily Google Sheet fill at 10:00 Europe/Moscow from local DB-backed services after freshness checks.
+- `Утренний отчет WB`: daily Google Sheet fill at 10:00 Europe/Moscow from local DB-backed services only after freshness checks; the default target is the previous Moscow calendar day.
 
 Не запускать full historical sync по расписанию.
 
@@ -42,6 +42,7 @@
 - Обновлять только свежие/недостающие даты.
 - Отчеты строить из базы и service/report layer.
 - Google Sheets writes require service-account env and Sheet sharing; formulas and plan blocks in `Утренний отчет WB` must not be overwritten.
+- `Утренний отчет WB` must not call WB API or sync services. It checks local coverage/stocks, writes from DB when ready, and fails fast when data is missing; run sync jobs separately before rerunning it.
 - Dangerous writes require human confirmation.
 
 ## Need To Clarify

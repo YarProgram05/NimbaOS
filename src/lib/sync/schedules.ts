@@ -6,6 +6,7 @@ import {
   type SyncScheduleRow,
   type UpdateSyncScheduleInput,
 } from '@/types/sync'
+import { getNextMoscowRunAt } from '@/lib/time/moscow'
 
 const TIMEZONE = 'Europe/Moscow'
 
@@ -103,14 +104,7 @@ function buildJobData(wbAccountId: string, kind: SyncJobKind, rollingDays: numbe
 function getNextRunAt(timeOfDay: string, enabled: boolean): string | null {
   if (!enabled) return null
   validateTimeOfDay(timeOfDay)
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  const now = new Date()
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000
-  const moscowNow = new Date(utcMs + 3 * 60 * 60_000)
-  const nextMoscow = new Date(moscowNow)
-  nextMoscow.setHours(hours, minutes, 0, 0)
-  if (nextMoscow <= moscowNow) nextMoscow.setDate(nextMoscow.getDate() + 1)
-  return new Date(nextMoscow.getTime() - 3 * 60 * 60_000).toISOString()
+  return getNextMoscowRunAt(timeOfDay).toISOString()
 }
 
 export async function ensureDefaultSyncSchedules(wbAccountId: string) {
@@ -171,13 +165,11 @@ export async function applySyncSchedule(
   if (!row.enabled) {
     await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
   } else {
-    const nextRunAt = getNextRunAt(row.timeOfDay, row.enabled)
     await queue.upsertJobScheduler(
       schedulerId(wbAccountId, kind),
       {
         pattern: patternFromTime(row.timeOfDay),
         tz: row.timezone,
-        startDate: nextRunAt ? new Date(nextRunAt).getTime() : undefined,
       },
       {
         name: kind,

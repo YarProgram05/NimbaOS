@@ -1,6 +1,6 @@
 # Database Access Guide
 
-Быстрый и безопасный доступ к данным. Last updated: 2026-05-25.
+Быстрый и безопасный доступ к данным. Last updated: 2026-05-26.
 
 ## Main Rule
 
@@ -12,7 +12,7 @@
 
 - Продажи/финансы: `calculateReport` in `src/lib/services/report-calculator.ts`; UI/action layer `src/lib/actions/reports.ts`.
 - Итоги report rows: `aggregateReportRows` in `src/lib/reports/aggregate-report-rows.ts`.
-- Утренний WB-отчет: `getMorningReportData` in `src/lib/services/morning-report.ts`; automation writer in `src/lib/services/morning-wb-report-workflow.ts`.
+- Утренний WB-отчет: `getMorningReportData` in `src/lib/services/morning-report.ts`; automation writer in `src/lib/services/morning-wb-report-workflow.ts` checks coverage first, then reads DB and writes Google Sheets. It must not call WB API or sync services.
 - План/факт: `calculatePlanDetail` in `src/lib/services/plan-calculator.ts`; actions in `src/lib/actions/sales-plan.ts`.
 - Dashboard: `getDashboardSummary`, `buildDashboardProblemCenter`, `buildDashboardExport`.
 - Остатки: `getStocksSummary`, `getPaginatedStocks`.

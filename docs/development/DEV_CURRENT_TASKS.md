@@ -6,14 +6,6 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Next
 
-- ID: TASK-MORNING-WB-LIVE-RUN-FIXES
-  Status: Pending
-  Priority: High
-  Description: Investigate first live `Утренний отчет WB` issues: previous-day fill stopped at 2026-05-23 instead of 2026-05-24, summary cells `A43:C43` were not filled, and Nimba manual run took about 988 seconds after Galioni completed in about 142 seconds.
-  Next step: Reproduce with a controlled target date, inspect per-step timing, and confirm whether WB/API rate limits caused the Nimba slowdown.
-  Related files: `src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`, `src/lib/queue/automation-processor.ts`.
-  Risks: Google Sheet writes affect live report; WB API rate limits can distort timing tests.
-
 - ID: TASK-P7-P8-LIVE-VERIFY
   Status: Pending
   Priority: High
@@ -41,6 +33,38 @@ No active development task is currently assigned. Pick from `Next` after reading
   Risks: Secrets, migrations, data safety.
 
 ## Done Recently
+
+- ID: TASK-AUTOMATION-SAME-DAY-SCHEDULE
+  Status: Done
+  Priority: High
+  Description: Fixed BullMQ scheduler setup so saving a near-future Moscow time does not skip the first same-day run.
+  Next step: Set `/automations` to a future time a few minutes ahead and save; BullMQ should create a same-day delayed job.
+  Related files: `src/lib/automations/workflows.ts`, `src/lib/sync/schedules.ts`.
+  Risks: Existing scheduler already moved to tomorrow if today's time has passed; save a future time to verify same-day behavior.
+
+- ID: TASK-MORNING-WB-DB-ONLY
+  Status: Done
+  Priority: High
+  Description: Hardened `Утренний отчет WB` so it only reads local DB data and writes Google Sheets. It no longer runs report/orders/sales-plan/ads/stocks sync services or live advertising API calls.
+  Next step: Refresh `/automations`; if a run fails for missing coverage, run the relevant sync separately and rerun the workflow.
+  Related files: `src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`.
+  Risks: Workflow now fails fast instead of auto-syncing; this is intentional to keep runtime predictable.
+
+- ID: TASK-AUTOMATION-NEXT-RUN-MSK
+  Status: Done
+  Priority: High
+  Description: Fixed schedule next-run calculation and UI so `/automations` and `/sync` use Moscow calendar time end-to-end instead of browser/runtime or host local time.
+  Next step: Refresh `/automations`; a `13:28` workflow should display `Следующий запуск` at `13:28` MSK.
+  Related files: `src/lib/time/moscow.ts`, `src/lib/automations/workflows.ts`, `src/lib/sync/schedules.ts`, `src/lib/queue/automation-processor.ts`, `src/lib/queue/sync-processor.ts`, `src/app/(dashboard)/automations/automations-client.tsx`, `src/app/(dashboard)/sync/sync-client.tsx`.
+  Risks: None known; scheduling itself already used `Europe/Moscow`.
+
+- ID: TASK-MORNING-WB-LIVE-RUN-FIXES
+  Status: Done
+  Priority: High
+  Description: Fixed first live `Утренний отчет WB` issues: previous-day target date now uses the Moscow calendar date, summary cells `A43:C43` are filled, duplicate monthly `orders` sync is skipped when report sync already refreshed the same range, and per-step timings are saved in run results.
+  Next step: On the next real manual run, inspect `AutomationRun.result.accounts[].steps` for Nimba/Galioni timing; API calls should appear only for missing coverage.
+  Related files: `src/lib/services/morning-wb-report-workflow.ts`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: Google Sheet writes affect live report; WB API rate limits can still slow runs when coverage is missing.
 
 - ID: TASK-AUTOMATIONS-MORNING-WB
   Status: Done

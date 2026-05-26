@@ -1,9 +1,78 @@
 # Bugs And Incidents
 
+## BUG-011: Scheduled automation skipped the first same-day run
+
+Status:
+Fixed
+
+Symptoms:
+After setting `Утренний отчет WB` to a near-future Moscow time such as `14:03`, the UI later showed the next run on the following day, but no scheduled run was created at `14:03`.
+
+Affected area:
+BullMQ job scheduler setup for automation and sync schedules.
+
+Investigation:
+The workflow was saved at `14:01` MSK with time `14:03`. The BullMQ scheduler had pattern `0 3 14 * * *`, `tz: Europe/Moscow`, and `startDate` equal to the exact first intended occurrence. BullMQ treated that occurrence as the lower boundary and scheduled the next one for the following day. Completed jobs confirmed there was no scheduled `14:03` run. A temporary scheduler test without `startDate` for a near-future Moscow time scheduled the same-day occurrence correctly.
+
+Fix:
+Removed `startDate` from BullMQ cron scheduler setup in automation and sync schedules. The cron pattern plus `tz: Europe/Moscow` now controls the next occurrence.
+
+Verification:
+`npm run type-check` and `npm run lint` passed. Temporary BullMQ scheduler test for `14:08` MSK created a delayed job for the same day with about 72 seconds delay.
+
+Related files:
+`src/lib/automations/workflows.ts`, `src/lib/sync/schedules.ts`
+
+## BUG-010: Morning WB workflow did external sync and could hang
+
+Status:
+Fixed
+
+Symptoms:
+Scheduled `Утренний отчет WB` could stay `RUNNING` for a long time even though the expected workflow is only DB-to-Google-Sheet filling. Runtime varied heavily between runs.
+
+Affected area:
+Morning WB automation source preparation and report calculation.
+
+Investigation:
+The workflow called sync services when coverage was missing: realization report, paid storage, orders, sales-plan/orders/sales, advertising campaigns/stats and current stocks. `getMorningReportData` also used report calculation options that preferred live WB advertising cost totals, so daily Google Sheet row calculation could call WB Advertising API even after coverage checks. The latest scheduled run was stale in DB: BullMQ had already completed/skipped the job, but `AutomationRun` remained `RUNNING`.
+
+Fix:
+Morning workflow is now DB-only. It checks report/ad coverage and latest stock snapshot, then fails fast with an explicit message if data is missing or stale; it no longer calls WB sync services. Sales-plan coverage/sync was removed from this workflow because the Google Sheet does not use sales plans. Morning report calculation now uses persisted ad stats only (`preferLiveAdCostTotals: false`). The stale `AutomationRun` `fb1825f9-a865-491f-8720-6dc951dac1e0` was marked `FAILED` after confirming the BullMQ job was already completed/skipped.
+
+Verification:
+`npm run type-check` and `npm run lint` passed. Checked BullMQ automation queue: no active jobs; one future delayed repeat job remains. Checked local coverage for 2026-05-01 - 2026-05-25: report and advertising coverage exist for both accounts; sales-plan coverage was intentionally not required.
+
+Related files:
+`src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`
+
+## BUG-009: Automation next run displayed outside Moscow time
+
+Status:
+Fixed
+
+Symptoms:
+On `/automations`, a workflow configured for `13:28` MSK displayed `Следующий запуск: 26 мая 10:28`.
+
+Affected area:
+Automation and sync schedule UI next-run formatting.
+
+Investigation:
+There were two timezone issues. First, the client formatted `nextRunAt` in the browser/runtime local timezone instead of `Europe/Moscow`. Second, backend `getNextRunAt` manually added/subtracted 3 hours using the host timezone offset, which double-shifted the result on a Moscow-time host.
+
+Fix:
+`formatNextRun` in `/automations` and `/sync` now formats with `Intl.DateTimeFormat` using `timeZone: 'Europe/Moscow'`. Backend schedule helpers now use `src/lib/time/moscow.ts` to calculate next run and lateness from Moscow calendar parts without depending on the server local timezone.
+
+Verification:
+`npm run type-check` and `npm run lint` passed. A local `getNextMoscowRunAt('13:28', 2026-05-26T09:00:00.000Z)` check returned `2026-05-26T10:28:00.000Z`, which formats as `26 мая, 13:28` in Moscow time. Lint still reports pre-existing `<img>` warnings outside this change.
+
+Related files:
+`src/lib/time/moscow.ts`, `src/lib/automations/workflows.ts`, `src/lib/sync/schedules.ts`, `src/lib/queue/automation-processor.ts`, `src/lib/queue/sync-processor.ts`, `src/app/(dashboard)/automations/automations-client.tsx`, `src/app/(dashboard)/sync/sync-client.tsx`
+
 ## BUG-008: Morning WB automation fill edge cases after first live run
 
 Status:
-Open
+Fixed
 
 Symptoms:
 First live `Утренний отчет WB` runs exposed three issues: on 2026-05-25 the daily block filled only through 2026-05-23 instead of the previous day 2026-05-24; the summary cells for `Отработано`, `Всего дней`, `Осталось` were not filled in `A43:C43`; separate manual runs took very different times, with `WB Galioni` around 142 seconds and `WB Nimba` around 988 seconds.
@@ -15,10 +84,13 @@ Steps to reproduce:
 Configure Google Sheets service-account access, run `Утренний отчет WB` manually for one account, then run it for the second account shortly after the first run completes.
 
 Investigation:
-Do not fix yet. Check target-date calculation for previous-day inclusion, add support for the plan/progress summary block at row 43, and profile Nimba execution. The long Nimba run may be caused by WB/API rate limits or by running shortly after the Galioni workflow.
+Target-date calculation mixed Moscow local midnight with UTC formatting, so on a Moscow-time host the previous-day target could become one day earlier in ISO format. The workflow also did not write the month progress cells in `A43:C43`. The Nimba slowdown needs live timing confirmation, but the workflow could perform duplicate `orders` sync for the same monthly range when both report and sales-plan coverage were missing.
 
 Fix:
-Not started.
+`getTargetDate` now derives the Moscow calendar date through `Intl.DateTimeFormat(..., timeZone: 'Europe/Moscow')` and subtracts one UTC calendar day, so 2026-05-25 morning targets 2026-05-24. The writer fills `A43:C43` with worked days, total month days and remaining days. Source preparation keeps the DB-first rule: it checks local coverage first, calls WB sync services only for missing coverage, skips duplicate `orders` sync for the same range, limits forced orders backfill to <=31 days, and records per-step timings in `AutomationRun.result`.
+
+Verification:
+`npm run type-check` passed.
 
 Related files:
 `src/lib/services/morning-wb-report-workflow.ts`, `src/lib/services/morning-report.ts`, `src/lib/queue/automation-processor.ts`, `docs/core/SCHEDULED_AUTOMATION.md`

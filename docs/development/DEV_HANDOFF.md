@@ -6,6 +6,14 @@
 
 ## Last Development Session Summary
 
+2026-05-26: fixed `BUG-011` scheduled automation first-run skip. BullMQ cron schedulers no longer pass `startDate` equal to the first occurrence; cron pattern with `tz: Europe/Moscow` now picks the nearest future run. Temporary scheduler test confirmed same-day near-future scheduling works.
+
+2026-05-26: fixed `BUG-010` for `Утренний отчет WB` runtime. The workflow is now DB-only: it checks report/ad coverage and stock snapshot freshness, then writes the sheet or fails fast; it no longer calls sync services or live WB advertising APIs, and sales-plan coverage is not required. Stale `AutomationRun` `fb1825f9-a865-491f-8720-6dc951dac1e0` was marked `FAILED` after BullMQ showed no active automation job.
+
+2026-05-26: fixed `BUG-009` next-run display for schedules. `/automations` and `/sync` now format `nextRunAt` explicitly in `Europe/Moscow`, and backend schedule helpers calculate next run/lateness from Moscow calendar parts instead of manual `+3/-3` hour shifts. `13:28` MSK now resolves to `10:28Z` and displays as `13:28`. `npm run type-check` and `npm run lint` passed.
+
+2026-05-26: fixed `BUG-008` in `Утренний отчет WB`. Default target date now uses the Moscow calendar date, `A43:C43` progress cells are filled, duplicate monthly `orders` sync is skipped after report sync refreshed the same range, and automation results include per-account/per-step timing diagnostics. `npm run type-check` passed.
+
 2026-05-25: implemented `/automations` and the first automation workflow `Утренний отчет WB`. Added Prisma automation settings/account/run tables, a separate BullMQ automation queue/worker/scheduler, Google Sheets service-account runtime, daily month rollover logic for `A2:P32`, and UI for spreadsheet/account/sheet mapping plus run history.
 
 2026-05-25: corrected `Заказано руб.` calculation to include cancelled WB orders. The metric now sums all `wb_orders.finishedPrice` rows for the selected period.
@@ -30,6 +38,7 @@
 - Raw report/ad tables могут быть тяжелыми без account/date filters.
 - `sales-plan.period` теперь может синхронизировать orders/sales без активного плана; не запускать широкий исторический диапазон без подтверждения.
 - `Утренний отчет WB` requires `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` and the target Sheet shared with the service-account email before real writes can run.
+- `Утренний отчет WB` is DB-only: it must not call WB API or sync services. Missing coverage/stale stocks should fail fast and be fixed via separate sync jobs.
 - Automation worker/scheduler are separate from sync worker; production enablement requires Redis/PostgreSQL and explicit rollout setup.
 - Старые flat `docs/*.md` теперь legacy redirects/archives.
 
@@ -51,4 +60,4 @@
 
 ## Last Updated
 
-2026-05-25 - first live `Утренний отчет WB` bugs recorded as `BUG-008`; automation failure diagnostics updated; Google service-account access works after local setup.
+2026-05-26 - `BUG-011` fixed: scheduled automation no longer skips first same-day run after save.

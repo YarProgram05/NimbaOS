@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { AUTOMATION_WORKFLOW_KINDS, type AutomationJobData } from '@/lib/queue/automation'
 import { createAutomationRunForBullJob, toAutomationPayloadJson } from '@/lib/automations/runs'
 import { toPrismaAutomationKind } from '@/lib/automations/mapping'
+import { minutesSinceMoscowScheduledTime } from '@/lib/time/moscow'
 import {
   morningWbReportPayload,
   runMorningWbReportWorkflow,
@@ -11,18 +12,8 @@ import {
 
 const SCHEDULED_START_GRACE_MINUTES = 10
 
-function toMoscowDate(value: Date): Date {
-  const utcMs = value.getTime() + value.getTimezoneOffset() * 60_000
-  return new Date(utcMs + 3 * 60 * 60_000)
-}
-
 function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  const moscowNow = toMoscowDate(now)
-  const scheduled = new Date(moscowNow)
-  scheduled.setHours(hours, minutes, 0, 0)
-  if (scheduled > moscowNow) scheduled.setDate(scheduled.getDate() - 1)
-  return Math.floor((moscowNow.getTime() - scheduled.getTime()) / 60_000)
+  return minutesSinceMoscowScheduledTime(timeOfDay, now)
 }
 
 async function shouldSkipScheduledJob(data: AutomationJobData): Promise<string | null> {

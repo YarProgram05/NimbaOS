@@ -13,6 +13,7 @@ import {
   type MorningWbReportConfig,
   type UpdateMorningWbReportWorkflowInput,
 } from '@/types/automations'
+import { getNextMoscowRunAt } from '@/lib/time/moscow'
 
 const TIMEZONE = 'Europe/Moscow'
 const DEFAULT_TIME_OF_DAY = '10:00'
@@ -66,14 +67,7 @@ function patternFromTime(timeOfDay: string) {
 function getNextRunAt(timeOfDay: string, enabled: boolean): string | null {
   if (!enabled) return null
   validateTimeOfDay(timeOfDay)
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  const now = new Date()
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000
-  const moscowNow = new Date(utcMs + 3 * 60 * 60_000)
-  const nextMoscow = new Date(moscowNow)
-  nextMoscow.setHours(hours, minutes, 0, 0)
-  if (nextMoscow <= moscowNow) nextMoscow.setDate(nextMoscow.getDate() + 1)
-  return new Date(nextMoscow.getTime() - 3 * 60 * 60_000).toISOString()
+  return getNextMoscowRunAt(timeOfDay).toISOString()
 }
 
 function schedulerId(kind = AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT) {
@@ -244,13 +238,11 @@ export async function applyMorningWbReportSchedule(workflowId?: string): Promise
   if (!workflow.enabled) {
     await queue.removeJobScheduler(schedulerId()).catch(() => false)
   } else {
-    const nextRunAt = getNextRunAt(workflow.timeOfDay, workflow.enabled)
     await queue.upsertJobScheduler(
       schedulerId(),
       {
         pattern: patternFromTime(workflow.timeOfDay),
         tz: workflow.timezone,
-        startDate: nextRunAt ? new Date(nextRunAt).getTime() : undefined,
       },
       {
         name: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
