@@ -96,6 +96,7 @@ Financial reports are calculated from local DB data:
 
 Key business rules:
 - WB Finance API `sales-reports/detailed` may return empty `vendorCode`; fallback comes from `Product.nmId -> vendorCode`.
+- Finance API may change `vendorCode` casing; financial report reference matching must be trim-normalized and case-insensitive.
 - `ppvzForPay` for returns comes positive; net transfer is sales for pay minus returns for pay.
 - Sale amount uses WB SPP from realization rows: `retailPriceWithDisc * (1 - sppPercent / 100)`.
 - Buyout percent uses bought-with-returns over delivered count.

@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-06-04: fixed `BUG-012` missing cost prices after the Finance API migration. Finance report rows can contain lowercased `vendorCode`, while references preserve product-card casing. Report reference lookups now normalize vendor-code keys before matching. For 2026-06-02 - 2026-06-03, `парео зеленое/вискоз` now shows `1478.00` cost for two units, and no sold rows in either account have zero cost. A DB-only audit through 2026-06-03 found no net-bought product without a linked cost price.
+
 2026-06-04: completed live verification of `TASK-WB-FINANCE-REPORTS-MIGRATION`. Manual `REPORTS_PERIOD` run `bd702e2a-c703-4aad-8faf-b76d15f29b65` for `WB Galioni (WB_2)` started at 2026-06-04 16:01:59 MSK using code loaded after the endpoint migration. It succeeded with 1 attempt, 1738 report rows read, 244 new rows inserted for 2026-06-02 - 2026-06-03, `maxReportDate: 2026-06-03`, and coverage advanced through 2026-06-03. Key financial fields were non-zero where expected and comparable to prior-period rows. Future report sync results now record `sourceApi` with exact domain/method/path.
 
 2026-06-04: implemented `TASK-WB-FINANCE-REPORTS-MIGRATION` at code level. `fetchRealizationReportPage` now calls Finance API `POST /api/finance/v1/sales-reports/detailed`, requests only fields used by `realization_reports`, paginates with `rrdId`, and normalizes renamed camelCase/string-money fields into the existing internal row mapper. Finance API throttle is now 1 request/minute. `npm run type-check` passed; `npm run lint` passed with two pre-existing `<img>` warnings. Live WB smoke verification was not run because an account and short period were not explicitly selected.
@@ -37,6 +39,7 @@
 ## Active Development Risks
 
 - Financial report sync uses live-verified Finance API `sales-reports/detailed`; continue monitoring `204 No data` and exact `report.sourceApi` in future job results.
+- Finance API may change vendor-code casing; report reference matching is normalized and must remain case-insensitive.
 - Very long `reports.period` ranges can still be slow because WB Statistics API is rate-limited; prefer shorter periods for forced orders backfill.
 - `reports.period` now also calls WB orders sync; respect the Statistics API rate limit and avoid wide historical ranges without confirmation.
 
@@ -67,4 +70,4 @@
 
 ## Last Updated
 
-2026-06-04 - implemented and live-verified WB Finance API migration.
+2026-06-04 - fixed `BUG-012` case-sensitive cost-price matching after Finance API migration.

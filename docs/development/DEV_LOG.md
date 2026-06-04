@@ -1,5 +1,19 @@
 # Development Log
 
+## 2026-06-04 - Financial report cost-price matching fixed
+
+### Summary
+Fixed `BUG-012`: Finance API lowercased report `vendorCode` values, while cost-price and related reference tables preserved product-card casing. Exact string matching caused valid cost prices to appear as zero.
+
+### Fix
+Financial report reference keys now use trimmed, Unicode-normalized, case-insensitive vendor-code matching. Equivalent normalized codes are deduplicated, and normalized cost duplicates prefer the most recently updated entry.
+
+### Verification
+For 2026-06-02 - 2026-06-03, both accounts now have zero sold rows with missing cost. `парео зеленое/вискоз` changed from `0.00` to `1478.00` for two bought units. The other affected rows were two additional Galioni articles and two Nimba articles. DB-only report calculation and a direct reference audit for 2026-01-01 - 2026-06-03 found no net-bought product without linked cost.
+
+### Checks run
+`npm run type-check`; `npm run lint`; `git diff --check`; DB-only financial report calculations for both accounts over 2026-06-02 - 2026-06-03 and 2026-01-01 - 2026-06-03.
+
 ## 2026-06-04 - WB Finance reports migration live-verified
 
 ### Summary

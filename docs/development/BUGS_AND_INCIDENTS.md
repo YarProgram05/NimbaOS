@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-012: Financial report cost price missing after Finance API migration
+
+Status:
+Fixed
+
+Symptoms:
+Some sold products showed `Себестоимость = 0` in the financial report even though their cost price existed in the reference table. For 2026-06-02 - 2026-06-03 this affected three Galioni products, including `парео зеленое/вискоз`, and two Nimba products.
+
+Affected area:
+Financial report reference matching in `src/lib/services/report-calculator.ts`.
+
+Investigation:
+WB Finance API returned `vendorCode` in lowercase, for example `парео зеленое/вискоз`, while `cost_prices` preserved the product card casing, for example `Парео зеленое/вискоз`. Report calculation used exact case-sensitive map keys, so cost price and other vendor-code references were not found. The same mismatch affected three sold Galioni articles and two sold Nimba articles for the checked period.
+
+Fix:
+Reference lookups now normalize vendor codes with trim, Unicode NFKC normalization and Russian-aware lowercase matching. The normalization applies to cost prices, self-purchases, external advertising, article overrides and product-to-vendor lookup. Normalized duplicate codes are deduplicated, and the most recently updated cost wins if equivalent normalized cost entries exist.
+
+Verification:
+For 2026-06-02 - 2026-06-03, both accounts now have zero sold report rows with missing cost price. `парео зеленое/вискоз` correctly shows `1478.00` for two bought units at `739.00` each. DB-only report calculation for 2026-01-01 - 2026-06-03 found no net-bought product without a linked cost price.
+
+Related files:
+`src/lib/services/report-calculator.ts`
+
 ## BUG-011: Scheduled automation skipped the first same-day run
 
 Status:

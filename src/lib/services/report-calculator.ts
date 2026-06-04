@@ -110,7 +110,10 @@ export async function calculateReport(
           ],
         },
       }),
-      prisma.costPrice.findMany({ where: { wbAccountId } }),
+      prisma.costPrice.findMany({
+        where: { wbAccountId },
+        orderBy: { updatedAt: 'asc' },
+      }),
       prisma.selfPurchase.findMany({
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
       }),
@@ -163,28 +166,30 @@ export async function calculateReport(
 
   const costMap = new Map<string, number>()
   for (const cp of costPrices) {
-    costMap.set(cp.vendorCode, d(cp.costPrice))
+    costMap.set(vendorCodeKey(cp.vendorCode), d(cp.costPrice))
   }
 
   const spMap = new Map<string, { quantity: number; amount: number; cashback: number }>()
   for (const sp of selfPurchases) {
-    const existing = spMap.get(sp.vendorCode) ?? { quantity: 0, amount: 0, cashback: 0 }
+    const key = vendorCodeKey(sp.vendorCode)
+    const existing = spMap.get(key) ?? { quantity: 0, amount: 0, cashback: 0 }
     existing.quantity += sp.quantity
     existing.amount += d(sp.amount)
     existing.cashback += d(sp.cashback)
-    spMap.set(sp.vendorCode, existing)
+    spMap.set(key, existing)
   }
 
   const extAdMap = new Map<string, number>()
   for (const ad of externalAds) {
     if (ad.vendorCode) {
-      extAdMap.set(ad.vendorCode, (extAdMap.get(ad.vendorCode) ?? 0) + d(ad.amount))
+      const key = vendorCodeKey(ad.vendorCode)
+      extAdMap.set(key, (extAdMap.get(key) ?? 0) + d(ad.amount))
     }
   }
 
   const overrideMap = new Map<string, { localName: string | null }>()
   for (const ov of overrides) {
-    overrideMap.set(ov.vendorCode, { localName: ov.localName })
+    overrideMap.set(vendorCodeKey(ov.vendorCode), { localName: ov.localName })
   }
 
   const nmVendorMap = new Map<number, string>()
@@ -195,7 +200,8 @@ export async function calculateReport(
   const sizeByChrtId = new Map<string, SizeMeta>()
   for (const p of products) {
     if (p.vendorCode) nmVendorMap.set(p.nmId, p.vendorCode)
-    if (p.vendorCode && !vendorNmMap.has(p.vendorCode)) vendorNmMap.set(p.vendorCode, p.nmId)
+    const key = vendorCodeKey(p.vendorCode)
+    if (key && !vendorNmMap.has(key)) vendorNmMap.set(key, p.nmId)
     productMetaMap.set(p.nmId, {
       subjectName: p.category ?? '',
       brandName: p.brand ?? '',
@@ -511,13 +517,14 @@ function calculateGroup(
 
   const deliveredCount = salesCount + cancellationsCount
 
-  const resolvedVendorCodes = new Set<string>()
+  const resolvedVendorCodes = new Map<string, string>()
   for (const vendorCode of Array.from(vendorCodes)) {
-    if (vendorCode) resolvedVendorCodes.add(vendorCode)
+    const key = vendorCodeKey(vendorCode)
+    if (key && !resolvedVendorCodes.has(key)) resolvedVendorCodes.set(key, vendorCode)
   }
   if (resolvedVendorCodes.size === 0 && nmId > 0) {
     const fallback = nmVendorMap.get(nmId)
-    if (fallback) resolvedVendorCodes.add(fallback)
+    if (fallback) resolvedVendorCodes.set(vendorCodeKey(fallback), fallback)
   }
 
   const sale = salesAmtWithSpp - returnsAmtWithSpp
@@ -534,27 +541,31 @@ function calculateGroup(
   let spTotalCashback = referenceTotals?.selfPurchaseCashback ?? 0
   let extAdTotal = referenceTotals?.externalAd ?? 0
 
-  const vcArray = resolvedVendorCodes.size > 0 ? Array.from(resolvedVendorCodes) : Array.from(vendorCodes)
+  const vcArray = resolvedVendorCodes.size > 0
+    ? Array.from(resolvedVendorCodes.values())
+    : Array.from(vendorCodes)
   for (const vendorCode of vcArray) {
-    const unitCost = costMap.get(vendorCode) ?? 0
+    const key = vendorCodeKey(vendorCode)
+    const unitCost = costMap.get(key) ?? 0
     costPriceTotal += unitCost * boughtWithReturns
 
     if (!referenceTotals) {
-      const sp = spMap.get(vendorCode)
+      const sp = spMap.get(key)
       if (sp) {
         spTotalAmount += sp.amount
         spTotalCashback += sp.cashback
       }
 
-      extAdTotal += extAdMap.get(vendorCode) ?? 0
+      extAdTotal += extAdMap.get(key) ?? 0
     }
   }
 
   let selfPurchaseCost = referenceTotals?.selfPurchaseCost ?? 0
   if (!referenceTotals) {
     for (const vendorCode of vcArray) {
-      const sp = spMap.get(vendorCode)
-      const unitCost = costMap.get(vendorCode) ?? 0
+      const key = vendorCodeKey(vendorCode)
+      const sp = spMap.get(key)
+      const unitCost = costMap.get(key) ?? 0
       if (sp) selfPurchaseCost += sp.quantity * unitCost
     }
   }
@@ -596,8 +607,11 @@ function calculateGroup(
   const logisticsFromSalesPercent = safeDivideMinZero(totalDelivery * 100, sale)
   const storageFromSalesPercent = safeDivideMinZero(totalStorage * 100, sale)
 
-  const primaryVendorCode = (resolvedVendorCodes.size > 0 ? resolvedVendorCodes : vendorCodes).values().next().value ?? ''
-  const override = overrideMap.get(primaryVendorCode)
+  const primaryVendorCode = (resolvedVendorCodes.size > 0 ? resolvedVendorCodes : vendorCodes)
+    .values()
+    .next()
+    .value ?? ''
+  const override = overrideMap.get(vendorCodeKey(primaryVendorCode))
   const displayVendorCode = identity.displayVendorCode ?? override?.localName ?? primaryVendorCode
 
   return {
@@ -1119,6 +1133,11 @@ async function buildAdSpendByNm(params: {
 function d(value: unknown): number {
   if (value == null) return 0
   return Number(value)
+}
+
+// Finance API may lowercase vendor codes while reference tables preserve card casing.
+function vendorCodeKey(value: string): string {
+  return value.trim().normalize('NFKC').toLocaleLowerCase('ru-RU')
 }
 
 function fmt(value: number): string {

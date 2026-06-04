@@ -34,6 +34,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-012-FINANCE-COST-PRICE-MATCH
+  Status: Done
+  Priority: High
+  Description: Fixed missing financial-report cost prices caused by Finance API lowercasing `vendorCode` while reference tables preserved product-card casing.
+  Next step: Monitor financial reports for genuinely missing cost references; normalized vendor-code matching now covers cost prices and related references.
+  Related files: `src/lib/services/report-calculator.ts`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: Equivalent normalized cost-price duplicates with different values use the most recently updated entry.
+
 - ID: TASK-WB-FINANCE-REPORTS-MIGRATION
   Status: Done
   Priority: High

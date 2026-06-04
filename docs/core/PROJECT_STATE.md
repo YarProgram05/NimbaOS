@@ -2,6 +2,8 @@
 
 Update 2026-06-04: WB financial report sync was migrated and live-verified from deprecated `GET /api/v5/supplier/reportDetailByPeriod` to `POST /api/finance/v1/sales-reports/detailed`. The successful Galioni run inserted 244 new rows for 2026-06-02 - 2026-06-03 and advanced coverage through 2026-06-03. The implementation uses POST JSON, `rrdId` pagination, selected fields, camelCase/string-money normalization, a 1 request/minute Finance throttle, and records exact `sourceApi` metadata in future job results.
 
+Update 2026-06-04: fixed financial report cost-price matching after Finance API lowercased `vendorCode`. Reference matching is now normalized and case-insensitive; `парео зеленое/вискоз` and four other affected sold articles now receive their configured cost price.
+
 Update 2026-05-26: `Утренний отчет WB` automation is DB-only after `BUG-010`. It no longer performs WB sync/API calls during sheet filling; missing coverage must be fixed via separate sync jobs.
 
 Update 2026-05-26: `Утренний отчет WB` automation bug `BUG-008` is fixed at code level: previous-day targeting uses the Moscow calendar date, `A43:C43` month progress cells are filled, duplicate orders sync is skipped for the same range, and run results include per-step timings.
