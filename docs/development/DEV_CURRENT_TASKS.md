@@ -34,6 +34,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: TASK-WB-FINANCE-REPORTS-MIGRATION
+  Status: Done
+  Priority: High
+  Description: Migrated financial report sync to Finance API `POST /api/finance/v1/sales-reports/detailed`; verified a successful live Galioni sync reaching 2026-06-03 and inserting 244 rows for 2026-06-02 - 2026-06-03.
+  Next step: Monitor future `REPORTS_PERIOD` results; `report.sourceApi` now records the exact domain/method/path.
+  Related files: `src/lib/wb-api/reports.ts`, `src/lib/services/sync-reports.ts`, `src/lib/wb-api/constants.ts`, `src/types/reports.ts`, `docs/core/WB_API_MAP.md`.
+  Risks: `204 No data` can still mean WB has not formed the report yet; avoid broad historical resyncs without confirmation.
+
 - ID: TASK-AUTOMATION-SAME-DAY-SCHEDULE
   Status: Done
   Priority: High

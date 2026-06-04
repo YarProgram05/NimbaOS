@@ -1,12 +1,12 @@
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
-import { fetchRealizationReportPage } from '@/lib/wb-api/reports'
+import { fetchRealizationReportPage, REALIZATION_REPORT_API } from '@/lib/wb-api/reports'
 import type { WbRealizationRow, ReportSyncResult } from '@/types/reports'
 
 /**
  * Synchronises realization report data for a WB account into the database.
- * Fetches all pages via rrdid cursor pagination (statistics domain, 1 req/min throttle).
+ * Fetches all pages via rrdId cursor pagination (finance domain, 1 req/min throttle).
  * Uses createMany with skipDuplicates for idempotent re-syncs.
  */
 export async function syncRealizationReport(
@@ -16,6 +16,7 @@ export async function syncRealizationReport(
 ): Promise<ReportSyncResult> {
   const startMs = Date.now()
   const result: ReportSyncResult = {
+    sourceApi: REALIZATION_REPORT_API,
     totalRows: 0,
     upserted: 0,
     pages: 0,
@@ -34,13 +35,13 @@ export async function syncRealizationReport(
   const apiKey = decrypt(account.apiKey)
   const client = new WbApiClient(apiKey)
 
-  // 2. Paginate through all report pages (rrdid cursor)
-  let rrdid: number | undefined = undefined
+  // 2. Paginate through all report pages (rrdId cursor)
+  let rrdId = 0
 
   while (true) {
     let page
     try {
-      page = await fetchRealizationReportPage(client, dateFrom, dateTo, rrdid)
+      page = await fetchRealizationReportPage(client, dateFrom, dateTo, rrdId)
     } catch (error) {
       result.errors++
       result.durationMs = Date.now() - startMs
@@ -59,7 +60,7 @@ export async function syncRealizationReport(
       }
     }
 
-    // 3. Map snake_case API rows → camelCase Prisma fields and bulk insert
+    // 3. Map normalized API rows → camelCase Prisma fields and bulk insert
     try {
       const mapped = page.rows.map((row) => mapRowToPrisma(wbAccountId, row))
       const { count } = await prisma.realizationReport.createMany({
@@ -74,8 +75,8 @@ export async function syncRealizationReport(
     }
 
     // Advance cursor
-    rrdid = page.lastRrdId ?? undefined
-    if (rrdid === undefined) break
+    if (page.lastRrdId === null) break
+    rrdId = page.lastRrdId
   }
 
   result.durationMs = Date.now() - startMs

@@ -1,6 +1,16 @@
 # Data Freshness Policy
 
-Политика актуальности данных. Last updated: 2026-05-25.
+Политика актуальности данных. Last updated: 2026-06-04.
+
+## Financial Report API Verification
+
+2026-06-04: `REPORTS_PERIOD` / financial report freshness depends on `syncRealizationReport` using live-verified WB Finance API `POST /api/finance/v1/sales-reports/detailed`.
+
+Operational rules:
+- Treat missing same-day/yesterday financial report data carefully; `204 No data` can mean WB has not formed the report yet.
+- Do not perform broad historical resyncs just to test the new endpoint without explicit confirmation.
+- Preserve DB-first analytics: the Finance API only refreshes `realization_reports`; reports, dashboard and automations still read from the database.
+- Inspect `report.sourceApi` in future `SyncJobRun.result` when endpoint audit evidence is needed.
 
 ## Main Principle
 
@@ -44,7 +54,7 @@
 ## Data Domains
 
 - Products/cards: `products`, `product_sizes`; refresh through products sync.
-- Financial reports: `realization_reports`, `paid_storage`, references, products, ad stats, plus `wb_orders` for `Заказано руб.`; `reports.period` sync refreshes orders for the selected period.
+- Financial reports: `realization_reports`, `paid_storage`, references, products, ad stats, plus `wb_orders` for `Заказано руб.`; `reports.period` sync refreshes orders for the selected period. The `realization_reports` source is Finance API `sales-reports/detailed`.
 - For `Заказано руб.`, `reports.period` forces full orders backfill only for periods up to 31 days. Wider periods use incremental orders sync to avoid long WB Statistics API lock/rate-limit stalls.
 - Sales plan/orders: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`. `sales-plan.period` may run account-wide for orders/sales even without active sales plans.
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`.

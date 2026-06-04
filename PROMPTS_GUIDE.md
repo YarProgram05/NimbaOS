@@ -395,7 +395,7 @@ AlertDialog для подтверждения удаления. Всё чере�
 - Какие файлы нужно создать
 - В каком порядке
 - Какие зависимости
-- Как организовать загрузку данных (учитывая лимит 1 req/min для reportDetailByPeriod)
+- Как организовать загрузку данных (учитывая лимит 1 req/min для Finance API sales report details)
 
 Покажи план, я подтвержу.
 ```
@@ -407,15 +407,16 @@ AlertDialog для подтверждения удаления. Всё чере�
 
 1. lib/wb-api/reports.ts:
    - fetchRealizationReport(dateFrom, dateTo, rrdId):
-     GET /api/v5/supplier/reportDetailByPeriod
-     * Параметры: dateFrom, dateTo, limit=100000, rrdid
-     * ВАЖНО: пагинация через rrdid — из последней строки ответа берём rrd_id 
+     POST /api/finance/v1/sales-reports/detailed
+     * JSON body: dateFrom, dateTo, period=daily, limit=100000, rrdId, fields
+     * ВАЖНО: пагинация через rrdId — из последней строки ответа берём rrdId
        и передаём в следующий запрос. Повторяем пока не вернётся 204.
+     * Нормализует camelCase/string-money поля Finance API перед записью.
      * Лимит: 1 req/min! Между запросами ждать 60 секунд.
 
 2. lib/services/sync-realization.ts:
    - syncRealization(wbAccountId, dateFrom, dateTo):
-     * Загружает ВСЕ страницы отчёта (цикл rrdid → 204)
+     * Загружает ВСЕ страницы отчёта (цикл rrdId → 204)
      * Upsert в RealizationReport по rrdId (уникальный ключ)
      * Показывает прогресс: "Загружено X строк..."
      * Возвращает: кол-во загруженных строк, время

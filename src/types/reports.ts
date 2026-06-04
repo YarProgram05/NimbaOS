@@ -1,4 +1,6 @@
-// ── WB API — Realization report response (snake_case as returned by API) ──────
+// ── WB API — Realization report normalized internal row ──────────────────────
+
+export type WbMoneyValue = number | string
 
 export interface WbRealizationRow {
   rrd_id: number
@@ -10,19 +12,19 @@ export interface WbRealizationRow {
   barcode: string | null
   doc_type_name: string              // "Продажа" | "Возврат" | ""
   quantity: number
-  retail_price: number
-  retail_price_withdisc_rub: number
-  ppvz_for_pay: number
-  ppvz_spp_prc: number
-  delivery_rub: number
-  penalty: number
-  additional_payment: number
-  storage_fee: number
-  deduction: number
-  acceptance: number
-  acquiring_fee: number
+  retail_price: WbMoneyValue
+  retail_price_withdisc_rub: WbMoneyValue
+  ppvz_for_pay: WbMoneyValue
+  ppvz_spp_prc: WbMoneyValue
+  delivery_rub: WbMoneyValue
+  penalty: WbMoneyValue
+  additional_payment: WbMoneyValue
+  storage_fee: WbMoneyValue
+  deduction: WbMoneyValue
+  acceptance: WbMoneyValue
+  acquiring_fee: WbMoneyValue
   commission_percent: number
-  ppvz_sales_commission: number
+  ppvz_sales_commission: WbMoneyValue
   sale_percent: number
   bonus_type_name: string | null
   srid: string | null
@@ -33,6 +35,43 @@ export interface WbRealizationRow {
   order_dt: string | null
   sale_dt: string | null
   rr_dt: string | null
+}
+
+// ── WB Finance API — POST /api/finance/v1/sales-reports/detailed ─────────────
+
+export interface WbFinanceRealizationRow {
+  reportId: number
+  dateFrom: string
+  dateTo: string
+  rrdId: number
+  subjectName?: string | null
+  nmId: number
+  brandName?: string | null
+  vendorCode?: string | null
+  sku?: string | null
+  docTypeName?: string | null
+  quantity?: number
+  retailPrice?: string | number
+  salePercent?: number
+  commissionPercent?: number
+  officeName?: string | null
+  sellerOperName?: string | null
+  orderDt?: string | null
+  saleDt?: string | null
+  rrDate?: string | null
+  retailPriceWithDisc?: string | number
+  deliveryService?: string | number
+  spp?: string | number
+  ppvzSalesCommission?: string | number
+  forPay?: string | number
+  acquiringFee?: string | number
+  bonusTypeName?: string | null
+  penalty?: string | number
+  additionalPayment?: string | number
+  paidStorage?: string | number
+  deduction?: string | number
+  paidAcceptance?: string | number
+  srid?: string | null
 }
 
 // ── WB API — Paid storage responses (analytics domain, task-based flow) ──────
@@ -87,6 +126,11 @@ export interface PaidStorageSyncResult {
 // ── Sync service result ──────────────────────────────────────────────────────
 
 export interface ReportSyncResult {
+  sourceApi: {
+    domain: 'finance'
+    method: 'POST'
+    path: '/api/finance/v1/sales-reports/detailed'
+  }
   totalRows: number
   upserted: number
   pages: number

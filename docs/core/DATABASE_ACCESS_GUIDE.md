@@ -1,6 +1,6 @@
 # Database Access Guide
 
-Быстрый и безопасный доступ к данным. Last updated: 2026-05-26.
+Быстрый и безопасный доступ к данным. Last updated: 2026-06-04.
 
 ## Main Rule
 
@@ -52,6 +52,7 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 
 ## Slow Spots To Watch
 
+- `realization_reports` sync uses live-verified WB Finance API `POST /api/finance/v1/sales-reports/detailed` and normalizes camelCase/string-money fields before the existing Prisma mapper. Future job results expose `report.sourceApi` for endpoint audits.
 - `Заказано руб.` needs fresh `wb_orders.finishedPrice` for all order rows, including cancelled orders; normal `reports.period` sync now refreshes this source for the selected period.
 - Long-period `realization_reports` calculations.
 - `Заказано руб.` needs fresh `wb_orders`; check `SALES_PLAN_PERIOD` coverage for the selected period.

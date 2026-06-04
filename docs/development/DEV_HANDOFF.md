@@ -6,6 +6,12 @@
 
 ## Last Development Session Summary
 
+2026-06-04: completed live verification of `TASK-WB-FINANCE-REPORTS-MIGRATION`. Manual `REPORTS_PERIOD` run `bd702e2a-c703-4aad-8faf-b76d15f29b65` for `WB Galioni (WB_2)` started at 2026-06-04 16:01:59 MSK using code loaded after the endpoint migration. It succeeded with 1 attempt, 1738 report rows read, 244 new rows inserted for 2026-06-02 - 2026-06-03, `maxReportDate: 2026-06-03`, and coverage advanced through 2026-06-03. Key financial fields were non-zero where expected and comparable to prior-period rows. Future report sync results now record `sourceApi` with exact domain/method/path.
+
+2026-06-04: implemented `TASK-WB-FINANCE-REPORTS-MIGRATION` at code level. `fetchRealizationReportPage` now calls Finance API `POST /api/finance/v1/sales-reports/detailed`, requests only fields used by `realization_reports`, paginates with `rrdId`, and normalizes renamed camelCase/string-money fields into the existing internal row mapper. Finance API throttle is now 1 request/minute. `npm run type-check` passed; `npm run lint` passed with two pre-existing `<img>` warnings. Live WB smoke verification was not run because an account and short period were not explicitly selected.
+
+2026-06-01: documented WB Finance API migration priority. At that time report sync used deprecated `GET /api/v5/supplier/reportDetailByPeriod`; the target was `POST /api/finance/v1/sales-reports/detailed` on `finance-api.wildberries.ru`. Main implementation risks identified were Finance token scope, POST JSON request body, `rrdId` pagination, 1 req/min rate limit, `204 No data` when report is not formed, and camelCase response fields that must map into the existing `realization_reports` schema.
+
 2026-05-26: fixed `BUG-011` scheduled automation first-run skip. BullMQ cron schedulers no longer pass `startDate` equal to the first occurrence; cron pattern with `tz: Europe/Moscow` now picks the nearest future run. Temporary scheduler test confirmed same-day near-future scheduling works.
 
 2026-05-26: fixed `BUG-010` for `Утренний отчет WB` runtime. The workflow is now DB-only: it checks report/ad coverage and stock snapshot freshness, then writes the sheet or fails fast; it no longer calls sync services or live WB advertising APIs, and sales-plan coverage is not required. Stale `AutomationRun` `fb1825f9-a865-491f-8720-6dc951dac1e0` was marked `FAILED` after BullMQ showed no active automation job.
@@ -26,10 +32,11 @@
 
 ## Current Safe Next Step
 
-Для новой development-задачи открыть `AGENTS.md`, `docs/DOCS_INDEX.md`, затем этот файл и `docs/development/DEV_CURRENT_TASKS.md`.
+Для новой development-задачи открыть `AGENTS.md`, `docs/DOCS_INDEX.md`, затем этот файл и `docs/development/DEV_CURRENT_TASKS.md`. Первоочередная миграция Finance API завершена и live-verified.
 
 ## Active Development Risks
 
+- Financial report sync uses live-verified Finance API `sales-reports/detailed`; continue monitoring `204 No data` and exact `report.sourceApi` in future job results.
 - Very long `reports.period` ranges can still be slow because WB Statistics API is rate-limited; prefer shorter periods for forced orders backfill.
 - `reports.period` now also calls WB orders sync; respect the Statistics API rate limit and avoid wide historical ranges without confirmation.
 
@@ -60,4 +67,4 @@
 
 ## Last Updated
 
-2026-05-26 - `BUG-011` fixed: scheduled automation no longer skips first same-day run after save.
+2026-06-04 - implemented and live-verified WB Finance API migration.

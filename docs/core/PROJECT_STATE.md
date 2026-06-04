@@ -1,5 +1,7 @@
 # Project State
 
+Update 2026-06-04: WB financial report sync was migrated and live-verified from deprecated `GET /api/v5/supplier/reportDetailByPeriod` to `POST /api/finance/v1/sales-reports/detailed`. The successful Galioni run inserted 244 new rows for 2026-06-02 - 2026-06-03 and advanced coverage through 2026-06-03. The implementation uses POST JSON, `rrdId` pagination, selected fields, camelCase/string-money normalization, a 1 request/minute Finance throttle, and records exact `sourceApi` metadata in future job results.
+
 Update 2026-05-26: `Утренний отчет WB` automation is DB-only after `BUG-010`. It no longer performs WB sync/API calls during sheet filling; missing coverage must be fixed via separate sync jobs.
 
 Update 2026-05-26: `Утренний отчет WB` automation bug `BUG-008` is fixed at code level: previous-day targeting uses the Moscow calendar date, `A43:C43` month progress cells are filled, duplicate orders sync is skipped for the same range, and run results include per-step timings.
@@ -10,7 +12,7 @@ Update 2026-05-25: `Заказано руб.` now sums all WB order rows, includ
 
 Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period` now refreshes `wb_orders` for the selected report period, and orders are upserted so changed WB order sums/cancellations update local data.
 
-Текущее состояние NimbaOS. Last updated: 2026-05-26.
+Текущее состояние NimbaOS. Last updated: 2026-06-04.
 
 ## Current Phase
 
@@ -57,6 +59,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 
 ## Important Risks
 
+- Financial report sync uses live-verified `POST /api/finance/v1/sales-reports/detailed`; broad historical refreshes still require confirmation.
 - Historical WB data must not be overwritten without explicit confirmation.
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.

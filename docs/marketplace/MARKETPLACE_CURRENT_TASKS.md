@@ -37,6 +37,15 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-PAREO-TUNICS-MAY-2026
+  Status: Done
+  Priority: High
+  Description: Проанализированы продажи за 2026-05-01 - 2026-05-31 и текущие остатки детских парео Galioni и детских туник Nimba; создана Google Sheet `Анализ детских парео и туник — май 2026`.
+  Next step: При планировании поставки точечно пополнить Nimba: белый 134-152/152-164, розовый 134-152/152-164; по Galioni детские парео не пополнять без нового сигнала спроса.
+  Related reports/metrics: `realization_reports`, latest `stock_snapshots`, days-to-stockout.
+  Related cabinets: `WB Galioni (WB_2)`, `WB Nimba (WB_1)`.
+  Risks: `SALES_PLAN_PERIOD` coverage was only through 2026-05-23, so May sales totals were based on financial reports, not `wb_sales`.
+
 - ID: MKT-MORNING-WB-GALIONI-FILL
   Status: Done
   Priority: High

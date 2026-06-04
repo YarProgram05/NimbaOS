@@ -1,5 +1,48 @@
 # Development Log
 
+## 2026-06-04 - WB Finance reports migration live-verified
+
+### Summary
+Audited the repository for old executable links to `reportDetailByPeriod`, verified the user's latest financial report sync, checked persisted field quality, and added exact source API metadata to future report sync results.
+
+### Verification evidence
+Manual `REPORTS_PERIOD` run `bd702e2a-c703-4aad-8faf-b76d15f29b65` for `WB Galioni (WB_2)` started at 2026-06-04 16:01:59 MSK after the migrated source files and dev runtime were loaded. It succeeded on the first attempt, read 1738 report rows, inserted 244 new rows dated 2026-06-02 - 2026-06-03, reached `maxReportDate: 2026-06-03`, and advanced report coverage through 2026-06-03.
+
+The 244 new rows contained expected non-zero values for transfer amount, SPP, logistics, acquiring and commission. No silent zeroing caused by Finance API field renames was found. No executable source reference to the deprecated endpoint remains.
+
+DB-only `calculateReport` for 2026-06-02 - 2026-06-03 completed successfully with covered status, 52 product rows, and non-zero sales, transfer, commission, logistics, storage and acquiring totals.
+
+### Checks run
+`npm run type-check`; `npm run lint`; `npx prisma validate`; `git diff --check`; repository/runtime-cache search for the deprecated endpoint; mock Finance POST/pagination/field-mapping check; DB-only report calculation.
+
+### Result
+Migration is considered implemented and live-verified. Future `ReportSyncResult` values include `sourceApi.domain`, `sourceApi.method`, and `sourceApi.path`.
+
+## 2026-06-04 - WB Finance reports migration implemented
+
+### Summary
+Replaced deprecated financial report request `GET /api/v5/supplier/reportDetailByPeriod` with `POST /api/finance/v1/sales-reports/detailed`. The new Finance API response is normalized into the existing internal realization row format so the Prisma schema and report calculations remain unchanged.
+
+### Files changed
+`src/lib/wb-api/reports.ts`, `src/lib/wb-api/constants.ts`, `src/lib/services/sync-reports.ts`, `src/types/reports.ts`, and relevant core/development documentation.
+
+### Commands run
+`npm run type-check`; `npm run lint`.
+
+### Result
+`npm run type-check` passed. `npm run lint` passed with two pre-existing `<img>` warnings. The new request uses POST JSON body, `rrdId` pagination, selected fields, explicit renamed-field mapping, and a 1 request/minute Finance API throttle. Live smoke verification was not run because an account and short period were not explicitly selected.
+
+## 2026-06-01 - WB Finance reports migration documented
+
+### Summary
+Compared the deprecated WB financial report endpoint used by NimbaOS at that time with the new Finance API endpoint. The retired implementation called `GET /api/v5/supplier/reportDetailByPeriod` on the Statistics API and mapped snake_case rows. The new target was `POST /api/finance/v1/sales-reports/detailed` on the Finance API, using a JSON body, `rrdId` pagination and camelCase response fields.
+
+### Files changed
+Documentation only: `docs/core/WB_API_MAP.md`, `docs/core/DATA_FRESHNESS_POLICY.md`, `docs/core/DATABASE_ACCESS_GUIDE.md`, `docs/core/PROJECT_STATE.md`, `docs/development/DEV_CURRENT_TASKS.md`, `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_LOG.md`.
+
+### Result
+Added `TASK-WB-FINANCE-REPORTS-MIGRATION` as the first high-priority development task. No code was changed.
+
 ## 2026-05-26 - Scheduled automation first-run fix
 
 ### Summary

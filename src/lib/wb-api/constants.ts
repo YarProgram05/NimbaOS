@@ -21,7 +21,7 @@ export const RATE_LIMITS = {
   analytics:  20000, // 3 req/min
   advert:     200,   // 5 req/sec
   common:     600,
-  finance:    600,
+  finance:    60000, // 1 req/min
   marketplace:200,
   documents:  600,
   feedbacks:  333,   // 3 req/sec for feedbacks and questions category

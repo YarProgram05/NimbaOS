@@ -6,6 +6,8 @@
 
 ## Last Marketplace Session Summary
 
+2026-06-01: created Google Sheet `Анализ детских парео и туник — май 2026` for child pareo/tunics supply planning. Used local DB only: `realization_reports` covered 2026-05-01 - 2026-05-31; latest stock snapshots were synced 2026-06-01. Main finding: Galioni child pareo stock is excessive versus May demand; Nimba child tunics need targeted replenishment in large sizes, especially white 134-152/152-164 and pink 134-152/152-164.
+
 2026-05-25: filled Google Sheet `Утренний отчет WB`, tab `WB Galioni`, for 2026-05-01 - 2026-05-24 from local DB-backed report data. 2026-05-25 was left blank because the day was not covered yet; no ad-hoc WB API call or historical resync was performed.
 
 2026-05-25: corrected `Заказано руб.` definition. It now includes all WB orders, including cancelled rows, so the metric reflects ordered ruble volume rather than non-cancelled/fulfilled order volume.
@@ -16,7 +18,7 @@
 
 ## Current Safe Next Step
 
-For the next morning update, fill only newly covered dates after checking local coverage. Current sheet has Galioni values through 2026-05-24; 2026-05-25 should be filled only after report/orders/sales/ads coverage exists in the local DB.
+For supply planning, prioritize Nimba child tunic large-size replenishment from the May analysis; do not create WB-side changes without confirmation. For the next morning update, fill only newly covered dates after checking local coverage.
 
 ## Active Marketplace Risks
 
@@ -42,4 +44,4 @@ For the next morning update, fill only newly covered dates after checking local 
 
 ## Last Updated
 
-2026-05-25 — filled `Утренний отчет WB` / `WB Galioni` through 2026-05-24.
+2026-06-01 — created May 2026 child pareo/tunics Google Sheet and supply recommendation.
