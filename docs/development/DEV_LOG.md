@@ -1,5 +1,16 @@
 # Development Log
 
+## 2026-06-07 - Stock risk classification fixed
+
+### Summary
+Reworked `/stocks` risk logic after the `В норме` state was effectively absent. The previous logic used only `wb_sales` for the last 30 completed days and classified any zero-stock product as `Нет остатка`, even if there was no recent demand. Slow/partial sales coverage also made many products look like `Излишек` or `Нет продаж`.
+
+### Fix
+Stock turnover still uses current sellable stock divided by average daily non-return sales over the 30 completed days before the latest stock snapshot. The sales source now takes the stronger local signal between `wb_sales` and `realization_reports` sale quantities; size rows use `realization_reports.barcode` when available. Risk thresholds are now: zero total sellable stock = `Нет остатка`; positive stock up to 14 days = `Низкий остаток`; 14-120 days = `В норме`; more than 120 days with at least 10 units = `Излишек`; positive stock with no recent demand = `Нет продаж`. `/stocks` category filter now supports selecting multiple categories.
+
+### Checks run
+`npm run type-check`.
+
 ## 2026-06-04 - Financial report cost-price matching fixed
 
 ### Summary

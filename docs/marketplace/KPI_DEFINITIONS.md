@@ -1,6 +1,6 @@
 # KPI Definitions
 
-Определения ключевых метрик. Last updated: 2026-05-25.
+Определения ключевых метрик. Last updated: 2026-06-07.
 
 ## Orders
 
@@ -24,11 +24,15 @@
 
 ## Turnover / Coverage
 
-Формула: stock quantity / average daily sales. Данные: stocks + sales. Ошибка: считать по слишком короткому периоду.
+Формула: stock quantity / average daily sales. Для `/stocks` используется текущий sellable stock из latest stock snapshot и средние не-возвратные продажи за последние 30 завершенных дней перед снимком. Данные: `stock_snapshots`, `stock_items`, `wb_sales`, fallback `realization_reports`. Ошибка: считать показатель готовым полем WB или не проверять freshness продаж.
 
 ## Days To Out Of Stock
 
 Формула: available stock / average daily sales. Если sales zero, нужна ручная интерпретация.
+
+## Stock Risk State
+
+Формула для `/stocks`: сначала считается `Оборачиваемость, дн.`. `Нет остатка` = общий sellable stock 0. `Низкий остаток` = положительный stock с покрытием до 14 дней. `В норме` = покрытие больше 14 и до 120 дней. `Излишек` = покрытие больше 120 дней и минимум 10 шт. `Нет продаж` = положительный stock, но в 30-дневном окне нет продаж. Ошибка: смешивать `Нет продаж` с `Нет остатка` или считать любой запас свыше 60 дней избытком.
 
 ## Conversion
 
@@ -76,7 +80,7 @@ Sales quantity or revenue divided by days with valid data. Проверять п
 
 ## Stock Turnover Days
 
-Формула для остатков: текущий sellable stock (`quantity`) / средние не-возвратные продажи в день за последние 30 завершенных дней относительно даты снимка остатков. В пути к клиенту/от клиента не включается. Если продаж нет, показатель пустой/`Нет продаж`.
+Формула для остатков: текущий sellable stock (`quantity`) / средние не-возвратные продажи в день за последние 30 завершенных дней относительно даты снимка остатков. В пути к клиенту/от клиента не включается. Основной источник продаж: локальные `wb_sales`; fallback и размерная детализация: sale quantities из `realization_reports` по `nmId`/`barcode`. Если продаж нет, показатель пустой/`Нет продаж`.
 
 ## Typical Interpretation Mistakes
 

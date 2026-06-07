@@ -5,6 +5,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { AlertTriangle, ChevronDown, ChevronRight, PackageCheck, RefreshCw, Search, Warehouse } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -22,7 +30,7 @@ interface StocksClientProps {
   wbAccountId: string
   currentSearch: string
   currentBrand: string
-  currentCategory: string
+  currentCategories: string[]
   currentWarehouse: string
   currentRisk: StockRisk | 'all'
   currentPage: number
@@ -31,11 +39,11 @@ interface StocksClientProps {
 }
 
 const RISK_LABELS: Record<StockRisk | 'all', string> = {
-  all: 'Все риски',
+  all: 'Все состояния',
   out_of_stock: 'Нет остатка',
   low_stock: 'Низкий остаток',
   overstock: 'Излишек',
-  ok: 'Норма',
+  ok: 'В норме',
   no_sales: 'Нет продаж',
 }
 
@@ -44,7 +52,7 @@ export function StocksClient({
   wbAccountId,
   currentSearch,
   currentBrand,
-  currentCategory,
+  currentCategories,
   currentWarehouse,
   currentRisk,
   currentPage,
@@ -59,11 +67,18 @@ export function StocksClient({
   const [syncing, startSync] = useTransition()
   const totalPages = Math.ceil(data.total / data.pageSize)
 
-  function buildUrl(overrides: Record<string, string | number | undefined>) {
+  function buildUrl(overrides: Record<string, string | string[] | number | undefined>) {
     const params = new URLSearchParams(searchParams.toString())
     for (const [key, value] of Object.entries(overrides)) {
-      if (value === undefined || value === '') params.delete(key)
-      else params.set(key, String(value))
+      params.delete(key)
+      if (value === undefined || value === '') continue
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item) params.append(key, item)
+        }
+      } else {
+        params.set(key, String(value))
+      }
     }
     return `${pathname}?${params.toString()}`
   }
@@ -97,6 +112,13 @@ export function StocksClient({
       else next.add(key)
       return next
     })
+  }
+
+  function toggleCategory(category: string, checked: boolean) {
+    const next = checked
+      ? Array.from(new Set([...currentCategories, category]))
+      : currentCategories.filter((item) => item !== category)
+    router.push(buildUrl({ category: next.length > 0 ? next : undefined, page: 1 }))
   }
 
   return (
@@ -135,12 +157,11 @@ export function StocksClient({
           values={data.brands}
           onChange={(value) => router.push(buildUrl({ brand: value === '__all__' ? undefined : value, page: 1 }))}
         />
-        <FilterSelect
-          value={currentCategory || '__all__'}
-          placeholder="Категория"
-          allLabel="Все категории"
+        <CategoryMultiSelect
           values={data.categories}
-          onChange={(value) => router.push(buildUrl({ category: value === '__all__' ? undefined : value, page: 1 }))}
+          selected={currentCategories}
+          onToggle={toggleCategory}
+          onClear={() => router.push(buildUrl({ category: undefined, page: 1 }))}
         />
         <Select
           value={currentWarehouse || '__all__'}
@@ -338,6 +359,54 @@ function StockRow({
       <td className="px-4 py-2.5 tabular-nums">{formatTurnover(row.turnoverDays)}</td>
       <td className="px-4 py-2.5"><RiskBadge risk={row.risk} /></td>
     </tr>
+  )
+}
+
+function CategoryMultiSelect({
+  values,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  values: string[]
+  selected: string[]
+  onToggle: (value: string, checked: boolean) => void
+  onClear: () => void
+}) {
+  const selectedSet = new Set(selected)
+  const label = selected.length === 0
+    ? 'Все категории'
+    : selected.length === 1
+      ? selected[0]
+      : `Категории: ${selected.length}`
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full justify-between sm:w-44">
+          <span className="truncate">{label}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-72 w-64 overflow-y-auto">
+        <DropdownMenuItem onClick={onClear} disabled={selected.length === 0} className="text-muted-foreground">
+          Все категории
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {values.length > 0 ? values.map((item) => (
+          <DropdownMenuCheckboxItem
+            key={item}
+            checked={selectedSet.has(item)}
+            onCheckedChange={(checked) => onToggle(item, Boolean(checked))}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {item}
+          </DropdownMenuCheckboxItem>
+        )) : (
+          <DropdownMenuItem disabled>Нет категорий</DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

@@ -23,7 +23,7 @@
 
 - Financial report: `realization_reports`, `paid_storage`, products, references, ad stats and `wb_orders` through `report-calculator`.
 - Orders/sales/plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`, `sales_plan_items` through `plan-calculator`.
-- Stock risk/turnover: latest `stock_snapshots` + `stock_items` + recent non-return `wb_sales` through stock services.
+- Stock risk/turnover: latest `stock_snapshots` + `stock_items` + recent non-return `wb_sales`; stock services also use `realization_reports` sale quantities as a local fallback and barcode source for size-level risk.
 - Advertising efficiency: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`; prefer actions/services.
 - Prices/cards: `products`, `product_sizes`; WB API only for approved refresh/sync.
 - Feedback: `product_reviews`, `product_questions`; answer writes require confirmation.

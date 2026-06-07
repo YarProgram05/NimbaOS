@@ -499,7 +499,7 @@ function stockRiskText(risk: StockSummaryItem['risk']): string {
   if (risk === 'low_stock') return 'Низкий остаток'
   if (risk === 'overstock') return 'Избыток'
   if (risk === 'no_sales') return 'Остаток без продаж'
-  return 'Ок'
+  return 'В норме'
 }
 
 function formatDateTime(value: string): string {

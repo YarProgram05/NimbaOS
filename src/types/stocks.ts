@@ -84,7 +84,7 @@ export interface GetStocksOptions {
   pageSize: number
   search?: string
   brand?: string
-  category?: string
+  categories?: string[]
   warehouse?: string
   risk?: StockRisk | 'all'
   sortBy?: 'vendorCode' | 'nmId' | 'brand' | 'category' | 'quantity' | 'stockValue' | 'turnoverDays' | 'risk'

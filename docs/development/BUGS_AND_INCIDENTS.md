@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-013: Stock risk classification did not show normal stock state
+
+Status:
+Fixed
+
+Symptoms:
+On `/stocks`, filtering by normal stock state (`В норме`) could return no products, while stock states looked too pessimistic or not useful for operational reading.
+
+Affected area:
+Stock analytics in `src/lib/services/stocks.ts` and `/stocks` labels.
+
+Investigation:
+The old calculation used only `wb_sales` for recent demand. If that source had incomplete coverage while financial reports were fresher, average daily sales was understated. The old risk logic also marked every zero-stock product as `Нет остатка`, even with no recent demand, and treated coverage above 60 days as `Излишек`, which was too aggressive for low-volume apparel stock.
+
+Fix:
+Risk now uses local DB sources only: recent non-return `wb_sales` and sale quantities from `realization_reports`, taking the stronger 30-day signal by `nmId`. Size rows use financial-report barcode sales when available. `Нет остатка` means zero total sellable stock; `В норме` is positive stock with 14-120 days of coverage; `Излишек` requires more than 120 days and at least 10 units; positive stock without recent demand is `Нет продаж`. `/stocks` also supports multi-select category filtering.
+
+Verification:
+`npm run type-check` passed.
+
+Related files:
+`src/lib/services/stocks.ts`, `src/app/(dashboard)/stocks/stocks-client.tsx`, `src/lib/services/dashboard-export.ts`
+
 ## BUG-012: Financial report cost price missing after Finance API migration
 
 Status:

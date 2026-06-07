@@ -6,6 +6,8 @@
 
 ## Last Marketplace Session Summary
 
+2026-06-07: clarified and fixed stock risk interpretation in NimbaOS. `Оборачиваемость, дн.` is not a WB-provided field; it is calculated as current sellable stock divided by average daily non-return sales over the 30 completed days before the latest stock snapshot. `/stocks` now uses local `wb_sales` plus `realization_reports` sale quantities as fallback, and risk states are: `Нет остатка` when total sellable stock is zero; `Низкий остаток` up to 14 days; `В норме` 14-120 days; `Излишек` above 120 days with at least 10 units; `Нет продаж` when positive stock has no recent demand. Category filtering supports selecting multiple categories.
+
 2026-06-01: created Google Sheet `Анализ детских парео и туник — май 2026` for child pareo/tunics supply planning. Used local DB only: `realization_reports` covered 2026-05-01 - 2026-05-31; latest stock snapshots were synced 2026-06-01. Main finding: Galioni child pareo stock is excessive versus May demand; Nimba child tunics need targeted replenishment in large sizes, especially white 134-152/152-164 and pink 134-152/152-164.
 
 2026-05-25: filled Google Sheet `Утренний отчет WB`, tab `WB Galioni`, for 2026-05-01 - 2026-05-24 from local DB-backed report data. 2026-05-25 was left blank because the day was not covered yet; no ad-hoc WB API call or historical resync was performed.
@@ -25,6 +27,7 @@ For supply planning, prioritize Nimba child tunic large-size replenishment from 
 - Нельзя менять цены, карточки, рекламу, ставки или остатки без подтверждения.
 - Данные могут быть устаревшими или неполными; всегда проверять coverage.
 - Для Galioni orders/sales могут отставать от financial reports; `Заказано руб.` зависит от `wb_orders`.
+- Stock turnover and risk depend on local 30-day demand coverage; if recent `wb_sales` and `realization_reports` are stale, interpret `Нет продаж` cautiously.
 - Рекомендации должны быть осторожными, особенно при низком объеме данных.
 
 ## Read Next If Needed
@@ -44,4 +47,4 @@ For supply planning, prioritize Nimba child tunic large-size replenishment from 
 
 ## Last Updated
 
-2026-06-01 — created May 2026 child pareo/tunics Google Sheet and supply recommendation.
+2026-06-07 — clarified stock turnover source and fixed stock risk state thresholds.

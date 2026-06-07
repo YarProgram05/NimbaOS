@@ -19,7 +19,7 @@ interface StocksPageProps {
     pageSize?: string
     search?: string
     brand?: string
-    category?: string
+    category?: string | string[]
     warehouse?: string
     risk?: string
     sortBy?: string
@@ -62,7 +62,9 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
   const pageSize = Math.min(100, Math.max(10, parseInt(params.pageSize ?? '50', 10) || 50))
   const search = params.search?.trim() ?? ''
   const brand = params.brand?.trim() ?? ''
-  const category = params.category?.trim() ?? ''
+  const categories = Array.from(new Set((Array.isArray(params.category) ? params.category : [params.category])
+    .map((value) => value?.trim())
+    .filter(Boolean) as string[]))
   const rawWarehouse = params.warehouse?.trim() ?? ''
   const warehouse = rawWarehouse === TOTAL_STOCK_WAREHOUSE_VALUE ? TOTAL_STOCK_WAREHOUSE_VALUE : rawWarehouse
   const risk = VALID_RISKS.includes(params.risk as (typeof VALID_RISKS)[number])
@@ -79,7 +81,7 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
     pageSize,
     search: search || undefined,
     brand: brand || undefined,
-    category: category || undefined,
+    categories: categories.length > 0 ? categories : undefined,
     warehouse: warehouse || undefined,
     risk,
     sortBy,
@@ -101,7 +103,7 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
         wbAccountId={wbAccountId}
         currentSearch={search}
         currentBrand={brand}
-        currentCategory={category}
+        currentCategories={categories}
         currentWarehouse={warehouse}
         currentRisk={risk}
         currentPage={page}

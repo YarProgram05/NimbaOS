@@ -9,11 +9,12 @@ import {
   type StocksSummary,
 } from '@/types/stocks'
 
-const LOW_STOCK_QTY = 3
-const LOW_STOCK_DAYS = 7
-const OVERSTOCK_DAYS = 60
+const LOW_STOCK_DAYS = 14
+const OVERSTOCK_DAYS = 120
+const OVERSTOCK_MIN_QTY = 10
 const SALES_WINDOW_DAYS = 30
 const TOTAL_STOCK_WAREHOUSE_LABEL = 'Общий остаток'
+const DOC_SALE = 'Продажа'
 
 function addDays(value: Date, days: number): Date {
   const next = new Date(value)
@@ -35,19 +36,39 @@ function startOfDay(value: Date): Date {
   return next
 }
 
-function calculateRisk(quantity: number, sales30: number): { risk: StockRisk; daysUntilZero: number | null; turnoverDays: number | null } {
-  if (quantity <= 0) return { risk: 'out_of_stock', daysUntilZero: 0, turnoverDays: 0 }
+type StockRiskCalculation = {
+  risk: StockRisk
+  daysUntilZero: number | null
+  turnoverDays: number | null
+}
+
+function salesKey(nmId: number, barcode: string | null | undefined): string {
+  return `${nmId}:${(barcode ?? '').trim()}`
+}
+
+function calculateRisk(quantity: number, sales30: number): StockRiskCalculation {
+  if (quantity <= 0) {
+    return { risk: 'out_of_stock', daysUntilZero: 0, turnoverDays: 0 }
+  }
 
   if (sales30 > 0) {
     const dailySales = sales30 / SALES_WINDOW_DAYS
     const turnoverDays = quantity / dailySales
     if (turnoverDays <= LOW_STOCK_DAYS) return { risk: 'low_stock', daysUntilZero: turnoverDays, turnoverDays }
-    if (turnoverDays > OVERSTOCK_DAYS) return { risk: 'overstock', daysUntilZero: turnoverDays, turnoverDays }
+    if (turnoverDays > OVERSTOCK_DAYS && quantity >= OVERSTOCK_MIN_QTY) return { risk: 'overstock', daysUntilZero: turnoverDays, turnoverDays }
     return { risk: 'ok', daysUntilZero: turnoverDays, turnoverDays }
   }
 
-  if (quantity <= LOW_STOCK_QTY) return { risk: 'low_stock', daysUntilZero: null, turnoverDays: null }
   return { risk: 'no_sales', daysUntilZero: null, turnoverDays: null }
+}
+
+function getSizeRisk(
+  nmId: number,
+  barcode: string | null | undefined,
+  riskBySize: Map<string, StockRiskCalculation>,
+  fallback: StockRiskCalculation,
+): StockRiskCalculation {
+  return barcode ? riskBySize.get(salesKey(nmId, barcode)) ?? fallback : fallback
 }
 
 function emptySummary(): StocksSummary {
@@ -93,7 +114,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
 
   const salesTo = addDays(startOfDay(snapshot.syncedAt), -1)
   const salesFrom = addDays(salesTo, -(SALES_WINDOW_DAYS - 1))
-  const [products, stockItems, costPrices, salesRows] = await Promise.all([
+  const [products, stockItems, costPrices, salesRows, reportSalesRows] = await Promise.all([
     prisma.product.findMany({
       where: { wbAccountId },
       select: {
@@ -120,13 +141,30 @@ async function buildStocksData(wbAccountId: string): Promise<{
       where: { wbAccountId },
       select: { vendorCode: true, costPrice: true },
     }),
-    prisma.wbSale.findMany({
+    prisma.wbSale.groupBy({
+      by: ['nmId'],
       where: {
         wbAccountId,
         isReturn: false,
         date: { gte: salesFrom, lte: salesTo },
       },
-      select: { nmId: true },
+      _count: { _all: true },
+    }),
+    prisma.realizationReport.groupBy({
+      by: ['nmId', 'barcode'],
+      where: {
+        wbAccountId,
+        docTypeName: DOC_SALE,
+        AND: [
+          {
+            OR: [
+              { rrDt: { gte: salesFrom, lte: salesTo } },
+              { rrDt: null, dateFrom: { lte: salesTo }, dateTo: { gte: salesFrom } },
+            ],
+          },
+        ],
+      },
+      _sum: { quantity: true },
     }),
   ])
 
@@ -134,10 +172,21 @@ async function buildStocksData(wbAccountId: string): Promise<{
   const costByVendor = new Map(costPrices.map((row) => [row.vendorCode, Number(row.costPrice)]))
   const salesByNmId = new Map<number, number>()
   for (const sale of salesRows) {
-    salesByNmId.set(sale.nmId, (salesByNmId.get(sale.nmId) ?? 0) + 1)
+    salesByNmId.set(sale.nmId, sale._count._all)
+  }
+  const reportSalesByNmId = new Map<number, number>()
+  const reportSalesBySize = new Map<string, number>()
+  for (const sale of reportSalesRows) {
+    const quantity = sale._sum.quantity ?? 0
+    reportSalesByNmId.set(sale.nmId, (reportSalesByNmId.get(sale.nmId) ?? 0) + quantity)
+    if (sale.barcode) {
+      const key = salesKey(sale.nmId, sale.barcode)
+      reportSalesBySize.set(key, (reportSalesBySize.get(key) ?? 0) + quantity)
+    }
   }
 
   const totalsByNmId = new Map<number, { quantity: number; inWayToClient: number; inWayFromClient: number }>()
+  const totalsBySize = new Map<string, { quantity: number; inWayToClient: number; inWayFromClient: number }>()
   const byWarehouse = new Map<number, StockWarehouseSummary>()
 
   for (const item of stockItems) {
@@ -146,6 +195,15 @@ async function buildStocksData(wbAccountId: string): Promise<{
     current.inWayToClient += item.inWayToClient
     current.inWayFromClient += item.inWayFromClient
     totalsByNmId.set(item.nmId, current)
+
+    if (item.productSize?.barcode) {
+      const key = salesKey(item.nmId, item.productSize.barcode)
+      const sizeTotal = totalsBySize.get(key) ?? { quantity: 0, inWayToClient: 0, inWayFromClient: 0 }
+      sizeTotal.quantity += item.quantity
+      sizeTotal.inWayToClient += item.inWayToClient
+      sizeTotal.inWayFromClient += item.inWayFromClient
+      totalsBySize.set(key, sizeTotal)
+    }
 
     const product = productByNmId.get(item.nmId)
     const costPrice = product ? costByVendor.get(product.vendorCode) ?? 0 : 0
@@ -165,7 +223,8 @@ async function buildStocksData(wbAccountId: string): Promise<{
     byWarehouse.set(item.warehouseId, warehouse)
   }
 
-  const riskByNmId = new Map<number, { risk: StockRisk; daysUntilZero: number | null; turnoverDays: number | null }>()
+  const riskByNmId = new Map<number, StockRiskCalculation>()
+  const riskBySize = new Map<string, StockRiskCalculation>()
   let totalUnits = 0
   let stockValue = 0
   let inWayToClient = 0
@@ -178,7 +237,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
 
   for (const product of products) {
     const total = totalsByNmId.get(product.nmId) ?? { quantity: 0, inWayToClient: 0, inWayFromClient: 0 }
-    const sales30 = salesByNmId.get(product.nmId) ?? 0
+    const sales30 = Math.max(salesByNmId.get(product.nmId) ?? 0, reportSalesByNmId.get(product.nmId) ?? 0)
     const risk = calculateRisk(total.quantity, sales30)
     const costPrice = costByVendor.get(product.vendorCode) ?? 0
 
@@ -194,6 +253,11 @@ async function buildStocksData(wbAccountId: string): Promise<{
     riskByNmId.set(product.nmId, risk)
   }
 
+  for (const [key, total] of Array.from(totalsBySize.entries())) {
+    const sales30 = reportSalesBySize.get(key) ?? 0
+    riskBySize.set(key, calculateRisk(total.quantity, sales30))
+  }
+
   const rowGroups = new Map<string, {
     nmId: number
     warehouseName: string
@@ -206,6 +270,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
     nmId: number
     warehouseName: string
     sizeLabel: string
+    barcode: string | null
     quantity: number
     inWayToClient: number
     inWayFromClient: number
@@ -233,6 +298,7 @@ async function buildStocksData(wbAccountId: string): Promise<{
         nmId: item.nmId,
         warehouseName: item.warehouse.name,
         sizeLabel: label,
+        barcode: item.productSize.barcode,
         quantity: 0,
         inWayToClient: 0,
         inWayFromClient: 0,
@@ -251,26 +317,30 @@ async function buildStocksData(wbAccountId: string): Promise<{
     const sizeRows = Array.from(sizeRowGroups.values())
       .filter((sizeGroup) => sizeGroup.parentKey === key)
       .sort((a, b) => a.sizeLabel.localeCompare(b.sizeLabel, 'ru', { numeric: true }))
-      .map((sizeGroup) => ({
-        nmId: sizeGroup.nmId,
-        vendorCode: formatSizedVendorCode(product?.vendorCode ?? String(item.nmId), sizeGroup.sizeLabel),
-        sizeLabel: sizeGroup.sizeLabel,
-        isSizeRow: true,
-        parentVendorCode: product?.vendorCode ?? String(item.nmId),
-        brand: product?.brand ?? null,
-        category: product?.category ?? null,
-        title: product?.title ?? null,
-        photoUrl: product?.photoUrl ?? null,
-        warehouseName: sizeGroup.warehouseName,
-        quantity: sizeGroup.quantity,
-        inWayToClient: sizeGroup.inWayToClient,
-        inWayFromClient: sizeGroup.inWayFromClient,
-        stockValue: sizeGroup.quantity * costPrice,
-        daysUntilZero: totalRisk.daysUntilZero,
-        turnoverDays: totalRisk.turnoverDays,
-        risk: totalRisk.risk,
-        syncedAt: snapshot.syncedAt.toISOString(),
-      }))
+      .map((sizeGroup) => {
+        const sizeRisk = getSizeRisk(sizeGroup.nmId, sizeGroup.barcode, riskBySize, totalRisk)
+
+        return {
+          nmId: sizeGroup.nmId,
+          vendorCode: formatSizedVendorCode(product?.vendorCode ?? String(item.nmId), sizeGroup.sizeLabel),
+          sizeLabel: sizeGroup.sizeLabel,
+          isSizeRow: true,
+          parentVendorCode: product?.vendorCode ?? String(item.nmId),
+          brand: product?.brand ?? null,
+          category: product?.category ?? null,
+          title: product?.title ?? null,
+          photoUrl: product?.photoUrl ?? null,
+          warehouseName: sizeGroup.warehouseName,
+          quantity: sizeGroup.quantity,
+          inWayToClient: sizeGroup.inWayToClient,
+          inWayFromClient: sizeGroup.inWayFromClient,
+          stockValue: sizeGroup.quantity * costPrice,
+          daysUntilZero: sizeRisk.daysUntilZero,
+          turnoverDays: sizeRisk.turnoverDays,
+          risk: sizeRisk.risk,
+          syncedAt: snapshot.syncedAt.toISOString(),
+        }
+      })
 
     return {
       nmId: item.nmId,
@@ -365,7 +435,7 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
     pageSize,
     search,
     brand,
-    category,
+    categories,
     warehouse,
     risk = 'all',
     sortBy = 'risk',
@@ -382,7 +452,7 @@ export async function getPaginatedStocks(options: GetStocksOptions): Promise<Pag
       if (!haystack.includes(query)) return false
     }
     if (brand && row.brand !== brand) return false
-    if (category && row.category !== category) return false
+    if (categories?.length && (!row.category || !categories.includes(row.category))) return false
     if (warehouse && !useTotalStock && row.warehouseName !== warehouse) return false
     if (risk !== 'all' && row.risk !== risk) return false
     return true

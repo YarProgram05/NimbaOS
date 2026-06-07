@@ -58,7 +58,7 @@ Operational rules:
 - For `Заказано руб.`, `reports.period` forces full orders backfill only for periods up to 31 days. Wider periods use incremental orders sync to avoid long WB Statistics API lock/rate-limit stalls.
 - Sales plan/orders: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`. `sales-plan.period` may run account-wide for orders/sales even without active sales plans.
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`.
-- Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`; turnover also depends on recent non-return `wb_sales`.
+- Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`; turnover also depends on recent non-return `wb_sales` and can fall back to local `realization_reports` sale quantities for article/size demand.
 - Reviews/questions: `product_reviews`, `product_questions`.
 
 ## API Rule

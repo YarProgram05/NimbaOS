@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-06-07: fixed stock risk classification on `/stocks`. Risk now uses local DB only, combines recent non-return sales from `wb_sales` with sale quantities from `realization_reports` as a fallback, and calculates size-level risk from financial-report barcodes when available. `Нет остатка` is assigned to products with zero total sellable stock; positive stock with reasonable 14-120 day coverage is `В норме`; positive no-demand stock is `Нет продаж`; `Излишек` requires more than 120 days of coverage and at least 10 units. UI label changed from `Норма` to `В норме`, and the category filter now supports multiple selected categories.
+
 2026-06-04: fixed `BUG-012` missing cost prices after the Finance API migration. Finance report rows can contain lowercased `vendorCode`, while references preserve product-card casing. Report reference lookups now normalize vendor-code keys before matching. For 2026-06-02 - 2026-06-03, `парео зеленое/вискоз` now shows `1478.00` cost for two units, and no sold rows in either account have zero cost. A DB-only audit through 2026-06-03 found no net-bought product without a linked cost price.
 
 2026-06-04: completed live verification of `TASK-WB-FINANCE-REPORTS-MIGRATION`. Manual `REPORTS_PERIOD` run `bd702e2a-c703-4aad-8faf-b76d15f29b65` for `WB Galioni (WB_2)` started at 2026-06-04 16:01:59 MSK using code loaded after the endpoint migration. It succeeded with 1 attempt, 1738 report rows read, 244 new rows inserted for 2026-06-02 - 2026-06-03, `maxReportDate: 2026-06-03`, and coverage advanced through 2026-06-03. Key financial fields were non-zero where expected and comparable to prior-period rows. Future report sync results now record `sourceApi` with exact domain/method/path.
@@ -49,6 +51,7 @@
 - `sales-plan.period` теперь может синхронизировать orders/sales без активного плана; не запускать широкий исторический диапазон без подтверждения.
 - `Утренний отчет WB` requires `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` and the target Sheet shared with the service-account email before real writes can run.
 - `Утренний отчет WB` is DB-only: it must not call WB API or sync services. Missing coverage/stale stocks should fail fast and be fixed via separate sync jobs.
+- Stock turnover/risk depends on recent local sales coverage. If both `wb_sales` and `realization_reports` are stale for the 30 completed days before the stock snapshot, `/stocks` can still show many `Нет продаж` rows.
 - Automation worker/scheduler are separate from sync worker; production enablement requires Redis/PostgreSQL and explicit rollout setup.
 - Старые flat `docs/*.md` теперь legacy redirects/archives.
 
@@ -70,4 +73,4 @@
 
 ## Last Updated
 
-2026-06-04 - fixed `BUG-012` case-sensitive cost-price matching after Finance API migration.
+2026-06-07 - fixed stock risk classification and turnover sales source fallback.

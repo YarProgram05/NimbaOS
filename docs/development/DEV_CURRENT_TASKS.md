@@ -34,6 +34,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-013-STOCK-RISK-CLASSIFICATION
+  Status: Done
+  Priority: High
+  Description: Reworked `/stocks` risk classification so `Нет остатка` means zero total sellable stock, `В норме` is reachable for 14-120 days of coverage, and multiple categories can be selected in the filter.
+  Next step: Refresh `/stocks`; if many rows remain `Нет продаж`, check recent `wb_sales`/`realization_reports` coverage for the 30 completed days before the latest stock snapshot.
+  Related files: `src/lib/services/stocks.ts`, `src/app/(dashboard)/stocks/stocks-client.tsx`, `src/lib/services/dashboard-export.ts`, `docs/marketplace/KPI_DEFINITIONS.md`.
+  Risks: Size-level risk uses `realization_reports` barcode data when available; if report coverage is stale, size risks can still fall back to article-level demand.
+
 - ID: BUG-012-FINANCE-COST-PRICE-MATCH
   Status: Done
   Priority: High

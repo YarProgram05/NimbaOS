@@ -37,6 +37,15 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-STOCK-RISK-DEFINITION
+  Status: Done
+  Priority: High
+  Description: Уточнена и внедрена логика риска остатков: оборачиваемость считается из текущего sellable stock и средних не-возвратных продаж за 30 завершенных дней; `В норме` теперь отдельное состояние 14-120 дней покрытия.
+  Next step: На следующей проверке `/stocks` смотреть `Нет продаж` отдельно от `Нет остатка`; перед поставочными выводами проверять свежесть `wb_sales`/`realization_reports`.
+  Related reports/metrics: `stock_risk_report`, `Оборачиваемость, дн.`, latest `stock_snapshots`, `wb_sales`, `realization_reports`.
+  Related cabinets: all.
+  Risks: При устаревшем sales/report coverage товары могут попадать в `Нет продаж`; не делать поставочные рекомендации без freshness check.
+
 - ID: MKT-PAREO-TUNICS-MAY-2026
   Status: Done
   Priority: High
