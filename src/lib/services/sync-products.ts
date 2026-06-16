@@ -145,6 +145,7 @@ async function upsertCard(
         where: { id: existing.id },
         data: {
           vendorCode: card.vendorCode,
+          imtId:      card.imtID ? BigInt(card.imtID) : null,
           brand:      card.brand    ?? null,
           category:   card.subjectName ?? null,
           subjectId:  card.subjectID ?? null,
@@ -159,6 +160,7 @@ async function upsertCard(
         data: {
           wbAccountId,
           nmId:       card.nmID,
+          imtId:      card.imtID ? BigInt(card.imtID) : null,
           vendorCode: card.vendorCode,
           brand:      card.brand    ?? null,
           category:   card.subjectName ?? null,

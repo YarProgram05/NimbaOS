@@ -120,6 +120,7 @@ export async function getProducts(
       return {
         id:              p.id,
         nmId:            p.nmId,
+        imtId:           p.imtId === null ? null : Number(p.imtId),
         vendorCode:      p.vendorCode,
         vendorCodeLocal: p.vendorCodeLocal,
         brand:           p.brand,

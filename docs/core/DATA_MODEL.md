@@ -1,11 +1,12 @@
 # Data Model
 
-Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-25.
+Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 
 ## Business Keys
 
 - Cabinet/account key: `wbAccountId` links nearly all WB data to `WbAccount`.
 - Product key: `nmId` is the main WB article key.
+- Combined-card key: `imtId` (BigInt) groups WB articles that belong to one combined product card.
 - Seller article: `vendorCode`; can be missing in WB reports, fallback comes from `Product`.
 - Size/barcode keys: `chrtId`, `barcode`, `techSize`, `wbSize`.
 - Advertising key: `advertId` under `wbAccountId`.
@@ -27,7 +28,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-25.
 
 ## Product And Reference Tables
 
-- `products`: normalized product card cache by `wbAccountId + nmId`.
+- `products`: normalized product card cache by `wbAccountId + nmId`, including WB combined-card BigInt `imtId`.
 - `product_sizes`: size/barcode/chrt links.
 - `product_materials`: materials for products.
 - `cost_prices`: cost by `wbAccountId + vendorCode`.
@@ -49,8 +50,8 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-25.
 ## Advertising Tables
 
 - `ad_campaigns`: campaign metadata by `wbAccountId + advertId`.
-- `ad_campaign_stats`: campaign/date/source stats.
-- `ad_campaign_nm_stats`: campaign/date/source/nm stats.
+- `ad_campaign_stats`: campaign/date/source stats, including advertising order sum from WB fullstats `sum_price`.
+- `ad_campaign_nm_stats`: campaign/date/source/nm stats, including advertising order sum from WB fullstats `sum_price`.
 - `ad_campaign_clusters`: cluster stats by campaign and selected period.
 - `ad_action_logs`: local action history.
 
@@ -70,7 +71,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-05-25.
 ## Important Indexes
 
 - Sync/automation: `sync_job_runs(status, createdAt)`, `(kind, createdAt)`, `(wbAccountId, createdAt)`, `bullJobId`; `sync_data_coverages(wbAccountId, kind, dateFrom, dateTo)`; `automation_runs(kind, createdAt)`, `(status, createdAt)`, `(workflowId, createdAt)`, `bullJobId`; unique automation workflow kind and account mapping.
-- Products: unique `(wbAccountId, nmId)`, indexes `nmId`, `vendorCode`, `wbAccountId`.
+- Products: unique `(wbAccountId, nmId)`, indexes `nmId`, `imtId`, `vendorCode`, `wbAccountId`.
 - Sizes/stocks: `product_sizes(productId/chrtId/barcode)`, `stock_snapshots(wbAccountId, syncedAt)`, `stock_items(snapshotId)`, `(wbAccountId, nmId)`, `warehouseId`, `chrtId`.
 - Feedback: unique `(wbAccountId, externalId)`, indexes by `(wbAccountId, createdDate)`, `(wbAccountId, nmId)`, `(wbAccountId, isAnswered)`, `rating`.
 - References: unique `(wbAccountId, vendorCode)` for cost/overrides; indexes by account/date/vendor.

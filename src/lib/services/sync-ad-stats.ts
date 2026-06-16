@@ -23,6 +23,7 @@ interface DaySourceMetrics {
   clicks: number
   cartAdds: number
   orders: number
+  orderSum: number
   spend: number
   ctr: number
   cpc: number
@@ -65,6 +66,7 @@ function toDbMetrics(metrics: DaySourceMetrics): DaySourceMetrics {
     clicks: toDbInt(metrics.clicks),
     cartAdds: toDbInt(metrics.cartAdds),
     orders: toDbInt(metrics.orders),
+    orderSum: toDbMoney(metrics.orderSum),
     spend: toDbMoney(metrics.spend),
     ctr: toDbPercent(metrics.ctr),
     cpc: toDbMoney(metrics.cpc),
@@ -106,11 +108,12 @@ function buildDateChunks(dateFrom: string, dateTo: string): Array<{ dateFrom: st
 
 function sumMetricPoints(
   points: WbFullStatsAppType['stats'] | undefined,
-): Pick<DaySourceMetrics, 'views' | 'clicks' | 'cartAdds' | 'orders' | 'spend'> & { bid: number | null } {
+): Pick<DaySourceMetrics, 'views' | 'clicks' | 'cartAdds' | 'orders' | 'orderSum' | 'spend'> & { bid: number | null } {
   let views = 0
   let clicks = 0
   let cartAdds = 0
   let orders = 0
+  let orderSum = 0
   let spend = 0
   let bid: number | null = null
 
@@ -119,13 +122,14 @@ function sumMetricPoints(
     clicks += toNumber(stat.clicks)
     cartAdds += toNumber(stat.atbs)
     orders += toNumber(stat.orders)
+    orderSum += toNumber(stat.sum_price)
     spend += toNumber(stat.sum ?? stat.spend)
     if (bid === null && stat.price !== undefined) {
       bid = toNumber(stat.price)
     }
   }
 
-  return { views, clicks, cartAdds, orders, spend, bid }
+  return { views, clicks, cartAdds, orders, orderSum, spend, bid }
 }
 
 function normalizeAppStats(
@@ -142,6 +146,7 @@ function normalizeAppStats(
   let clicks = 0
   let cartAdds = 0
   let orders = 0
+  let orderSum = 0
   let spend = 0
   let bid: number | null = null
 
@@ -151,6 +156,7 @@ function normalizeAppStats(
     const itemClicks = toNumber(item.clicks) || nestedTotals.clicks
     const itemCartAdds = toNumber(item.atbs) || nestedTotals.cartAdds
     const itemOrders = toNumber(item.orders) || nestedTotals.orders
+    const itemOrderSum = toNumber(item.sum_price) || nestedTotals.orderSum
     const itemSpend = toNumber(item.sum ?? item.spend) || nestedTotals.spend
     const itemBid = item.price !== undefined ? toNumber(item.price) : nestedTotals.bid
 
@@ -158,6 +164,7 @@ function normalizeAppStats(
     clicks += itemClicks
     cartAdds += itemCartAdds
     orders += itemOrders
+    orderSum += itemOrderSum
     spend += itemSpend
 
     if (bid === null && itemBid !== null) {
@@ -170,6 +177,7 @@ function normalizeAppStats(
     clicks,
     cartAdds,
     orders,
+    orderSum,
     spend,
     ctr: views > 0 ? (clicks / views) * 100 : 0,
     cpc: clicks > 0 ? spend / clicks : 0,
@@ -182,13 +190,15 @@ function normalizeNmPoint(point: WbFullStatsMetricPoint): DaySourceMetrics {
   const clicks = toNumber(point.clicks)
   const cartAdds = toNumber(point.atbs)
   const orders = toNumber(point.orders)
-  const spend = toNumber(point.sum ?? point.spend ?? point.sum_price)
+  const orderSum = toNumber(point.sum_price)
+  const spend = toNumber(point.sum ?? point.spend)
 
   return {
     views,
     clicks,
     cartAdds,
     orders,
+    orderSum,
     spend,
     ctr: toNumber(point.ctr) || (views > 0 ? (clicks / views) * 100 : 0),
     cpc: toNumber(point.cpc) || (clicks > 0 ? spend / clicks : 0),
@@ -201,6 +211,7 @@ function mergeMetrics(target: DaySourceMetrics, incoming: DaySourceMetrics): Day
   const clicks = target.clicks + incoming.clicks
   const cartAdds = target.cartAdds + incoming.cartAdds
   const orders = target.orders + incoming.orders
+  const orderSum = target.orderSum + incoming.orderSum
   const spend = target.spend + incoming.spend
 
   return {
@@ -208,6 +219,7 @@ function mergeMetrics(target: DaySourceMetrics, incoming: DaySourceMetrics): Day
     clicks,
     cartAdds,
     orders,
+    orderSum,
     spend,
     ctr: views > 0 ? (clicks / views) * 100 : 0,
     cpc: clicks > 0 ? spend / clicks : 0,
@@ -236,6 +248,7 @@ function aggregateNmStats(
         clicks: 0,
         cartAdds: 0,
         orders: 0,
+        orderSum: 0,
         spend: 0,
         ctr: 0,
         cpc: 0,
@@ -270,6 +283,7 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
   const clicks = toNumber(day.clicks)
   const cartAdds = toNumber(day.atbs)
   const orders = toNumber(day.orders)
+  const orderSum = toNumber(day.sum_price)
   const spend = toNumber(day.sum ?? day.spend)
 
   if (views > 0 || clicks > 0 || cartAdds > 0 || orders > 0 || spend > 0) {
@@ -278,6 +292,7 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
       clicks,
       cartAdds,
       orders,
+      orderSum,
       spend,
       ctr: toNumber(day.ctr) || (views > 0 ? (clicks / views) * 100 : 0),
       cpc: toNumber(day.cpc) || (clicks > 0 ? spend / clicks : 0),
@@ -291,6 +306,7 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
   const totalClicks = search.clicks + recommendations.clicks
   const totalCartAdds = search.cartAdds + recommendations.cartAdds
   const totalOrders = search.orders + recommendations.orders
+  const totalOrderSum = search.orderSum + recommendations.orderSum
   const totalSpend = search.spend + recommendations.spend
 
   return {
@@ -298,6 +314,7 @@ function normalizeTotalStats(day: WbFullStatsDayItem): DaySourceMetrics {
     clicks: totalClicks,
     cartAdds: totalCartAdds,
     orders: totalOrders,
+    orderSum: totalOrderSum,
     spend: totalSpend,
     ctr: totalViews > 0 ? (totalClicks / totalViews) * 100 : 0,
     cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
@@ -338,6 +355,7 @@ async function syncDaySourceRow(
       spend: dbMetrics.spend,
       orders: dbMetrics.orders,
       cartAdds: dbMetrics.cartAdds,
+      orderSum: dbMetrics.orderSum,
       bid: dbMetrics.bid,
     },
     update: {
@@ -348,6 +366,7 @@ async function syncDaySourceRow(
       spend: dbMetrics.spend,
       orders: dbMetrics.orders,
       cartAdds: dbMetrics.cartAdds,
+      orderSum: dbMetrics.orderSum,
       bid: dbMetrics.bid,
     },
   })
@@ -385,6 +404,7 @@ async function syncDayNmRows(
         spend: dbMetrics.spend,
         orders: dbMetrics.orders,
         cartAdds: dbMetrics.cartAdds,
+        orderSum: dbMetrics.orderSum,
       },
       update: {
         views: dbMetrics.views,
@@ -394,6 +414,7 @@ async function syncDayNmRows(
         spend: dbMetrics.spend,
         orders: dbMetrics.orders,
         cartAdds: dbMetrics.cartAdds,
+        orderSum: dbMetrics.orderSum,
       },
     })
 

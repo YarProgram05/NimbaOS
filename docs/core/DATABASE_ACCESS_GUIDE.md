@@ -1,6 +1,6 @@
 # Database Access Guide
 
-Быстрый и безопасный доступ к данным. Last updated: 2026-06-04.
+Быстрый и безопасный доступ к данным. Last updated: 2026-06-16.
 
 ## Main Rule
 
@@ -24,7 +24,7 @@
 - Financial report: `realization_reports`, `paid_storage`, products, references, ad stats and `wb_orders` through `report-calculator`.
 - Orders/sales/plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`, `sales_plan_items` through `plan-calculator`.
 - Stock risk/turnover: latest `stock_snapshots` + `stock_items` + recent non-return `wb_sales`; stock services also use `realization_reports` sale quantities as a local fallback and barcode source for size-level risk.
-- Advertising efficiency: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`; prefer actions/services.
+- Advertising efficiency: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`; prefer actions/services. Campaign detail filters nm stats to the primary product combined-card `products.imtId`, keeps meaningful nm rows, normalizes zero-contact order baskets, and uses ad `orderSum` from WB fullstats `sum_price`.
 - Prices/cards: `products`, `product_sizes`; WB API only for approved refresh/sync.
 - Feedback: `product_reviews`, `product_questions`; answer writes require confirmation.
 - Automations: `automation_workflow_settings`, `automation_workflow_accounts`, `automation_runs` for workflow configuration/history; do not query raw WB tables manually for automation output.
@@ -59,5 +59,6 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 - `Заказано руб.` needs fresh `wb_orders`; check `SALES_PLAN_PERIOD` coverage for the selected period.
 - `paid_storage` joins for storage-only articles.
 - `ad_campaign_nm_stats` completeness and long-period ad allocation.
+- Local ad stats that existed on 2026-06-16 were backfilled for ordered rows; other database copies with old ad stats need a one-time `orderSum` backfill or bounded ad stats resync.
 - Dashboard summary if it grows beyond current service-level aggregation.
 - Any marketplace ad-hoc request that scans all raw rows across all accounts.

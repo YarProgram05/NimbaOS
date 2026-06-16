@@ -194,7 +194,218 @@ function emptyNmAggregate(nmId: number) {
     spend: 0,
     orders: 0,
     cartAdds: 0,
+    orderSum: 0,
   }
+}
+
+type NmStatLike = {
+  date: Date
+  source: string
+  nmId: number
+  views: number
+  clicks: number
+  spend: { toString(): string } | number
+  orders: number
+  cartAdds: number
+}
+
+type ProductImtLike = {
+  nmId: number
+  imtId: number | null
+}
+
+type ProductAdvertisingMeta = ProductImtLike & {
+  vendorCode?: string | null
+  brand?: string | null
+  category?: string | null
+  photoUrl?: string | null
+}
+
+function numberFromDecimal(value: { toString(): string } | number): number {
+  return typeof value === 'number' ? value : Number(value)
+}
+
+async function getAdvertisingProducts(
+  wbAccountId: string,
+  nmIds: number[],
+  includeDetails = false,
+): Promise<ProductAdvertisingMeta[]> {
+  if (nmIds.length === 0) return []
+
+  try {
+    const rows = includeDetails
+      ? await prisma.$queryRawUnsafe<ProductAdvertisingMeta[]>(
+          `
+            SELECT
+              "nmId",
+              "imtId",
+              "vendorCode",
+              "brand",
+              "category",
+              "photoUrl"
+            FROM "products"
+            WHERE "wbAccountId" = $1
+              AND "nmId" = ANY($2::int[])
+          `,
+          wbAccountId,
+          nmIds,
+        )
+      : await prisma.$queryRawUnsafe<ProductAdvertisingMeta[]>(
+          `
+            SELECT
+              "nmId",
+              "imtId"
+            FROM "products"
+            WHERE "wbAccountId" = $1
+              AND "nmId" = ANY($2::int[])
+          `,
+          wbAccountId,
+          nmIds,
+        )
+
+    return rows.map((row) => ({
+      ...row,
+      nmId: Number(row.nmId),
+      imtId: row.imtId === null || row.imtId === undefined ? null : Number(row.imtId),
+    }))
+  } catch {
+    const rows = await prisma.product.findMany({
+      where: { wbAccountId, nmId: { in: nmIds } },
+      select: includeDetails
+        ? {
+            nmId: true,
+            vendorCode: true,
+            brand: true,
+            category: true,
+            photoUrl: true,
+          }
+        : {
+            nmId: true,
+          },
+    })
+
+    return rows.map((row) => ({
+      ...row,
+      imtId: null,
+    }))
+  }
+}
+
+function isMeaningfulAdNmRow(row: NmStatLike): boolean {
+  return row.views > 0 ||
+    row.clicks > 0 ||
+    numberFromDecimal(row.spend) > 0 ||
+    row.orders > 0
+}
+
+function displayCartAdds(row: NmStatLike): number {
+  const hasAdContact = row.views > 0 ||
+    row.clicks > 0 ||
+    numberFromDecimal(row.spend) > 0
+
+  if (!hasAdContact && row.orders > 0) return row.orders
+  return row.cartAdds
+}
+
+async function getAdOrderSumByKey(
+  campaignId: string,
+  dateFrom: Date,
+  dateTo: Date,
+): Promise<Map<string, number>> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{
+      date: Date
+      source: string
+      nmId: number
+      orderSum: { toString(): string } | number
+    }>>`
+      SELECT
+        "date",
+        "source",
+        "nmId",
+        "orderSum"
+      FROM "ad_campaign_nm_stats"
+      WHERE "campaignId" = ${campaignId}
+        AND "date" >= ${dateFrom}
+        AND "date" <= ${dateTo}
+    `
+
+    return new Map(rows.map((row) => [
+      `${serializeDate(row.date)}:${row.source}:${row.nmId}`,
+      numberFromDecimal(row.orderSum),
+    ]))
+  } catch {
+    return new Map()
+  }
+}
+
+function pickPrimaryImtId(
+  rows: NmStatLike[],
+  productsByNm: Map<number, ProductImtLike>,
+): number | null {
+  const scoreByImt = new Map<number, {
+    spend: number
+    views: number
+    clicks: number
+    cartAdds: number
+    orders: number
+  }>()
+
+  const totalRows = rows.filter((row) => row.source === 'total')
+  const rowsForScore = totalRows.length > 0 ? totalRows : rows
+
+  for (const row of rowsForScore) {
+    const imtId = productsByNm.get(row.nmId)?.imtId
+    if (!imtId) continue
+
+    const score = scoreByImt.get(imtId) ?? {
+      spend: 0,
+      views: 0,
+      clicks: 0,
+      cartAdds: 0,
+      orders: 0,
+    }
+    score.spend += numberFromDecimal(row.spend)
+    score.views += row.views
+    score.clicks += row.clicks
+    score.cartAdds += row.cartAdds
+    score.orders += row.orders
+    scoreByImt.set(imtId, score)
+  }
+
+  let selected: number | null = null
+  let selectedScore = {
+    spend: -1,
+    views: -1,
+    clicks: -1,
+    cartAdds: -1,
+    orders: -1,
+  }
+
+  for (const [imtId, score] of Array.from(scoreByImt.entries())) {
+    const isBetter =
+      score.spend > selectedScore.spend ||
+      (score.spend === selectedScore.spend && score.views > selectedScore.views) ||
+      (score.spend === selectedScore.spend && score.views === selectedScore.views && score.clicks > selectedScore.clicks) ||
+      (score.spend === selectedScore.spend && score.views === selectedScore.views && score.clicks === selectedScore.clicks && score.cartAdds > selectedScore.cartAdds) ||
+      (score.spend === selectedScore.spend && score.views === selectedScore.views && score.clicks === selectedScore.clicks && score.cartAdds === selectedScore.cartAdds && score.orders > selectedScore.orders)
+
+    if (isBetter) {
+      selected = imtId
+      selectedScore = score
+    }
+  }
+
+  return selected
+}
+
+function filterRowsToPrimaryImt<T extends NmStatLike>(
+  rows: T[],
+  productsByNm: Map<number, ProductImtLike>,
+): T[] {
+  const primaryImtId = pickPrimaryImtId(rows, productsByNm)
+  if (!primaryImtId) return rows
+  return rows.filter((row) => productsByNm.get(row.nmId)?.imtId === primaryImtId)
 }
 
 function mapClusterRow(row: {
@@ -293,12 +504,20 @@ export async function getCampaignStatsAction(
     if (!campaignId) return { success: false, error: 'Кампания не указана' }
     if (!dateFrom || !dateTo) return { success: false, error: 'Укажите период' }
 
+    const campaign = await prisma.adCampaign.findUnique({
+      where: { id: campaignId },
+      select: { wbAccountId: true },
+    })
+    if (!campaign) return { success: false, error: 'Кампания не найдена' }
+
+    const from = parseDate(dateFrom)
+    const to = parseDate(dateTo)
     const rows = await prisma.adCampaignStat.findMany({
       where: {
         campaignId,
         date: {
-          gte: parseDate(dateFrom),
-          lte: parseDate(dateTo),
+          gte: from,
+          lte: to,
         },
       },
       orderBy: [
@@ -306,6 +525,73 @@ export async function getCampaignStatsAction(
         { source: 'asc' },
       ],
     })
+
+    const nmRows = await prisma.adCampaignNmStat.findMany({
+      where: {
+        campaignId,
+        date: { gte: from, lte: to },
+      },
+      orderBy: [
+        { date: 'asc' },
+        { source: 'asc' },
+        { nmId: 'asc' },
+      ],
+    })
+    const nmIds = Array.from(new Set(nmRows.map((row) => row.nmId)))
+    const products = await getAdvertisingProducts(campaign.wbAccountId, nmIds)
+    const productsByNm = new Map(products.map((product) => [product.nmId, product]))
+    const hasImtIds = products.some((product) => product.imtId !== null)
+
+    if (hasImtIds && nmRows.length > 0) {
+      const filteredNmRows = filterRowsToPrimaryImt(nmRows, productsByNm)
+        .filter(isMeaningfulAdNmRow)
+      const bidByDateSource = new Map(rows.map((row) => [`${serializeDate(row.date)}:${row.source}`, row.bid?.toString() ?? null]))
+      const aggregateByDateSource = new Map<string, {
+        date: Date
+        source: AdSource
+        views: number
+        clicks: number
+        spend: number
+        cartAdds: number
+        orders: number
+      }>()
+
+      for (const row of filteredNmRows) {
+        const key = `${serializeDate(row.date)}:${row.source}`
+        const aggregate = aggregateByDateSource.get(key) ?? {
+          date: row.date,
+          source: row.source as AdSource,
+          views: 0,
+          clicks: 0,
+          spend: 0,
+          cartAdds: 0,
+          orders: 0,
+        }
+        aggregate.views += row.views
+        aggregate.clicks += row.clicks
+        aggregate.spend += Number(row.spend)
+        aggregate.cartAdds += displayCartAdds(row)
+        aggregate.orders += row.orders
+        aggregateByDateSource.set(key, aggregate)
+      }
+
+      const groupedRows: AdStatRow[] = Array.from(aggregateByDateSource.values())
+        .sort((a, b) => serializeDate(a.date).localeCompare(serializeDate(b.date)) || a.source.localeCompare(b.source))
+        .map((row) => ({
+          date: serializeDate(row.date),
+          source: row.source,
+          views: row.views,
+          clicks: row.clicks,
+          ctr: row.views > 0 ? ((row.clicks / row.views) * 100).toFixed(4) : '0.0000',
+          cpc: row.clicks > 0 ? (row.spend / row.clicks).toFixed(2) : '0.00',
+          spend: row.spend.toFixed(2),
+          orders: row.orders,
+          cartAdds: row.cartAdds,
+          bid: bidByDateSource.get(`${serializeDate(row.date)}:${row.source}`) ?? null,
+        }))
+
+      return { success: true, data: groupedRows }
+    }
 
     return { success: true, data: rows.map(mapStatRow) }
   } catch (err) {
@@ -343,9 +629,18 @@ export async function getCampaignNmStatsAction(
       ],
     })
 
+    const allNmIds = Array.from(new Set(nmRows.map((row) => row.nmId)))
+    const products = await getAdvertisingProducts(campaign.wbAccountId, allNmIds, true)
+    const productsByNm = new Map(products.map((product) => [product.nmId, product]))
+    const rowsForAggregation = (products.some((product) => product.imtId !== null)
+      ? filterRowsToPrimaryImt(nmRows, productsByNm)
+      : nmRows)
+      .filter(isMeaningfulAdNmRow)
+    const adOrderSumByKey = await getAdOrderSumByKey(campaignId, from, to)
+
     type NmStatDbRow = (typeof nmRows)[number]
     const rowsByDayAndNm = new Map<string, NmStatDbRow[]>()
-    for (const row of nmRows) {
+    for (const row of rowsForAggregation) {
       const key = `${serializeDate(row.date)}:${row.nmId}`
       const group = rowsByDayAndNm.get(key) ?? []
       group.push(row)
@@ -363,7 +658,8 @@ export async function getCampaignNmStatsAction(
         aggregate.clicks += row.clicks
         aggregate.spend += Number(row.spend)
         aggregate.orders += row.orders
-        aggregate.cartAdds += row.cartAdds
+        aggregate.cartAdds += displayCartAdds(row)
+        aggregate.orderSum += adOrderSumByKey.get(`${serializeDate(row.date)}:${row.source}:${row.nmId}`) ?? 0
         aggregates.set(row.nmId, aggregate)
       }
     }
@@ -371,17 +667,7 @@ export async function getCampaignNmStatsAction(
     const nmIds = Array.from(aggregates.keys())
     if (nmIds.length === 0) return { success: true, data: [] }
 
-    const [products, wbOrders, wbSales, funnelRows] = await Promise.all([
-      prisma.product.findMany({
-        where: { wbAccountId: campaign.wbAccountId, nmId: { in: nmIds } },
-        select: {
-          nmId: true,
-          vendorCode: true,
-          brand: true,
-          category: true,
-          photoUrl: true,
-        },
-      }),
+    const [wbOrders, wbSales, funnelRows] = await Promise.all([
       prisma.wbOrder.findMany({
         where: {
           wbAccountId: campaign.wbAccountId,
@@ -415,7 +701,6 @@ export async function getCampaignNmStatsAction(
       }),
     ])
 
-    const productsByNm = new Map(products.map((product) => [product.nmId, product]))
     const ordersByNm = new Map<number, { count: number; revenue: number }>()
     const salesByNm = new Map<number, { sales: number; revenue: number; returns: number }>()
     const funnelByNm = new Map<number, {
@@ -486,6 +771,7 @@ export async function getCampaignNmStatsAction(
           spend: aggregate.spend.toFixed(2),
           orders: aggregate.orders,
           cartAdds: aggregate.cartAdds,
+          adOrderSum: aggregate.orderSum.toFixed(2),
           cpo: aggregate.orders > 0 ? (aggregate.spend / aggregate.orders).toFixed(2) : '0.00',
           wbOrders: orderMetrics.count,
           wbOrderRevenue: orderMetrics.revenue.toFixed(2),

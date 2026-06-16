@@ -34,6 +34,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-014-AD-COMBINED-CARD-STATS
+  Status: Done
+  Priority: High
+  Description: Fixed advertising campaign detail so campaigns with multiple WB combined-card groups use the primary `imtID`, show only meaningful nm rows, normalize basket-only order rows, and use advertising `sum_price` for order sum. Existing product `imtId` and ad `orderSum` rows were backfilled for active accounts/campaign periods.
+  Next step: Refresh advertising campaign detail pages; `Кампания от 10.06.2026` is expected to show 6 articles, 31 baskets, 8 ad orders, 16680.00 ad order sum for 2026-06-10 - 2026-06-14.
+  Related files: `src/lib/actions/advertising.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-products.ts`, `prisma/schema.prisma`, `prisma/migrations/20260616120000_product_imt_id/migration.sql`, `prisma/migrations/20260616123000_ad_order_sum/migration.sql`, `prisma/migrations/20260616124500_product_imt_id_bigint/migration.sql`.
+  Risks: New future campaigns still depend on normal product/ad stats sync to persist `imtId` and `orderSum`; WB fullstats can still rate-limit broad historical checks.
+
 - ID: BUG-013-STOCK-RISK-CLASSIFICATION
   Status: Done
   Priority: High

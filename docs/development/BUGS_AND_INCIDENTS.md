@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-014: Advertising campaign stats mixed several WB combined-card groups
+
+Status:
+Fixed
+
+Symptoms:
+For `WB Galioni (WB_2)` campaign `Кампания от 10.06.2026`, period 2026-06-10 - 2026-06-14, NimbaOS showed 63 baskets and 10 advertising orders, while the WB seller UI showed 31 baskets and 8 orders for the displayed combined card.
+
+Affected area:
+Advertising campaign detail in `src/lib/actions/advertising.ts` and product-card metadata in `products`.
+
+Investigation:
+Local DB matched public WB Advertising API `GET /adv/v3/fullstats`: campaign/day/nm totals were 63 baskets and 10 orders. A read-only Content API check showed that the 24 nm rows belonged to three `imtID` groups. Primary `imtID=151000452` contained all views/clicks/spend and 8 orders; other zero-spend groups contributed 15 baskets and 2 orders. Public fullstats still returned 48 baskets for the primary `imtID`, not 31.
+
+Fix:
+Added nullable BigInt `products.imtId`, stored `card.imtID` during product sync, backfilled all active-account products locally, and changed campaign stats/detail actions to rebuild advertising stats from nm rows filtered to the primary `imtID` group when available. The detail now keeps only meaningful nm rows (views/clicks/spend or orders) and normalizes zero-contact order rows by using orders as basket count. Added `orderSum` to ad stat tables and sync mapping from WB fullstats `sum_price`, so article order sum is advertising-attributed instead of all WB orders. Existing saved ad stat periods were backfilled from WB fullstats for all campaigns with ordered rows.
+
+Verification:
+`npx prisma migrate deploy`, `npx prisma generate`, `npm run type-check`, and `npm run lint` passed. Product `imtId` backfill updated 64 Galioni and 87 Nimba products. Backfill verification found 0 ordered ad nm rows and 0 ordered campaign stat rows missing `orderSum`. For the checked campaign/date range, the advertising detail now produces 6 articles, 31 baskets, 8 advertising orders, and 16680.00 advertising order sum.
+
+Related files:
+`src/lib/actions/advertising.ts`, `src/lib/services/sync-ad-stats.ts`, `src/lib/services/sync-products.ts`, `prisma/schema.prisma`, `prisma/migrations/20260616120000_product_imt_id/migration.sql`, `prisma/migrations/20260616123000_ad_order_sum/migration.sql`, `prisma/migrations/20260616124500_product_imt_id_bigint/migration.sql`
+
 ## BUG-013: Stock risk classification did not show normal stock state
 
 Status:

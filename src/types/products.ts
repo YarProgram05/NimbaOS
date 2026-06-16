@@ -92,6 +92,7 @@ export interface SyncResult {
 export interface ProductRow {
   id: string
   nmId: number
+  imtId: number | null
   vendorCode: string
   vendorCodeLocal: string | null
   brand: string | null

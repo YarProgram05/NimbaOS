@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-06-16: fixed advertising campaign stats overcount for combined cards (`BUG-014`). Product sync now stores WB card `imtID` as nullable BigInt `products.imtId`; `/advertising/[campaignId]` rebuilds campaign stats and nm detail from `ad_campaign_nm_stats` for the primary combined card group, keeps only meaningful nm rows (ad contact or ad orders), and normalizes basket-only order rows to order count. Added `orderSum` to ad stat tables from WB fullstats `sum_price`, so article order sum is advertising-attributed instead of all WB orders. Backfilled `imtId` for all active-account products and `orderSum` for all existing ordered ad stat periods. For `WB Galioni (WB_2)`, `Кампания от 10.06.2026`, 2026-06-10 - 2026-06-14, local backfills now produce 6 articles, 31 baskets, 8 ad orders, and 16680.00 ad order sum.
+
 2026-06-07: fixed stock risk classification on `/stocks`. Risk now uses local DB only, combines recent non-return sales from `wb_sales` with sale quantities from `realization_reports` as a fallback, and calculates size-level risk from financial-report barcodes when available. `Нет остатка` is assigned to products with zero total sellable stock; positive stock with reasonable 14-120 day coverage is `В норме`; positive no-demand stock is `Нет продаж`; `Излишек` requires more than 120 days of coverage and at least 10 units. UI label changed from `Норма` to `В норме`, and the category filter now supports multiple selected categories.
 
 2026-06-04: fixed `BUG-012` missing cost prices after the Finance API migration. Finance report rows can contain lowercased `vendorCode`, while references preserve product-card casing. Report reference lookups now normalize vendor-code keys before matching. For 2026-06-02 - 2026-06-03, `парео зеленое/вискоз` now shows `1478.00` cost for two units, and no sold rows in either account have zero cost. A DB-only audit through 2026-06-03 found no net-bought product without a linked cost price.
@@ -44,6 +46,7 @@
 - Finance API may change vendor-code casing; report reference matching is normalized and must remain case-insensitive.
 - Very long `reports.period` ranges can still be slow because WB Statistics API is rate-limited; prefer shorter periods for forced orders backfill.
 - `reports.period` now also calls WB orders sync; respect the Statistics API rate limit and avoid wide historical ranges without confirmation.
+- WB Advertising fullstats can return several combined-card (`imtID`) groups inside one campaign and zero-contact nm basket rows. Campaign detail now filters to the primary `imtID`, keeps meaningful nm rows, and normalizes zero-contact order rows; existing ordered ad stat periods were backfilled for `orderSum`, but new data still depends on normal ad stats sync.
 
 - Не запускать production migrations и full historical sync без подтверждения.
 - WB advertising live API может возвращать 429/rate limits.
@@ -73,4 +76,4 @@
 
 ## Last Updated
 
-2026-06-07 - fixed stock risk classification and turnover sales source fallback.
+2026-06-16 - fixed advertising campaign detail filtering by primary combined-card group, meaningful nm rows, normalized baskets, advertising order sum, and all-campaign historical `orderSum` backfill.

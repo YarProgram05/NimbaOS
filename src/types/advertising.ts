@@ -116,6 +116,7 @@ export interface WbFullStatsAppType {
   cpc?: number
   spend?: number
   sum?: number
+  sum_price?: number
   atbs?: number
   orders?: number
   canceled?: number
@@ -133,6 +134,7 @@ export interface WbFullStatsDayItem {
   cpc?: number
   spend?: number
   sum?: number
+  sum_price?: number
   atbs?: number
   orders?: number
   canceled?: number
@@ -152,6 +154,7 @@ export interface WbFullStatsCampaign {
   cpc?: number
   spend?: number
   sum?: number
+  sum_price?: number
   atbs?: number
   orders?: number
   canceled?: number
@@ -283,6 +286,7 @@ export interface AdNmStatRow {
   spend: string
   orders: number
   cartAdds: number
+  adOrderSum: string
   cpo: string
   wbOrders: number
   wbOrderRevenue: string

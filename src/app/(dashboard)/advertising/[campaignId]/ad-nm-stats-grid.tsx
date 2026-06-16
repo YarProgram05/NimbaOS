@@ -29,6 +29,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
       clicks: sum.clicks + row.clicks,
       cartAdds: sum.cartAdds + row.cartAdds,
       adOrders: sum.adOrders + row.orders,
+      adOrderSum: sum.adOrderSum + parseMoney(row.adOrderSum),
       sales: sum.sales + row.sales,
       salesRevenue: sum.salesRevenue + parseMoney(row.salesRevenue),
     }),
@@ -38,6 +39,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
       clicks: 0,
       cartAdds: 0,
       adOrders: 0,
+      adOrderSum: 0,
       sales: 0,
       salesRevenue: 0,
     },
@@ -49,7 +51,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
         <Metric label="Затраты" value={formatMoney(totals.spend)} />
         <Metric label="Корзины" value={formatNumber(totals.cartAdds)} />
         <Metric label="Рекламные заказы" value={formatNumber(totals.adOrders)} />
-        <Metric label="Продажи" value={formatMoney(totals.salesRevenue)} />
+        <Metric label="Сумма заказов" value={formatMoney(totals.adOrderSum)} />
       </div>
 
       <div className="overflow-x-auto rounded-md border bg-muted/20">
@@ -68,7 +70,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
               <Head>Рекл. заказы</Head>
               <Head>CPO</Head>
               <Head>Заказы WB</Head>
-              <Head>Сумма заказов</Head>
+              <Head>Сумма рекл. заказов</Head>
               <Head>Продажи</Head>
               <Head>Выручка</Head>
               <Head>Возвраты</Head>
@@ -108,7 +110,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
                 <Cell>{formatNumber(row.orders)}</Cell>
                 <Cell>{formatMoney(row.cpo)}</Cell>
                 <Cell>{formatNumber(row.wbOrders)}</Cell>
-                <Cell>{formatMoney(row.wbOrderRevenue)}</Cell>
+                <Cell>{formatMoney(row.adOrderSum)}</Cell>
                 <Cell>{formatNumber(row.sales)}</Cell>
                 <Cell>{formatMoney(row.salesRevenue)}</Cell>
                 <Cell>{formatNumber(row.returns)}</Cell>

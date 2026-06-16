@@ -37,6 +37,15 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-WB-NIMBA-JUNE-PDF
+  Status: Done
+  Priority: High
+  Description: Подготовлен и пересобран PDF-отчет по `WB Nimba (WB_1)` за 2026-06-01 - 2026-06-12 с продажами, остатками, оборачиваемостью, ключевыми финансовыми метриками и выводами. Детские товары показаны как `артикул + размер`; риск-таблица ограничена парео/туниками и исключает снятые с торговли артикулы.
+  Next step: При необходимости отдельно разобрать причины низкого выкупа/отмен и излишков; не менять цены, рекламу или карточки без подтверждения.
+  Related reports/metrics: `daily_wb_report`, `stock_risk_report`, `Заказано руб.`, `ДРР`, `ROMI %`, `Оборачиваемость, дн.`
+  Related cabinets: `WB Nimba (WB_1)`.
+  Risks: `SALES_PLAN_PERIOD` не был покрыт за период, поэтому план/факт исключен из PDF; рекомендации осторожные.
+
 - ID: MKT-STOCK-RISK-DEFINITION
   Status: Done
   Priority: High

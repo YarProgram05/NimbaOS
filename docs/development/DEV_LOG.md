@@ -204,6 +204,32 @@ Fixed `Заказано руб.` freshness: report sync now also syncs WB orders
 
 Новые записи добавлять сверху. В начале сессии не читать целиком.
 
+## 2026-06-16 - Advertising combined-card stats filter
+
+### Summary
+Investigated `Кампания от 10.06.2026` for `WB Galioni (WB_2)`, 2026-06-10 - 2026-06-14. Local campaign totals matched public WB `adv/v3/fullstats`: 63 baskets and 10 orders. The nm rows belonged to three WB combined-card groups (`imtID`): primary `151000452` had all spend/views/clicks and 8 orders; two other groups had zero spend but contributed 15 baskets and 2 orders.
+
+### Files changed
+`prisma/schema.prisma`, `prisma/migrations/20260616120000_product_imt_id/migration.sql`, `src/lib/services/sync-products.ts`, `src/lib/actions/advertising.ts`, `src/types/products.ts`, `src/lib/actions/products.ts`, docs.
+
+### Commands run
+Read-only DB checks bounded to the campaign/date range; read-only WB Content API and Advertising fullstats checks; local `products.imtId` backfill for 64 Galioni products; `npx prisma migrate deploy`; `npx prisma generate`; `npm run type-check`; `npm run lint`.
+
+### Result
+Product sync now stores card `imtID` in `products.imtId`. Advertising campaign stats and nm detail now filter to the primary `imtID` when products have that data, falling back to old campaign totals when `imtId` is unavailable. The checked campaign now resolves to primary `imtID=151000452` and advertising orders 8 instead of campaign-wide 10.
+
+### Issues
+Public WB `adv/v3/fullstats` still returns 48 baskets for primary `imtID=151000452`, while the WB seller UI reportedly shows 31. This looks like a WB UI/public API basket deduplication mismatch; exact basket parity needs the source of the seller UI metric or a WB-supported grouped advertising endpoint.
+
+### Follow-up fix
+After opening campaign stats, the running app hit `Unknown field imtId for select statement on model Product` because the dev server still used an older Prisma Client. `src/lib/actions/advertising.ts` now loads advertising product metadata through raw SQL with a Prisma fallback, so campaign stats no longer hard-require regenerated Prisma model metadata at request validation time.
+
+### Second follow-up fix
+Seller UI showed 6 articles and 31 baskets, while primary `imtID` filtering still showed 15 articles and 48 baskets. The display logic now keeps only meaningful nm rows (ad contact or ad orders) and normalizes rows with no views/clicks/spend but with ad orders by using `orders` as basket count. Added `orderSum` columns to ad stat tables and sync mapping from WB fullstats `sum_price`; the article table now shows advertising order sum, not all WB order revenue. Backfilled current Galioni campaign/date range: 6 articles, 31 baskets, 8 ad orders, 16680.00 ad order sum.
+
+### Third follow-up fix
+Another campaign showed empty advertising order sum because old saved ad stat rows predated `orderSum`. Applied the `products.imtId` BigInt migration, regenerated Prisma Client, backfilled `imtId` for all active accounts (64 Galioni products, 87 Nimba products), and backfilled `orderSum` from WB fullstats for all existing campaign periods with ordered rows. Verification now shows 0 ordered ad nm rows and 0 ordered campaign stat rows missing `orderSum`; the checked Galioni campaign still resolves to 6 articles, 31 baskets, 8 ad orders, and 16680.00 ad order sum.
+
 ## 2026-05-25 — Morning report metrics prep
 
 ### Summary
