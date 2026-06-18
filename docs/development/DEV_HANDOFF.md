@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-06-18: fixed `BUG-015` code path for undercounted financial-report `Заказано руб.` on long periods. The report formula remains `Σ wb_orders.finishedPrice` including cancelled orders, but `REPORTS_PERIOD`/`SALES_PLAN_PERIOD` worker paths now force a full order fetch for the requested period instead of using an incremental `lastChangeDate` cursor from a potentially partial local range. `npm run type-check` passed. Concrete DB readback for `WB Nimba` and `WB Galioni`, 2026-01-01 - 2026-06-17, still needs a normal app-environment sync/readback because this shell has no `DATABASE_URL` and agents must not read `.env`.
+
 2026-06-16: fixed advertising campaign stats overcount for combined cards (`BUG-014`). Product sync now stores WB card `imtID` as nullable BigInt `products.imtId`; `/advertising/[campaignId]` rebuilds campaign stats and nm detail from `ad_campaign_nm_stats` for the primary combined card group, keeps only meaningful nm rows (ad contact or ad orders), and normalizes basket-only order rows to order count. Added `orderSum` to ad stat tables from WB fullstats `sum_price`, so article order sum is advertising-attributed instead of all WB orders. Backfilled `imtId` for all active-account products and `orderSum` for all existing ordered ad stat periods. For `WB Galioni (WB_2)`, `Кампания от 10.06.2026`, 2026-06-10 - 2026-06-14, local backfills now produce 6 articles, 31 baskets, 8 ad orders, and 16680.00 ad order sum.
 
 2026-06-07: fixed stock risk classification on `/stocks`. Risk now uses local DB only, combines recent non-return sales from `wb_sales` with sale quantities from `realization_reports` as a fallback, and calculates size-level risk from financial-report barcodes when available. `Нет остатка` is assigned to products with zero total sellable stock; positive stock with reasonable 14-120 day coverage is `В норме`; positive no-demand stock is `Нет продаж`; `Излишек` requires more than 120 days of coverage and at least 10 units. UI label changed from `Норма` to `В норме`, and the category filter now supports multiple selected categories.
@@ -43,6 +45,7 @@
 ## Active Development Risks
 
 - Financial report sync uses live-verified Finance API `sales-reports/detailed`; continue monitoring `204 No data` and exact `report.sourceApi` in future job results.
+- `Заказано руб.` depends on complete local `wb_orders`; long manual report periods now force full order fetches and can be slow/rate-limited, but must not fall back to partial incremental cursors.
 - Finance API may change vendor-code casing; report reference matching is normalized and must remain case-insensitive.
 - Very long `reports.period` ranges can still be slow because WB Statistics API is rate-limited; prefer shorter periods for forced orders backfill.
 - `reports.period` now also calls WB orders sync; respect the Statistics API rate limit and avoid wide historical ranges without confirmation.
@@ -76,4 +79,4 @@
 
 ## Last Updated
 
-2026-06-16 - fixed advertising campaign detail filtering by primary combined-card group, meaningful nm rows, normalized baskets, advertising order sum, and all-campaign historical `orderSum` backfill.
+2026-06-18 - fixed long-period ordered-rubles undercount by forcing full order refresh for requested report/sales-plan periods.

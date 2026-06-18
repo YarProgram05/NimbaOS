@@ -54,9 +54,9 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 
 - `realization_reports` sync uses live-verified WB Finance API `POST /api/finance/v1/sales-reports/detailed` and normalizes camelCase/string-money fields before the existing Prisma mapper. Future job results expose `report.sourceApi` for endpoint audits.
 - Finance API may lowercase `vendorCode`; financial report reference lookups normalize vendor-code casing, Unicode form and surrounding whitespace before matching `cost_prices` and related references.
-- `Заказано руб.` needs fresh `wb_orders.finishedPrice` for all order rows, including cancelled orders; normal `reports.period` sync now refreshes this source for the selected period.
+- `Заказано руб.` needs fresh `wb_orders.finishedPrice` for all order rows, including cancelled orders; normal `reports.period` sync now forces a full order fetch for the selected period so long ranges do not reuse partial incremental cursors.
 - Long-period `realization_reports` calculations.
-- `Заказано руб.` needs fresh `wb_orders`; check `SALES_PLAN_PERIOD` coverage for the selected period.
+- `Заказано руб.` needs fresh `wb_orders`; after code changes on 2026-06-18, verify suspicious long periods by rerunning `reports.period` for the exact account/range and then reading the report from DB.
 - `paid_storage` joins for storage-only articles.
 - `ad_campaign_nm_stats` completeness and long-period ad allocation.
 - Local ad stats that existed on 2026-06-16 were backfilled for ordered rows; other database copies with old ad stats need a one-time `orderSum` backfill or bounded ad stats resync.

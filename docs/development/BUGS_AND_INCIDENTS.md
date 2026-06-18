@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-015: Financial report ordered rubles undercounted on long periods
+
+Status:
+Fixed in code; target account totals need DB sync/readback in the normal app environment.
+
+Symptoms:
+For `WB Nimba`, financial report period 2026-01-01 - 2026-06-17 showed `Заказано руб.` = 2004577.64 and `Продажа` = 2913759.88. Since `Заказано руб.` is based on WB orders, this indicated an incomplete local `wb_orders` source for the selected period.
+
+Affected area:
+Financial report sync path in `src/lib/queue/sync-processor.ts`; calculated report still reads `wb_orders.finishedPrice` in `src/lib/services/report-calculator.ts`.
+
+Investigation:
+`calculateReport` correctly sums all local `wb_orders.finishedPrice` rows, including cancelled orders. The bug was in refresh behavior: after the BullMQ lock incident, `reports.period` only forced a full orders backfill for periods up to 31 days. For longer ranges, `syncOrders` could start from the newest local `lastChangeDate` inside an already partial period, so older missing orders were never loaded while report coverage still looked complete.
+
+Fix:
+`REPORTS_PERIOD` and `SALES_PLAN_PERIOD` worker paths now force a full order fetch for the requested period. This avoids reusing an incremental cursor from a partial local order set and prevents silent undercounting of `Заказано руб.`.
+
+Verification:
+`npm run type-check` passed. DB readback for `WB Nimba` and `WB Galioni` 2026-01-01 - 2026-06-17 was not run in this session because `DATABASE_URL` was not present in the shell and `.env` must not be read or printed by agents. After deploying/restarting the worker, run a normal `reports.period` sync for each account and re-open `/reports` for that period to verify the totals.
+
+Related files:
+`src/lib/queue/sync-processor.ts`, `src/lib/services/sync-orders.ts`, `src/lib/services/report-calculator.ts`
+
 ## BUG-014: Advertising campaign stats mixed several WB combined-card groups
 
 Status:

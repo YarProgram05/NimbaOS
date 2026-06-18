@@ -34,6 +34,14 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-015-FINANCE-ORDERED-RUB-LONG-PERIOD
+  Status: Done in code
+  Priority: High
+  Description: Fixed long-period financial-report `Заказано руб.` undercount caused by report sync reusing incremental order cursors from partial `wb_orders` ranges.
+  Next step: In the normal app environment, run `reports.period` for `WB Nimba` and `WB Galioni`, 2026-01-01 - 2026-06-17, then verify `/reports` totals.
+  Related files: `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-orders.ts`, `src/lib/services/report-calculator.ts`.
+  Risks: Wide order backfills use the WB Statistics API and can be slow/rate-limited; do not start unrelated full historical syncs.
+
 - ID: BUG-014-AD-COMBINED-CARD-STATS
   Status: Done
   Priority: High

@@ -49,8 +49,6 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
 }
 
 const SCHEDULED_START_GRACE_MINUTES = 10
-const MAX_FORCE_ORDERS_BACKFILL_DAYS = 31
-
 function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`)
 }
@@ -63,16 +61,6 @@ function addDays(value: Date, days: number): Date {
   const next = new Date(value)
   next.setUTCDate(next.getUTCDate() + days)
   return next
-}
-
-function daysInclusive(dateFrom: string, dateTo: string): number {
-  const from = parseDate(dateFrom)
-  const to = parseDate(dateTo)
-  return Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1
-}
-
-function shouldForceOrdersBackfill(dateFrom: string, dateTo: string): boolean {
-  return daysInclusive(dateFrom, dateTo) <= MAX_FORCE_ORDERS_BACKFILL_DAYS
 }
 
 function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
@@ -138,7 +126,9 @@ async function runReportsJob(data: Extract<SyncJobData, { kind: typeof SYNC_JOB_
   const storage = await syncPaidStorage(data.wbAccountId, dateFrom, dateTo)
   const orders = await syncOrders(data.wbAccountId, dateFrom, {
     dateTo,
-    forceFullFetch: shouldForceOrdersBackfill(dateFrom, dateTo),
+    // Financial reports must not reuse an incremental cursor from a partial
+    // local order set: that silently undercounts "Заказано руб.".
+    forceFullFetch: true,
   })
   if (report.maxReportDate && report.maxReportDate >= dateFrom) {
     await markSyncCoverage(
@@ -186,7 +176,10 @@ async function runOnePlan(plan: {
   const from = formatDate(dateFrom)
   const to = formatDate(dateTo)
   const nmIds = Array.from(new Set(plan.items.map((item) => item.nmId)))
-  const orders = syncOrdersAndSales ? await syncOrders(plan.wbAccountId, from, { dateTo: to }) : null
+  const orders = syncOrdersAndSales ? await syncOrders(plan.wbAccountId, from, {
+    dateTo: to,
+    forceFullFetch: true,
+  }) : null
   const sales = syncOrdersAndSales ? await syncSales(plan.wbAccountId, from) : null
   const funnel = await syncFunnel(plan.wbAccountId, nmIds, from, to)
 
@@ -205,7 +198,7 @@ async function runSalesPlanJob(data: Extract<SyncJobData, { kind: typeof SYNC_JO
     ? {
         orders: await syncOrders(data.wbAccountId, period.dateFrom, {
           dateTo: period.dateTo,
-          forceFullFetch: shouldForceOrdersBackfill(period.dateFrom, period.dateTo),
+          forceFullFetch: true,
         }),
         sales: await syncSales(data.wbAccountId, period.dateFrom),
       }

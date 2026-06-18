@@ -1,5 +1,22 @@
 # Development Log
 
+## 2026-06-18 - Financial report ordered rub long-period repair
+
+### Summary
+Fixed the code path that let long financial-report periods show understated `Заказано руб.`. The calculation still uses all local `wb_orders.finishedPrice`, including cancellations, but report/sales-plan worker sync now performs a full order fetch for the requested period instead of starting from a potentially partial local `lastChangeDate` cursor.
+
+### Files changed
+`src/lib/queue/sync-processor.ts`, docs.
+
+### Commands run
+`npm run type-check`.
+
+### Result
+The 31-day forced-backfill cap is no longer used for `REPORTS_PERIOD`/`SALES_PLAN_PERIOD` order refreshes. Wide periods may take longer and hit WB Statistics rate limits, but they should not silently reuse incomplete local orders.
+
+### Issues
+DB readback for `WB Nimba` and `WB Galioni`, 2026-01-01 - 2026-06-17, was not possible in this shell because `DATABASE_URL` was not set and `.env` is off-limits. Run the normal report sync in the app environment, then verify the totals on `/reports`.
+
 ## 2026-06-07 - Stock risk classification fixed
 
 ### Summary
