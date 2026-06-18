@@ -6,6 +6,8 @@
 
 ## Last Development Session Summary
 
+2026-06-19: implemented dated article versions to prevent historical financial reports from mixing old and new physical products under the same WB `nmId`. Added Prisma model/table `article_versions`, `/references` tab `Версии артикулов`, server actions with non-overlap validation, and `calculateReport` version resolution by report-row date. Reports now split one `nmId` into separate rows when a selected period crosses a version change; `ArticleVersion.costPrice` overrides regular `cost_prices` only for that version/date range. Ran `npx prisma generate`, `npm run type-check`, `npx prisma migrate deploy` against local `localhost:5432/wb_cabinet`, and a DB-only Nimba report smoke check. Existing versions were not backfilled; user should manually enter known transitions such as old `Парео синяя ракушка` to new `парео синяя разводы` with exact change date/cost.
+
 2026-06-18: fixed `BUG-015` code path for undercounted financial-report `Заказано руб.` on long periods. The report formula remains `Σ wb_orders.finishedPrice` including cancelled orders, but `REPORTS_PERIOD`/`SALES_PLAN_PERIOD` worker paths now force a full order fetch for the requested period instead of using an incremental `lastChangeDate` cursor from a potentially partial local range. `npm run type-check` passed. Concrete DB readback for `WB Nimba` and `WB Galioni`, 2026-01-01 - 2026-06-17, still needs a normal app-environment sync/readback because this shell has no `DATABASE_URL` and agents must not read `.env`.
 
 2026-06-16: fixed advertising campaign stats overcount for combined cards (`BUG-014`). Product sync now stores WB card `imtID` as nullable BigInt `products.imtId`; `/advertising/[campaignId]` rebuilds campaign stats and nm detail from `ad_campaign_nm_stats` for the primary combined card group, keeps only meaningful nm rows (ad contact or ad orders), and normalizes basket-only order rows to order count. Added `orderSum` to ad stat tables from WB fullstats `sum_price`, so article order sum is advertising-attributed instead of all WB orders. Backfilled `imtId` for all active-account products and `orderSum` for all existing ordered ad stat periods. For `WB Galioni (WB_2)`, `Кампания от 10.06.2026`, 2026-06-10 - 2026-06-14, local backfills now produce 6 articles, 31 baskets, 8 ad orders, and 16680.00 ad order sum.
@@ -79,4 +81,4 @@
 
 ## Last Updated
 
-2026-06-18 - fixed long-period ordered-rubles undercount by forcing full order refresh for requested report/sales-plan periods.
+2026-06-19 - added dated article versions for historical product identity across financial reports, advertising article stats, sales-plan metrics, analytics chart, and feedback display.

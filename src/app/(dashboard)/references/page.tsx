@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import {
   getCostPriceItems,
+  getArticleVersions,
   getSelfPurchases,
   getExternalAds,
   getArticleOverrides,
@@ -13,7 +14,7 @@ import {
 } from '@/lib/actions/references'
 import { ReferencesClient } from './references-client'
 
-const VALID_TABS = ['cost-price', 'self-purchases', 'external-ads', 'overrides', 'reply-templates'] as const
+const VALID_TABS = ['cost-price', 'article-versions', 'self-purchases', 'external-ads', 'overrides', 'reply-templates'] as const
 type TabValue = (typeof VALID_TABS)[number]
 
 interface ReferencesPageProps {
@@ -62,9 +63,10 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
     : 'cost-price'
 
   // ── Fetch all datasets in parallel ──────────────────────────────────────────
-  const [costPriceItems, selfPurchases, externalAds, articleOverrides, replyTemplateGroups, vendorCodes] =
+  const [costPriceItems, articleVersions, selfPurchases, externalAds, articleOverrides, replyTemplateGroups, vendorCodes] =
     await Promise.all([
       getCostPriceItems(wbAccountId),
+      getArticleVersions(wbAccountId),
       getSelfPurchases(wbAccountId),
       getExternalAds(wbAccountId),
       getArticleOverrides(wbAccountId),
@@ -77,6 +79,7 @@ export default async function ReferencesPage({ searchParams }: ReferencesPagePro
       wbAccountId={wbAccountId}
       initialTab={tab}
       costPriceItems={costPriceItems}
+      articleVersions={articleVersions}
       selfPurchases={selfPurchases}
       externalAds={externalAds}
       articleOverrides={articleOverrides}

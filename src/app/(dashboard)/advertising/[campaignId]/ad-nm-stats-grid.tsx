@@ -81,7 +81,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.nmId} className="border-b last:border-b-0 hover:bg-muted/20">
+              <tr key={`${row.nmId}-${row.vendorCode ?? 'base'}`} className="border-b last:border-b-0 hover:bg-muted/20">
                 <td className="sticky left-0 z-10 border-r bg-background/95 px-3 py-2 backdrop-blur">
                   <div className="flex min-w-0 items-center gap-2">
                     {row.photoUrl ? (

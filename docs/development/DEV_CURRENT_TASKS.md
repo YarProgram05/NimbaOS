@@ -34,6 +34,22 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: TASK-ARTICLE-VERSIONS-CROSS-SECTIONS
+  Status: Done
+  Priority: High
+  Description: Extended dated article-version resolution from financial reports to advertising article stats, sales-plan metrics/detail, analytics comparison chart, and reviews/questions display.
+  Next step: In `/references`, manually add known version periods/costs for product model changes under the same WB `nmId`; then refresh affected sections for the selected period.
+  Related files: `src/lib/services/article-versions.ts`, `src/lib/actions/advertising.ts`, `src/lib/services/plan-calculator.ts`, `src/lib/actions/sales-plan.ts`, `src/lib/services/feedback.ts`, `src/app/(dashboard)/analytics/chart`.
+  Risks: Existing historical transitions are not auto-backfilled; exact change dates and version-specific cost prices must be entered by the user.
+
+- ID: BUG-016-ARTICLE-VERSIONS-HISTORY
+  Status: Done
+  Priority: High
+  Description: Добавлены датированные версии артикулов, чтобы финансовый отчет не смешивал старую и новую физическую модель под одним WB `nmId`. Версия задает период, название в отчете и опциональную себестоимость версии.
+  Next step: В `/references?tab=article-versions` вручную завести реальные смены моделей/принтов с точными датами и себестоимостью; например разделить старое `Парео синяя ракушка` и новое `парео синяя разводы`.
+  Related files: `prisma/schema.prisma`, `prisma/migrations/20260619120000_article_versions/migration.sql`, `src/lib/services/report-calculator.ts`, `src/lib/actions/references.ts`, `src/app/(dashboard)/references/article-version-tab.tsx`.
+  Risks: Если версии не заведены вручную, отчеты будут вести себя как раньше. Периоды версий одного `nmId` не должны пересекаться; server actions это проверяют.
+
 - ID: BUG-015-FINANCE-ORDERED-RUB-LONG-PERIOD
   Status: Done in code
   Priority: High

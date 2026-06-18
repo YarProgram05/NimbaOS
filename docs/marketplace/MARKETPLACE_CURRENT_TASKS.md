@@ -37,6 +37,15 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-BOTH-CABINETS-ARTICLE-PROFIT-XLSX
+  Status: Done
+  Priority: High
+  Description: Подготовлен Excel `output/excel/wb_article_profitability_2026-01-01_2026-06-17.xlsx` по обоим кабинетам: отдельные листы `WB Galioni` и `WB Nimba`, сводка, ранги по ОП/выручке, выкупы, выкупаемость, ключевые факторы прибыльности и отдельный лист `Не продавались`. Для Nimba размерные позиции показаны как `артикул + размер`.
+  Next step: При необходимости пересобрать рекламные метрики после подтвержденной синхронизации `ADVERTISING_STATS` за январь-март.
+  Related reports/metrics: `calculateReport`, `Заказано руб.`, `ОП`, `Выручка`, `Выкуп %`, `ДРР`, no-sale products.
+  Related cabinets: `WB Galioni (WB_2)`, `WB Nimba (WB_1)`.
+  Risks: `REPORTS_PERIOD` покрыт полностью за 2026-01-01 - 2026-06-17; `ADVERTISING_STATS` покрывает не весь период, поэтому рекламные выводы осторожные.
+
 - ID: MKT-WB-NIMBA-JUNE-PDF
   Status: Done
   Priority: High

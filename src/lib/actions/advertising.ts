@@ -22,6 +22,12 @@ import {
   enqueueAdStatsSyncAction,
   enqueueAdClustersSyncAction,
 } from '@/lib/actions/sync'
+import {
+  articleVersionGroupKey,
+  buildArticleVersionMap,
+  findArticleVersionsForPeriod,
+  resolveArticleVersion,
+} from '@/lib/services/article-versions'
 import type { ActionResult } from '@/types'
 import type { EnqueuedSyncJob } from '@/types/sync'
 import {
@@ -186,9 +192,11 @@ function mapStatRow(row: {
   }
 }
 
-function emptyNmAggregate(nmId: number) {
+function emptyNmAggregate(nmId: number, key: string, vendorCode: string | null) {
   return {
+    key,
     nmId,
+    vendorCode,
     views: 0,
     clicks: 0,
     spend: 0,
@@ -630,8 +638,12 @@ export async function getCampaignNmStatsAction(
     })
 
     const allNmIds = Array.from(new Set(nmRows.map((row) => row.nmId)))
-    const products = await getAdvertisingProducts(campaign.wbAccountId, allNmIds, true)
+    const [products, articleVersions] = await Promise.all([
+      getAdvertisingProducts(campaign.wbAccountId, allNmIds, true),
+      findArticleVersionsForPeriod(campaign.wbAccountId, from, to),
+    ])
     const productsByNm = new Map(products.map((product) => [product.nmId, product]))
+    const versionsByNm = buildArticleVersionMap(articleVersions)
     const rowsForAggregation = (products.some((product) => product.imtId !== null)
       ? filterRowsToPrimaryImt(nmRows, productsByNm)
       : nmRows)
@@ -647,24 +659,31 @@ export async function getCampaignNmStatsAction(
       rowsByDayAndNm.set(key, group)
     }
 
-    const aggregates = new Map<number, ReturnType<typeof emptyNmAggregate>>()
+    const aggregates = new Map<string, ReturnType<typeof emptyNmAggregate>>()
     for (const rows of Array.from(rowsByDayAndNm.values())) {
       const totalRows = rows.filter((row) => row.source === 'total')
       const rowsForTotals = totalRows.length > 0 ? totalRows : rows.filter((row) => row.source !== 'total')
 
       for (const row of rowsForTotals) {
-        const aggregate = aggregates.get(row.nmId) ?? emptyNmAggregate(row.nmId)
+        const version = resolveArticleVersion(versionsByNm, row.nmId, row.date)
+        const key = articleVersionGroupKey(row.nmId, version)
+        const product = productsByNm.get(row.nmId)
+        const aggregate = aggregates.get(key) ?? emptyNmAggregate(
+          row.nmId,
+          key,
+          version?.vendorCode ?? product?.vendorCode ?? null,
+        )
         aggregate.views += row.views
         aggregate.clicks += row.clicks
         aggregate.spend += Number(row.spend)
         aggregate.orders += row.orders
         aggregate.cartAdds += displayCartAdds(row)
         aggregate.orderSum += adOrderSumByKey.get(`${serializeDate(row.date)}:${row.source}:${row.nmId}`) ?? 0
-        aggregates.set(row.nmId, aggregate)
+        aggregates.set(key, aggregate)
       }
     }
 
-    const nmIds = Array.from(aggregates.keys())
+    const nmIds = Array.from(new Set(Array.from(aggregates.values()).map((aggregate) => aggregate.nmId)))
     if (nmIds.length === 0) return { success: true, data: [] }
 
     const [wbOrders, wbSales, funnelRows] = await Promise.all([
@@ -674,7 +693,7 @@ export async function getCampaignNmStatsAction(
           nmId: { in: nmIds },
           date: { gte: from, lte: to },
         },
-        select: { nmId: true, finishedPrice: true, isCancel: true },
+        select: { nmId: true, date: true, finishedPrice: true, isCancel: true },
       }),
       prisma.wbSale.findMany({
         where: {
@@ -682,7 +701,7 @@ export async function getCampaignNmStatsAction(
           nmId: { in: nmIds },
           date: { gte: from, lte: to },
         },
-        select: { nmId: true, priceWithDisc: true, isReturn: true },
+        select: { nmId: true, date: true, priceWithDisc: true, isReturn: true },
       }),
       prisma.wbFunnelStat.findMany({
         where: {
@@ -692,6 +711,7 @@ export async function getCampaignNmStatsAction(
         },
         select: {
           nmId: true,
+          date: true,
           openCount: true,
           addToCartCount: true,
           cartCount: true,
@@ -701,9 +721,9 @@ export async function getCampaignNmStatsAction(
       }),
     ])
 
-    const ordersByNm = new Map<number, { count: number; revenue: number }>()
-    const salesByNm = new Map<number, { sales: number; revenue: number; returns: number }>()
-    const funnelByNm = new Map<number, {
+    const ordersByKey = new Map<string, { count: number; revenue: number }>()
+    const salesByKey = new Map<string, { sales: number; revenue: number; returns: number }>()
+    const funnelByKey = new Map<string, {
       openCount: number
       addToCartCount: number
       cartCount: number
@@ -713,24 +733,27 @@ export async function getCampaignNmStatsAction(
 
     for (const order of wbOrders) {
       if (order.isCancel) continue
-      const aggregate = ordersByNm.get(order.nmId) ?? { count: 0, revenue: 0 }
+      const key = articleVersionGroupKey(order.nmId, resolveArticleVersion(versionsByNm, order.nmId, order.date))
+      const aggregate = ordersByKey.get(key) ?? { count: 0, revenue: 0 }
       aggregate.count += 1
       aggregate.revenue += Number(order.finishedPrice)
-      ordersByNm.set(order.nmId, aggregate)
+      ordersByKey.set(key, aggregate)
     }
 
     for (const sale of wbSales) {
-      const aggregate = salesByNm.get(sale.nmId) ?? { sales: 0, revenue: 0, returns: 0 }
+      const key = articleVersionGroupKey(sale.nmId, resolveArticleVersion(versionsByNm, sale.nmId, sale.date))
+      const aggregate = salesByKey.get(key) ?? { sales: 0, revenue: 0, returns: 0 }
       if (sale.isReturn) aggregate.returns += 1
       else {
         aggregate.sales += 1
         aggregate.revenue += Number(sale.priceWithDisc)
       }
-      salesByNm.set(sale.nmId, aggregate)
+      salesByKey.set(key, aggregate)
     }
 
     for (const row of funnelRows) {
-      const aggregate = funnelByNm.get(row.nmId) ?? {
+      const key = articleVersionGroupKey(row.nmId, resolveArticleVersion(versionsByNm, row.nmId, row.date))
+      const aggregate = funnelByKey.get(key) ?? {
         openCount: 0,
         addToCartCount: 0,
         cartCount: 0,
@@ -742,15 +765,15 @@ export async function getCampaignNmStatsAction(
       aggregate.cartCount += row.cartCount
       aggregate.ordersCount += row.ordersCount
       aggregate.ordersSumRub += Number(row.ordersSumRub)
-      funnelByNm.set(row.nmId, aggregate)
+      funnelByKey.set(key, aggregate)
     }
 
     const data = Array.from(aggregates.values())
       .map((aggregate) => {
         const product = productsByNm.get(aggregate.nmId)
-        const orderMetrics = ordersByNm.get(aggregate.nmId) ?? { count: 0, revenue: 0 }
-        const saleMetrics = salesByNm.get(aggregate.nmId) ?? { sales: 0, revenue: 0, returns: 0 }
-        const funnelMetrics = funnelByNm.get(aggregate.nmId) ?? {
+        const orderMetrics = ordersByKey.get(aggregate.key) ?? { count: 0, revenue: 0 }
+        const saleMetrics = salesByKey.get(aggregate.key) ?? { sales: 0, revenue: 0, returns: 0 }
+        const funnelMetrics = funnelByKey.get(aggregate.key) ?? {
           openCount: 0,
           addToCartCount: 0,
           cartCount: 0,
@@ -760,7 +783,7 @@ export async function getCampaignNmStatsAction(
 
         return {
           nmId: aggregate.nmId,
-          vendorCode: product?.vendorCode ?? null,
+          vendorCode: aggregate.vendorCode ?? product?.vendorCode ?? null,
           brandName: product?.brand ?? null,
           subjectName: product?.category ?? null,
           photoUrl: product?.photoUrl ?? null,

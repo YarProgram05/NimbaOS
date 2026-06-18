@@ -1,4 +1,10 @@
 import { prisma } from '@/lib/db'
+import {
+  articleVersionGroupKey,
+  buildArticleVersionMap,
+  findArticleVersionsForPeriod,
+  resolveArticleVersion,
+} from '@/lib/services/article-versions'
 import type {
   DailyMetrics,
   ArticleSummary,
@@ -39,6 +45,10 @@ function dateKey(dt: Date): string {
   return dt.toISOString().slice(0, 10)
 }
 
+function parseDateKey(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
 // ── Main calculator ─────────────────────────────────────────────
 
 export async function calculatePlanDetail(
@@ -51,7 +61,7 @@ export async function calculatePlanDetail(
   const dto = new Date(dateTo)
 
   // 1. Parallel DB queries
-  const [plan, orders, sales, funnelStats, products] = await Promise.all([
+  const [plan, orders, sales, funnelStats, products, articleVersions] = await Promise.all([
     prisma.salesPlan.findUniqueOrThrow({
       where: { id: planId },
       include: { items: true },
@@ -82,9 +92,11 @@ export async function calculatePlanDetail(
       where: { wbAccountId },
       select: { nmId: true, photoUrl: true, category: true },
     }),
+    findArticleVersionsForPeriod(wbAccountId, dfrom, dto),
   ])
 
   const productMap = new Map(products.map((p) => [p.nmId, p]))
+  const versionsByNm = buildArticleVersionMap(articleVersions)
 
   // 2. Index orders by nmId → date
   type OrderAgg = { revenue: number; count: number }
@@ -125,81 +137,100 @@ export async function calculatePlanDetail(
   const today = new Date().toISOString().slice(0, 10)
   const daysElapsed = allDates.filter((d) => d <= today).length || 1
 
-  const articles: ArticleDetailData[] = plan.items.map((item) => {
+  const articles: ArticleDetailData[] = plan.items.flatMap((item) => {
     const prod = productMap.get(item.nmId)
-    let factMonthBought = 0
-    let revenueOrdersTotal = 0
-    let revenueSalesTotal = 0
-    let ordersCountTotal = 0
+    const groups = new Map<string, { vendorCode: string; dates: string[] }>()
 
-    const dailyBreakdown: DailyMetrics[] = allDates.map((date) => {
-      const key = `${item.nmId}:${date}`
+    for (const date of allDates) {
+      const version = resolveArticleVersion(versionsByNm, item.nmId, parseDateKey(date))
+      const key = articleVersionGroupKey(item.nmId, version)
+      const group = groups.get(key) ?? {
+        vendorCode: version?.vendorCode ?? item.vendorCode,
+        dates: [],
+      }
+      group.dates.push(date)
+      groups.set(key, group)
+    }
 
-      // Orders
-      const orderAgg = orderIndex.get(key)
-      const revenueOrders = orderAgg?.revenue ?? 0
-      const ordersCount = orderAgg?.count ?? 0
+    return Array.from(groups.values()).map((group) => {
+      let factMonthBought = 0
+      let revenueOrdersTotal = 0
+      let revenueSalesTotal = 0
+      let ordersCountTotal = 0
 
-      // Sales
-      const saleAgg = saleIndex.get(key)
-      const revenueSales = saleAgg?.revenue ?? 0
-      const boughtQty = saleAgg?.count ?? 0
+      const dailyBreakdown: DailyMetrics[] = group.dates.map((date) => {
+        const key = `${item.nmId}:${date}`
 
-      // Avg price
-      const avgPrice = boughtQty > 0 ? revenueSales / boughtQty : 0
+        // Orders
+        const orderAgg = orderIndex.get(key)
+        const revenueOrders = orderAgg?.revenue ?? 0
+        const ordersCount = orderAgg?.count ?? 0
 
-      // Funnel
-      const funnel = funnelIndex.get(key)
-      const visits = funnel ? d(funnel.openCount) : 0
-      const cartPercent = funnel ? d(funnel.addToCartConversion) : 0
-      const cartQty = funnel ? d(funnel.cartCount) : 0
-      const orderPercent = funnel ? d(funnel.cartToOrderConversion) : 0
+        // Sales
+        const saleAgg = saleIndex.get(key)
+        const revenueSales = saleAgg?.revenue ?? 0
+        const boughtQty = saleAgg?.count ?? 0
 
-      // Accumulate totals
-      factMonthBought += boughtQty
-      revenueOrdersTotal += revenueOrders
-      revenueSalesTotal += revenueSales
-      ordersCountTotal += ordersCount
+        // Avg price
+        const avgPrice = boughtQty > 0 ? revenueSales / boughtQty : 0
+
+        // Funnel
+        const funnel = funnelIndex.get(key)
+        const visits = funnel ? d(funnel.openCount) : 0
+        const cartPercent = funnel ? d(funnel.addToCartConversion) : 0
+        const cartQty = funnel ? d(funnel.cartCount) : 0
+        const orderPercent = funnel ? d(funnel.cartToOrderConversion) : 0
+
+        // Accumulate totals
+        factMonthBought += boughtQty
+        revenueOrdersTotal += revenueOrders
+        revenueSalesTotal += revenueSales
+        ordersCountTotal += ordersCount
+
+        return {
+          date,
+          revenueOrders: toFixed2(revenueOrders),
+          ordersCount,
+          revenueSales: toFixed2(revenueSales),
+          boughtQty,
+          avgPrice: toFixed2(avgPrice),
+          visits,
+          cartPercent: toFixed4(cartPercent),
+          cartQty,
+          orderPercent: toFixed4(orderPercent),
+        }
+      })
+
+      const hasSplitVersions = groups.size > 1
+      const planMonth = hasSplitVersions && totalDays > 0
+        ? Number((item.plannedQty * (group.dates.length / totalDays)).toFixed(2))
+        : item.plannedQty
+      const planDay = group.dates.length > 0 ? planMonth / group.dates.length : 0
+      const groupDaysElapsed = group.dates.filter((date) => date <= today).length || daysElapsed
+      const factDay = groupDaysElapsed > 0 ? factMonthBought / groupDaysElapsed : 0
+
+      const summary: ArticleSummary = {
+        planMonth,
+        factMonth: factMonthBought,
+        planDay: toFixed2(planDay),
+        factDay: toFixed2(factDay),
+        revenueOrdersTotal: toFixed2(revenueOrdersTotal),
+        revenueSalesTotal: toFixed2(revenueSalesTotal),
+        ordersCountTotal,
+      }
 
       return {
-        date,
-        revenueOrders: toFixed2(revenueOrders),
-        ordersCount,
-        revenueSales: toFixed2(revenueSales),
-        boughtQty,
-        avgPrice: toFixed2(avgPrice),
-        visits,
-        cartPercent: toFixed4(cartPercent),
-        cartQty,
-        orderPercent: toFixed4(orderPercent),
+        nmId: item.nmId,
+        vendorCode: group.vendorCode,
+        photoUrl: prod?.photoUrl ?? null,
+        category: prod?.category ?? null,
+        plannedQty: planMonth,
+        price: item.price.toString(),
+        buyoutPercent: item.buyoutPercent.toString(),
+        summary,
+        dailyBreakdown,
       }
     })
-
-    const planMonth = item.plannedQty
-    const planDay = totalDays > 0 ? planMonth / totalDays : 0
-    const factDay = daysElapsed > 0 ? factMonthBought / daysElapsed : 0
-
-    const summary: ArticleSummary = {
-      planMonth,
-      factMonth: factMonthBought,
-      planDay: toFixed2(planDay),
-      factDay: toFixed2(factDay),
-      revenueOrdersTotal: toFixed2(revenueOrdersTotal),
-      revenueSalesTotal: toFixed2(revenueSalesTotal),
-      ordersCountTotal,
-    }
-
-    return {
-      nmId: item.nmId,
-      vendorCode: item.vendorCode,
-      photoUrl: prod?.photoUrl ?? null,
-      category: prod?.category ?? null,
-      plannedQty: item.plannedQty,
-      price: item.price.toString(),
-      buyoutPercent: item.buyoutPercent.toString(),
-      summary,
-      dailyBreakdown,
-    }
   })
 
   return {

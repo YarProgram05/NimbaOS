@@ -275,8 +275,8 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
   }
 
   // ── Get article metrics data ──────────────────────────────────────────
-  function getArticleData(nmId: number): ArticleDetailData | undefined {
-    return metricsData?.articles.find((a) => a.nmId === nmId)
+  function getArticleData(nmId: number): ArticleDetailData[] {
+    return metricsData?.articles.filter((a) => a.nmId === nmId) ?? []
   }
 
   // ── Sort ────────────────────────────────────────────────────────────────
@@ -541,10 +541,10 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                 const isDirty = dirty.has(item.id)
                 const isSaving = saving.has(item.id)
                 const isExpanded = expandedItems.has(item.id)
-                const articleData = metricsData ? getArticleData(item.nmId) : undefined
+                const articleData = metricsData ? getArticleData(item.nmId) : []
 
                 // Fact completion percentage
-                const factMonth = articleData?.summary.factMonth ?? 0
+                const factMonth = articleData.reduce((sum, article) => sum + article.summary.factMonth, 0)
                 const planMonth = item.plannedQty
                 const completionPct = planMonth > 0 ? Math.round((factMonth / planMonth) * 100) : 0
 
@@ -656,11 +656,16 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                       </td>
                     </tr>
                     {/* Expanded detail grid */}
-                    {isExpanded && articleData && (
+                    {isExpanded && articleData.length > 0 && (
                       <tr key={`${item.id}-detail`}>
                         <td colSpan={metricsData ? 12 : 9} className="p-0">
-                          <div className="px-4 py-3 bg-muted/10 border-t">
-                            <ArticleDetailGrid article={articleData} />
+                          <div className="space-y-3 px-4 py-3 bg-muted/10 border-t">
+                            {articleData.map((article) => (
+                              <div key={`${article.nmId}-${article.vendorCode}`} className="space-y-2">
+                                <p className="text-sm font-semibold">{article.vendorCode}</p>
+                                <ArticleDetailGrid article={article} />
+                              </div>
+                            ))}
                           </div>
                         </td>
                       </tr>

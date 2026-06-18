@@ -1,5 +1,10 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import {
+  buildArticleVersionMap,
+  findArticleVersionsForPeriod,
+  resolveArticleVersion,
+} from '@/lib/services/article-versions'
 import type {
   FeedbackSortBy,
   FeedbackSortDir,
@@ -214,6 +219,35 @@ function mapWorkloadItem(row: FeedbackReviewRow | FeedbackQuestionRow): Feedback
   }
 }
 
+type VersionableFeedbackRow = {
+  nmId: number
+  vendorCode: string | null
+  createdDate: Date
+}
+
+async function applyArticleVersionsToFeedbackRows<T extends VersionableFeedbackRow>(
+  wbAccountId: string,
+  rows: T[],
+): Promise<T[]> {
+  if (rows.length === 0) return rows
+
+  const dates = rows.map((row) => row.createdDate.getTime())
+  const dateFrom = new Date(Math.min(...dates))
+  const dateTo = new Date(Math.max(...dates))
+  const versions = await findArticleVersionsForPeriod(wbAccountId, dateFrom, dateTo)
+  if (versions.length === 0) return rows
+
+  const versionsByNm = buildArticleVersionMap(versions)
+  return rows.map((row) => {
+    const version = resolveArticleVersion(versionsByNm, row.nmId, row.createdDate)
+    if (!version) return row
+    return {
+      ...row,
+      vendorCode: version.vendorCode,
+    }
+  })
+}
+
 export async function getFeedbackSummary(
   wbAccountId: string,
   dateFrom?: string,
@@ -265,9 +299,14 @@ export async function getFeedbackSummary(
     .filter((value): value is Date => Boolean(value))
     .sort((a, b) => b.getTime() - a.getTime())[0]
 
+  const [versionedUrgentReviews, versionedUrgentQuestions] = await Promise.all([
+    applyArticleVersionsToFeedbackRows(wbAccountId, urgentReviews),
+    applyArticleVersionsToFeedbackRows(wbAccountId, urgentQuestions),
+  ])
+
   const urgentItems = [
-    ...urgentReviews.map(mapReviewRow),
-    ...urgentQuestions.map(mapQuestionRow),
+    ...versionedUrgentReviews.map(mapReviewRow),
+    ...versionedUrgentQuestions.map(mapQuestionRow),
   ]
     .sort((a, b) => {
       if (a.isAnswered !== b.isAnswered) return a.isAnswered ? 1 : -1
@@ -340,10 +379,12 @@ export async function getPaginatedFeedback(options: GetFeedbackOptions): Promise
       }),
     ])
 
+    const versionedRows = await applyArticleVersionsToFeedbackRows(options.wbAccountId, rows)
+
     return {
       summary,
       reviews: [],
-      questions: rows.map(mapQuestionRow),
+      questions: versionedRows.map(mapQuestionRow),
       products,
       total,
       page,
@@ -363,9 +404,11 @@ export async function getPaginatedFeedback(options: GetFeedbackOptions): Promise
     }),
   ])
 
+  const versionedRows = await applyArticleVersionsToFeedbackRows(options.wbAccountId, rows)
+
   return {
     summary,
-    reviews: rows.map(mapReviewRow),
+    reviews: versionedRows.map(mapReviewRow),
     questions: [],
     products,
     total,

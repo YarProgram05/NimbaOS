@@ -28,8 +28,8 @@ export default async function AnalyticsChartPage({ searchParams }: AnalyticsPage
 
   const { summary } = detail
   const params = await searchParams
-  const requestedNmIds = parseSelectedArticles(params.articles)
-  const articleChart = await buildArticleChart(summary.account.id, summary.period, requestedNmIds)
+  const requestedArticleKeys = parseSelectedArticles(params.articles)
+  const articleChart = await buildArticleChart(summary.account.id, summary.period, requestedArticleKeys)
 
   return (
     <AnalyticsShell
@@ -52,7 +52,7 @@ export default async function AnalyticsChartPage({ searchParams }: AnalyticsPage
       <DetailPanel label="Артикулы" title="Сравнение выбранных артикулов">
         <ArticleComparisonChart
           options={articleChart.options}
-          selectedNmIds={articleChart.selectedNmIds}
+          selectedArticleKeys={articleChart.selectedArticleKeys}
           points={articleChart.points}
         />
       </DetailPanel>
@@ -93,16 +93,17 @@ export default async function AnalyticsChartPage({ searchParams }: AnalyticsPage
 async function buildArticleChart(
   accountId: string,
   period: DashboardPeriod,
-  requestedNmIds: number[],
+  requestedArticleKeys: string[],
 ): Promise<{
   options: ArticleChartOption[]
-  selectedNmIds: number[]
+  selectedArticleKeys: string[]
   points: ArticleChartPoint[]
 }> {
   const report = await calculateReport(accountId, period.dateFrom, period.dateTo, REPORT_CALCULATION_OPTIONS)
   const rows = report.rows.filter((row) => row.nmId > 0 && !row.isSizeRow)
   const options = rows
     .map((row) => ({
+      key: articleKey(row.nmId, row.vendorCode),
       nmId: row.nmId,
       vendorCode: row.vendorCode,
       brandName: row.brandName,
@@ -112,9 +113,15 @@ async function buildArticleChart(
     }))
     .sort((a, b) => b.revenue - a.revenue || a.vendorCode.localeCompare(b.vendorCode, 'ru', { sensitivity: 'base' }))
 
-  const availableNmIds = new Set(options.map((option) => option.nmId))
-  const selectedNmIds = (requestedNmIds.length > 0 ? requestedNmIds : options.slice(0, 1).map((option) => option.nmId))
-    .filter((nmId, index, list) => availableNmIds.has(nmId) && list.indexOf(nmId) === index)
+  const availableKeys = new Set(options.map((option) => option.key))
+  const normalizedRequestedKeys = requestedArticleKeys.flatMap((key) => {
+    if (availableKeys.has(key)) return [key]
+    const legacyNmId = Number(key)
+    if (!Number.isInteger(legacyNmId) || legacyNmId <= 0) return []
+    return options.filter((option) => option.nmId === legacyNmId).slice(0, 1).map((option) => option.key)
+  })
+  const selectedArticleKeys = (normalizedRequestedKeys.length > 0 ? normalizedRequestedKeys : options.slice(0, 1).map((option) => option.key))
+    .filter((key, index, list) => availableKeys.has(key) && list.indexOf(key) === index)
     .slice(0, 6)
 
   const buckets = buildBuckets(period)
@@ -129,7 +136,7 @@ async function buildArticleChart(
     values: metricsByArticles(bucketReports[index]),
   }))
 
-  return { options, selectedNmIds, points }
+  return { options, selectedArticleKeys, points }
 }
 
 function metricsByArticles(report: ReportData): Record<string, ArticleChartMetrics> {
@@ -137,7 +144,7 @@ function metricsByArticles(report: ReportData): Record<string, ArticleChartMetri
     .filter((row) => row.nmId > 0 && !row.isSizeRow)
     .map((row) => {
     return [
-      String(row.nmId),
+      articleKey(row.nmId, row.vendorCode),
       {
         revenue: Number(row.sale),
         operatingProfit: Number(row.operatingProfit),
@@ -149,12 +156,16 @@ function metricsByArticles(report: ReportData): Record<string, ArticleChartMetri
   }))
 }
 
-function parseSelectedArticles(value?: string): number[] {
+function parseSelectedArticles(value?: string): string[] {
   if (!value) return []
   return value
     .split(',')
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isInteger(item) && item > 0)
+    .map((item) => decodeURIComponent(item.trim()))
+    .filter(Boolean)
+}
+
+function articleKey(nmId: number, vendorCode: string): string {
+  return `${nmId}::${vendorCode}`
 }
 
 function buildBuckets(period: DashboardPeriod): Array<{ dateFrom: string; dateTo: string; label: string }> {

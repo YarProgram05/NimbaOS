@@ -25,6 +25,28 @@ Related files:
 
 ---
 
+## 2026-06-19 — Article versions preserve historical product identity
+
+Status:
+Active
+
+Decision:
+Если под тем же WB `nmId` фактически продается новая модель/принт, NimbaOS хранит это как `ArticleVersion` с периодом действия, отчетным названием и опциональной себестоимостью версии. Финансовый отчет выбирает версию по дате строки `realization_reports` и разделяет один `nmId` на несколько строк, если выбранный период пересекает смену версии.
+
+Reason:
+Простое переименование текущей карточки смешивает историю: старые продажи, новая модель и новая себестоимость попадают в одну строку, из-за чего съезжают ОП, маржинальность и выводы по артикулам.
+
+Consequences:
+Обычный справочник себестоимости остается текущим fallback-источником. `ArticleVersion.costPrice`, если задана, имеет приоритет в финансовом отчете только для дат версии. Периоды версий одного `nmId` не должны пересекаться. Для новой физической модели предпочтительно заводить новую WB-карточку или новую версию в справочнике до анализа истории.
+
+Related files:
+`prisma/schema.prisma`, `prisma/migrations/20260619120000_article_versions/migration.sql`, `src/lib/services/report-calculator.ts`, `src/lib/actions/references.ts`, `src/app/(dashboard)/references/article-version-tab.tsx`
+
+Follow-up:
+The same event-date identity rule also applies to advertising article stats, sales-plan metrics/detail, analytics comparison chart, and reviews/questions display through shared article-version resolution.
+
+---
+
 ## 2026-05-24 — Documentation split into core/development/marketplace zones
 
 Status:

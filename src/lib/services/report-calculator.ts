@@ -37,12 +37,22 @@ interface ReferenceTotals {
   selfPurchaseCashback: number
 }
 
+interface ArticleVersionMeta {
+  id: string
+  nmId: number
+  dateFrom: Date
+  dateTo: Date | null
+  vendorCode: string
+  costPrice: number | null
+}
+
 interface RowIdentity {
   sizeLabel?: string | null
   isSizeRow?: boolean
   parentNmId?: number | null
   parentVendorCode?: string | null
   displayVendorCode?: string
+  versionCostPrice?: number | null
 }
 
 interface CalculateReportOptions {
@@ -86,6 +96,7 @@ export async function calculateReport(
     selfPurchases,
     externalAds,
     overrides,
+    articleVersions,
     account,
     products,
     paidStorageRows,
@@ -121,6 +132,7 @@ export async function calculateReport(
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
       }),
       prisma.articleOverride.findMany({ where: { wbAccountId } }),
+      findArticleVersionsForReport(wbAccountId, dfrom, dto),
       prisma.wbAccount.findUniqueOrThrow({
         where: { id: wbAccountId },
         select: { taxRate: true, lastSyncAt: true, apiKey: true },
@@ -140,7 +152,7 @@ export async function calculateReport(
       }),
       prisma.paidStorage.findMany({
         where: { wbAccountId, date: { gte: dfrom, lte: dto } },
-        select: { nmId: true, chrtId: true, barcode: true, cost: true, fetchedAt: true },
+        select: { nmId: true, chrtId: true, barcode: true, cost: true, date: true, fetchedAt: true },
       }),
       prisma.adCampaignNmStat.findMany({
         where: {
@@ -155,7 +167,7 @@ export async function calculateReport(
           wbAccountId,
           date: { gte: dfrom, lte: dto },
         },
-        select: { nmId: true, finishedPrice: true },
+        select: { nmId: true, date: true, finishedPrice: true },
       }),
       prisma.adCampaign.findMany({
         where: { wbAccountId },
@@ -191,6 +203,15 @@ export async function calculateReport(
   for (const ov of overrides) {
     overrideMap.set(vendorCodeKey(ov.vendorCode), { localName: ov.localName })
   }
+
+  const versionMap = buildArticleVersionMap(articleVersions.map((version) => ({
+    id: version.id,
+    nmId: version.nmId,
+    dateFrom: version.dateFrom,
+    dateTo: version.dateTo,
+    vendorCode: version.vendorCode,
+    costPrice: version.costPrice == null ? null : d(version.costPrice),
+  })))
 
   const nmVendorMap = new Map<number, string>()
   const vendorNmMap = new Map<string, number>()
@@ -231,18 +252,27 @@ export async function calculateReport(
     0,
   )
   const orderedRubByNm = new Map<number, number>()
+  const orderedRubByGroup = new Map<string, number>()
   for (const order of orderRows) {
     orderedRubByNm.set(order.nmId, (orderedRubByNm.get(order.nmId) ?? 0) + d(order.finishedPrice))
+    const key = reportGroupKey(order.nmId, resolveArticleVersion(versionMap, order.nmId, order.date))
+    orderedRubByGroup.set(key, (orderedRubByGroup.get(key) ?? 0) + d(order.finishedPrice))
   }
 
   const paidStorageByNm = new Map<number, number>()
+  const paidStorageByGroup = new Map<string, number>()
+  const paidStorageGroups = new Map<string, { nmId: number; version: ArticleVersionMeta | null }>()
   const paidStorageBySize = new Map<string, number>()
   for (const ps of paidStorageRows) {
     if (ps.nmId === 0) continue
     paidStorageByNm.set(ps.nmId, (paidStorageByNm.get(ps.nmId) ?? 0) + d(ps.cost))
+    const version = resolveArticleVersion(versionMap, ps.nmId, ps.date)
+    const groupKey = reportGroupKey(ps.nmId, version)
+    paidStorageGroups.set(groupKey, { nmId: ps.nmId, version })
+    paidStorageByGroup.set(groupKey, (paidStorageByGroup.get(groupKey) ?? 0) + d(ps.cost))
     const size = resolveSizeMeta(ps.nmId, ps.barcode, ps.chrtId, sizeByBarcode, sizeByChrtId)
     if (size) {
-      const key = `${ps.nmId}:${size.key}`
+      const key = `${groupKey}:${size.key}`
       paidStorageBySize.set(key, (paidStorageBySize.get(key) ?? 0) + d(ps.cost))
     }
   }
@@ -260,6 +290,7 @@ export async function calculateReport(
 
   let globalStorageTotal = 0
   const outboundPerNm = new Map<number, number>()
+  const outboundPerGroup = new Map<string, number>()
   let totalOutbound = 0
 
   for (const row of rows) {
@@ -270,52 +301,77 @@ export async function calculateReport(
       (row.bonusTypeName === BONUS_TO_CLIENT_SALE || row.bonusTypeName === BONUS_TO_CLIENT_CANCEL)
     ) {
       outboundPerNm.set(row.nmId, (outboundPerNm.get(row.nmId) ?? 0) + 1)
+      const groupKey = reportGroupKey(row.nmId, resolveArticleVersion(versionMap, row.nmId, reportRowDate(row)))
+      outboundPerGroup.set(groupKey, (outboundPerGroup.get(groupKey) ?? 0) + 1)
       totalOutbound++
     }
   }
 
   const usePaidStorage = paidStorageByNm.size > 0
 
-  const grouped = new Map<number, DbRow[]>()
+  const grouped = new Map<string, { nmId: number; version: ArticleVersionMeta | null; rows: DbRow[] }>()
   for (const row of rows) {
     if (row.nmId === 0) continue
-    const arr = grouped.get(row.nmId) ?? []
-    arr.push(row)
-    grouped.set(row.nmId, arr)
+    const version = resolveArticleVersion(versionMap, row.nmId, reportRowDate(row))
+    const key = reportGroupKey(row.nmId, version)
+    const group = grouped.get(key) ?? { nmId: row.nmId, version, rows: [] }
+    group.rows.push(row)
+    grouped.set(key, group)
   }
 
   const hasRealizationRows = rows.some((row) => row.nmId !== 0)
-  const reportNmIds = new Set<number>(grouped.keys())
+  const reportGroups = new Map(grouped)
   if (hasRealizationRows) {
-    for (const nmId of Array.from(paidStorageByNm.keys())) {
-      reportNmIds.add(nmId)
+    for (const [key, group] of Array.from(paidStorageGroups.entries())) {
+      if (!reportGroups.has(key)) reportGroups.set(key, { ...group, rows: [] })
     }
     for (const nmId of Array.from(adSpendByNm.keys())) {
-      reportNmIds.add(nmId)
+      const version = resolveArticleVersion(versionMap, nmId, dto)
+      const key = reportGroupKey(nmId, version)
+      if (!reportGroups.has(key)) reportGroups.set(key, { nmId, version, rows: [] })
     }
     for (const vendorCode of Array.from(extAdMap.keys())) {
       const nmId = vendorNmMap.get(vendorCode)
-      if (nmId) reportNmIds.add(nmId)
+      if (nmId) {
+        const version = resolveArticleVersion(versionMap, nmId, dto)
+        const key = reportGroupKey(nmId, version)
+        if (!reportGroups.has(key)) reportGroups.set(key, { nmId, version, rows: [] })
+      }
     }
     for (const vendorCode of Array.from(spMap.keys())) {
       const nmId = vendorNmMap.get(vendorCode)
-      if (nmId) reportNmIds.add(nmId)
+      if (nmId) {
+        const version = resolveArticleVersion(versionMap, nmId, dto)
+        const key = reportGroupKey(nmId, version)
+        if (!reportGroups.has(key)) reportGroups.set(key, { nmId, version, rows: [] })
+      }
     }
   }
 
   const reportRows: ReportRow[] = []
   let totalOP = 0
 
-  for (const nmId of Array.from(reportNmIds)) {
-    const group = grouped.get(nmId) ?? []
+  const saleBasisByNm = new Map<number, number>()
+  for (const group of Array.from(reportGroups.values())) {
+    const basis = groupBasis(group.rows)
+    saleBasisByNm.set(group.nmId, (saleBasisByNm.get(group.nmId) ?? 0) + basis.sale)
+  }
+
+  for (const [groupKey, reportGroup] of Array.from(reportGroups.entries())) {
+    const { nmId, version } = reportGroup
+    const group = reportGroup.rows
     let extraStorage = 0
 
     if (usePaidStorage) {
-      extraStorage = paidStorageByNm.get(nmId) ?? 0
+      extraStorage = paidStorageByGroup.get(groupKey) ?? 0
     } else {
-      const outbound = outboundPerNm.get(nmId) ?? 0
+      const outbound = outboundPerGroup.get(groupKey) ?? outboundPerNm.get(nmId) ?? 0
       extraStorage = totalOutbound > 0 ? globalStorageTotal * (outbound / totalOutbound) : 0
     }
+
+    const basis = groupBasis(group)
+    const nmSaleBasis = saleBasisByNm.get(nmId) ?? 0
+    const versionSaleShare = nmSaleBasis > 0 ? basis.sale / nmSaleBasis : 1
 
     const row = calculateGroup(
       nmId,
@@ -329,9 +385,13 @@ export async function calculateReport(
       productMetaMap,
       extraStorage,
       usePaidStorage,
-      adSpendByNm.get(nmId)?.balance ?? 0,
-      adSpendByNm.get(nmId)?.all ?? 0,
-      orderedRubByNm.get(nmId) ?? 0,
+      (adSpendByNm.get(nmId)?.balance ?? 0) * versionSaleShare,
+      (adSpendByNm.get(nmId)?.all ?? 0) * versionSaleShare,
+      orderedRubByGroup.get(groupKey) ?? 0,
+      version ? {
+        displayVendorCode: version.vendorCode,
+        versionCostPrice: version.costPrice,
+      } : {},
     )
 
     const parentVendorCode = row.vendorCode
@@ -354,7 +414,7 @@ export async function calculateReport(
         const saleShare = shareOf(basis.sale, totalSaleBasis, sizeGroups.length, index)
         const qtyShare = shareOf(basis.boughtWithReturns, totalQtyBasis, sizeGroups.length, index)
         const deliveredShare = shareOf(basis.delivered, totalDeliveredBasis, sizeGroups.length, index)
-        const actualStorage = paidStorageBySize.get(`${nmId}:${sizeGroup.size.key}`)
+        const actualStorage = paidStorageBySize.get(`${groupKey}:${sizeGroup.size.key}`)
         const childStorage = (actualStorage ?? 0) + undistributedStorage * deliveredShare
         const childVendorCode = formatSizedVendorCode(parentVendorCode, sizeGroup.size.label)
 
@@ -379,6 +439,7 @@ export async function calculateReport(
             parentNmId: nmId,
             parentVendorCode,
             displayVendorCode: childVendorCode,
+            versionCostPrice: version?.costPrice ?? null,
           },
           {
             externalAd: referenceTotals.externalAd * saleShare,
@@ -546,7 +607,7 @@ function calculateGroup(
     : Array.from(vendorCodes)
   for (const vendorCode of vcArray) {
     const key = vendorCodeKey(vendorCode)
-    const unitCost = costMap.get(key) ?? 0
+    const unitCost = identity.versionCostPrice ?? costMap.get(key) ?? 0
     costPriceTotal += unitCost * boughtWithReturns
 
     if (!referenceTotals) {
@@ -565,7 +626,7 @@ function calculateGroup(
     for (const vendorCode of vcArray) {
       const key = vendorCodeKey(vendorCode)
       const sp = spMap.get(key)
-      const unitCost = costMap.get(key) ?? 0
+      const unitCost = identity.versionCostPrice ?? costMap.get(key) ?? 0
       if (sp) selfPurchaseCost += sp.quantity * unitCost
     }
   }
@@ -789,6 +850,105 @@ function calculateReferenceTotals(row: ReportRow): ReferenceTotals {
     selfPurchaseAmount: Number(row.selfPurchaseAmount),
     selfPurchaseCashback: Number(row.cashbackDistributions),
   }
+}
+
+async function findArticleVersionsForReport(
+  wbAccountId: string,
+  dateFrom: Date,
+  dateTo: Date,
+): Promise<ArticleVersionMeta[]> {
+  const delegate = (prisma as unknown as {
+    articleVersion?: {
+      findMany(args: unknown): Promise<Array<{
+        id: string
+        nmId: number
+        dateFrom: Date
+        dateTo: Date | null
+        vendorCode: string
+        costPrice: { toString(): string } | number | string | null
+      }>>
+    }
+  }).articleVersion
+
+  const rows = delegate
+    ? await delegate.findMany({
+      where: {
+        wbAccountId,
+        dateFrom: { lte: dateTo },
+        OR: [
+          { dateTo: null },
+          { dateTo: { gte: dateFrom } },
+        ],
+      },
+      orderBy: [{ nmId: 'asc' }, { dateFrom: 'asc' }],
+    })
+    : await prisma.$queryRaw<Array<{
+      id: string
+      nmId: number
+      dateFrom: Date
+      dateTo: Date | null
+      vendorCode: string
+      costPrice: { toString(): string } | number | string | null
+    }>>`
+      SELECT id, "nmId", "dateFrom", "dateTo", "vendorCode", "costPrice"
+      FROM "article_versions"
+      WHERE "wbAccountId" = ${wbAccountId}
+        AND "dateFrom" <= ${dateTo}
+        AND ("dateTo" IS NULL OR "dateTo" >= ${dateFrom})
+      ORDER BY "nmId" ASC, "dateFrom" ASC
+    `
+
+  return rows.map((version) => ({
+    id: version.id,
+    nmId: version.nmId,
+    dateFrom: version.dateFrom,
+    dateTo: version.dateTo,
+    vendorCode: version.vendorCode,
+    costPrice: version.costPrice == null ? null : d(version.costPrice),
+  }))
+}
+
+function buildArticleVersionMap(versions: ArticleVersionMeta[]): Map<number, ArticleVersionMeta[]> {
+  const result = new Map<number, ArticleVersionMeta[]>()
+  for (const version of versions) {
+    const rows = result.get(version.nmId) ?? []
+    rows.push(version)
+    result.set(version.nmId, rows)
+  }
+
+  for (const rows of Array.from(result.values())) {
+    rows.sort((left, right) => left.dateFrom.getTime() - right.dateFrom.getTime())
+  }
+
+  return result
+}
+
+function resolveArticleVersion(
+  versionsByNm: Map<number, ArticleVersionMeta[]>,
+  nmId: number,
+  date: Date | null | undefined,
+): ArticleVersionMeta | null {
+  const versions = versionsByNm.get(nmId)
+  if (!versions?.length || !date) return null
+
+  const day = startOfUtcDay(date).getTime()
+  return versions.find((version) => {
+    const from = startOfUtcDay(version.dateFrom).getTime()
+    const to = version.dateTo ? startOfUtcDay(version.dateTo).getTime() : Number.POSITIVE_INFINITY
+    return from <= day && day <= to
+  }) ?? null
+}
+
+function reportGroupKey(nmId: number, version: ArticleVersionMeta | null): string {
+  return version ? `${nmId}:version:${version.id}` : `${nmId}:base`
+}
+
+function reportRowDate(row: DbRow): Date {
+  return row.rrDt ?? row.saleDt ?? row.orderDt ?? row.dateFrom
+}
+
+function startOfUtcDay(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
 }
 
 interface AdSpendByNm {

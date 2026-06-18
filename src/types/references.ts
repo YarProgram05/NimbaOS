@@ -23,6 +23,21 @@ export interface CostPriceItem {
   updatedAt: string | null    // null if not yet set
 }
 
+export interface ArticleVersionRow {
+  id: string
+  wbAccountId: string
+  nmId: number
+  currentVendorCode: string | null
+  title: string | null
+  dateFrom: string
+  dateTo: string | null
+  vendorCode: string
+  costPrice: string | null
+  note: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface SelfPurchaseRow {
   id: string
   wbAccountId: string
@@ -59,6 +74,7 @@ export interface ArticleOverrideRow {
 export interface VendorCodeOption {
   vendorCode: string
   title: string | null
+  nmId?: number | null
 }
 
 export interface ReplyTemplateRow {

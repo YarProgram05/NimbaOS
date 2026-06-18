@@ -1,5 +1,28 @@
 # Bugs And Incidents
 
+## BUG-016: Financial report mixed old and new physical products under one WB nmId
+
+Status:
+Fixed in code; known article versions need manual entry.
+
+Symptoms:
+If a seller article/current card name changed from an old model to a new physical product under the same WB `nmId`, historical report rows could be read as one product. This also made cost price ambiguous when the new model had a different себестоимость.
+
+Affected area:
+Financial report calculation and reference data for product identity/cost.
+
+Investigation:
+`products` and `cost_prices` represent the current/local reference state, while `realization_reports` contains historical fact rows. A simple local rename is not enough when the physical item changed; the report needs a dated business identity layer.
+
+Fix:
+Added `article_versions` with `wbAccountId`, `nmId`, date range, report name and optional version-specific cost. `/references` has a `Версии артикулов` tab. `calculateReport` resolves versions by report-row date, splits one `nmId` into multiple rows when needed, and uses version cost before falling back to `cost_prices`.
+
+Verification:
+`npx prisma generate`, `npm run type-check`, `npx prisma migrate deploy`, and a DB-only Nimba `calculateReport` smoke check passed.
+
+Related files:
+`prisma/schema.prisma`, `prisma/migrations/20260619120000_article_versions/migration.sql`, `src/lib/services/report-calculator.ts`, `src/lib/actions/references.ts`, `src/app/(dashboard)/references/article-version-tab.tsx`
+
 ## BUG-015: Financial report ordered rubles undercounted on long periods
 
 Status:

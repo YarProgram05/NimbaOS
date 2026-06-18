@@ -6,6 +6,8 @@
 
 ## Last Marketplace Session Summary
 
+2026-06-18: created Excel report `output/excel/wb_article_profitability_2026-01-01_2026-06-17.xlsx` for both active WB cabinets, with separate sheets for `WB Galioni (WB_2)` and `WB Nimba (WB_1)`, plus `Сводка` and `Не продавались`. Used local DB only through `calculateReport`; no WB API, sync or DB/code changes. `REPORTS_PERIOD` was fully covered for 2026-01-01 - 2026-06-17. `ADVERTISING_STATS` did not cover the full January-June period, so ad/DRR influence is based only on available local ad stats. Main totals: Galioni sales 2,157,583.34 rub / OP 283,987.06 rub / 53 sold rows / 11 no-sale rows; Nimba sales 2,913,759.88 rub / OP 398,842.06 rub / 70 sold rows / 61 no-sale rows. For Nimba, size products are shown as `article + size`.
+
 2026-06-13: created and revised PDF report `output/pdf/wb_nimba_report_2026-06-01_2026-06-12.pdf` for `WB Nimba (WB_1)` covering 2026-06-01 - 2026-06-12. Used local DB only through `getMorningReportData`; `REPORTS_PERIOD` and `ADVERTISING_STATS` were covered, latest stock snapshot was 2026-06-13 08:52 UTC, `SALES_PLAN_PERIOD` was not covered so plan/fact was excluded. Main findings: sales 352,246.94 rub / 202 units, ordered 648,048.13 rub, buyout 56.74%, operating profit 43,146.16 rub, margin 12.25%, ad spend 7,998.22 rub, DRR 2.27%; stock 3,755 units / 2,481,295 rub cost value, average turnover 624.4 days, 39 overstock SKU. User-requested revision: child products are shown as separate `article + size` rows; stock-risk table is only `Парео` and `Туники`, excluding stopped articles (`парео сирень2`, `парео фуксия`, listed long pareo, `пижама003`, `пижама004`).
 
 2026-06-07: clarified and fixed stock risk interpretation in NimbaOS. `Оборачиваемость, дн.` is not a WB-provided field; it is calculated as current sellable stock divided by average daily non-return sales over the 30 completed days before the latest stock snapshot. `/stocks` now uses local `wb_sales` plus `realization_reports` sale quantities as fallback, and risk states are: `Нет остатка` when total sellable stock is zero; `Низкий остаток` up to 14 days; `В норме` 14-120 days; `Излишек` above 120 days with at least 10 units; `Нет продаж` when positive stock has no recent demand. Category filtering supports selecting multiple categories.
@@ -49,4 +51,4 @@ For WB Nimba, next safe analysis step is to investigate low buyout/high cancella
 
 ## Last Updated
 
-2026-06-13 — created WB Nimba PDF report for 2026-06-01 - 2026-06-12 and logged findings.
+2026-06-18 — created both-cabinet article profitability Excel for 2026-01-01 - 2026-06-17 and logged findings.

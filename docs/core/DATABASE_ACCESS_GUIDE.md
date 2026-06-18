@@ -21,7 +21,7 @@
 
 ## Table Choice By Task
 
-- Financial report: `realization_reports`, `paid_storage`, products, references, ad stats and `wb_orders` through `report-calculator`.
+- Financial report: `realization_reports`, `paid_storage`, products, `article_versions`, references, ad stats and `wb_orders` through `report-calculator`.
 - Orders/sales/plan: `wb_orders`, `wb_sales`, `wb_funnel_stats`, `sales_plans`, `sales_plan_items` through `plan-calculator`.
 - Stock risk/turnover: latest `stock_snapshots` + `stock_items` + recent non-return `wb_sales`; stock services also use `realization_reports` sale quantities as a local fallback and barcode source for size-level risk.
 - Advertising efficiency: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`; prefer actions/services. Campaign detail filters nm stats to the primary product combined-card `products.imtId`, keeps meaningful nm rows, normalizes zero-contact order baskets, and uses ad `orderSum` from WB fullstats `sum_price`.
@@ -54,6 +54,7 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 
 - `realization_reports` sync uses live-verified WB Finance API `POST /api/finance/v1/sales-reports/detailed` and normalizes camelCase/string-money fields before the existing Prisma mapper. Future job results expose `report.sourceApi` for endpoint audits.
 - Finance API may lowercase `vendorCode`; financial report reference lookups normalize vendor-code casing, Unicode form and surrounding whitespace before matching `cost_prices` and related references.
+- If a physical product/model changes under the same WB `nmId`, create dated `article_versions` instead of overwriting history. Financial reports resolve version name and optional cost price by report-row date and can split one `nmId` into separate historical/current rows. Advertising article stats, sales-plan metrics/detail, analytics comparison chart, and feedback display also resolve article version by event date.
 - `Заказано руб.` needs fresh `wb_orders.finishedPrice` for all order rows, including cancelled orders; normal `reports.period` sync now forces a full order fetch for the selected period so long ranges do not reuse partial incremental cursors.
 - Long-period `realization_reports` calculations.
 - `Заказано руб.` needs fresh `wb_orders`; after code changes on 2026-06-18, verify suspicious long periods by rerunning `reports.period` for the exact account/range and then reading the report from DB.

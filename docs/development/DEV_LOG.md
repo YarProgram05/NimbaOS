@@ -1,5 +1,28 @@
 # Development Log
 
+## 2026-06-19 - Article versions for historical product identity
+
+### Summary
+Added dated article versions so one WB `nmId` can represent different physical products/models over time without mixing historical financial reports. A version has a report display name, date range and optional version-specific cost price.
+
+### Files changed
+`prisma/schema.prisma`, `prisma/migrations/20260619120000_article_versions/migration.sql`, `src/lib/services/report-calculator.ts`, `src/lib/actions/references.ts`, `src/types/references.ts`, `src/app/(dashboard)/references`.
+
+### Commands run
+`npx prisma generate`; `npm run type-check`; `npx prisma migrate status`; `npx prisma migrate deploy`; DB-only `calculateReport` smoke for `WB Nimba (WB_1)`, 2026-06-01 - 2026-06-17.
+
+### Result
+`/references` now has a `Версии артикулов` tab. Financial reports resolve `ArticleVersion` by report-row date and split one `nmId` into separate rows when the selected period crosses a version change. Version cost has priority over `cost_prices` for that version; if empty, the old cost fallback remains.
+
+### Issues
+Existing versions were not backfilled automatically. Add versions manually for known model changes such as old `Парео синяя ракушка` vs new `парео синяя разводы`, with the real change date and costs.
+
+### Follow-up fix
+After opening `/references`, the running app could still use an older Prisma Client and throw `Cannot read properties of undefined (reading 'findMany')` for `prisma.articleVersion`. Reference actions and `calculateReport` now use a parameterized SQL fallback for `article_versions` when the generated delegate is not present in the current process. Restarting the dev server is still recommended, but the page no longer depends on it for this table.
+
+### Cross-section follow-up
+Extended historical article-version resolution beyond financial reports. Advertising article stats, sales-plan metrics/detail, analytics comparison chart, and feedback rows now resolve article names by event date and can show separate rows/series when one WB `nmId` spans several physical product versions. Added shared resolver `src/lib/services/article-versions.ts`. Ran `npm run type-check` and `npx prisma validate`.
+
 ## 2026-06-18 - Financial report ordered rub long-period repair
 
 ### Summary

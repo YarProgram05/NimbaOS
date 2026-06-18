@@ -8,6 +8,11 @@ import { getAutoFillByNmId } from '@/lib/services/spp-calculator'
 import { enqueuePlanSyncAction } from '@/lib/actions/sync'
 import { calculatePlanDetail } from '@/lib/services/plan-calculator'
 import {
+  buildArticleVersionMap,
+  findArticleVersionsForPeriod,
+  resolveArticleVersion,
+} from '@/lib/services/article-versions'
+import {
   appendAoaSheet,
   createWorkbook,
   safeXlsxFilename,
@@ -117,7 +122,7 @@ export async function getPlanDetailAction(
 
     // Enrich items with Product data (photo, category, title, brand)
     const nmIds = plan.items.map((i) => i.nmId)
-    const [products, salesCounts] = await Promise.all([
+    const [products, salesCounts, articleVersions] = await Promise.all([
       nmIds.length > 0
         ? prisma.product.findMany({
             where: { wbAccountId: plan.wbAccountId, nmId: { in: nmIds } },
@@ -149,15 +154,18 @@ export async function getPlanDetailAction(
             return countMap
           })()
         : Promise.resolve(new Map<number, number>()),
+      findArticleVersionsForPeriod(plan.wbAccountId, plan.dateFrom, plan.dateTo),
     ])
     const productMap = new Map(products.map((p) => [p.nmId, p]))
+    const versionsByNm = buildArticleVersionMap(articleVersions)
 
     const items: SalesPlanItemRow[] = plan.items.map((i) => {
       const prod = productMap.get(i.nmId)
+      const version = resolveArticleVersion(versionsByNm, i.nmId, plan.dateTo)
       return {
         id: i.id,
         nmId: i.nmId,
-        vendorCode: i.vendorCode,
+        vendorCode: version?.vendorCode ?? i.vendorCode,
         plannedQty: i.plannedQty,
         price: i.price.toString(),
         buyoutPercent: i.buyoutPercent.toString(),

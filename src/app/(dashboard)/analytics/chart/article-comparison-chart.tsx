@@ -15,6 +15,7 @@ import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
 export interface ArticleChartOption {
+  key: string
   nmId: number
   vendorCode: string
   brandName: string
@@ -40,7 +41,7 @@ export interface ArticleChartPoint {
 
 interface ArticleComparisonChartProps {
   options: ArticleChartOption[]
-  selectedNmIds: number[]
+  selectedArticleKeys: string[]
   points: ArticleChartPoint[]
 }
 
@@ -60,28 +61,28 @@ type MetricDef = (typeof METRICS)[number]
 
 export function ArticleComparisonChart({
   options,
-  selectedNmIds: initialSelectedNmIds,
+  selectedArticleKeys: initialSelectedArticleKeys,
   points,
 }: ArticleComparisonChartProps) {
-  const [selectedNmIds, setSelectedNmIds] = useState<number[]>(initialSelectedNmIds)
+  const [selectedArticleKeys, setSelectedArticleKeys] = useState<string[]>(initialSelectedArticleKeys)
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(['buyouts', 'adSpend'])
   const [query, setQuery] = useState('')
 
   useEffect(() => {
-    setSelectedNmIds(initialSelectedNmIds)
-  }, [initialSelectedNmIds])
+    setSelectedArticleKeys(initialSelectedArticleKeys)
+  }, [initialSelectedArticleKeys])
 
-  const optionsByNmId = useMemo(
-    () => new Map(options.map((option) => [option.nmId, option])),
+  const optionsByKey = useMemo(
+    () => new Map(options.map((option) => [option.key, option])),
     [options],
   )
   const selected = useMemo(
-    () => selectedNmIds
-      .map((nmId) => optionsByNmId.get(nmId))
+    () => selectedArticleKeys
+      .map((key) => optionsByKey.get(key))
       .filter((option): option is ArticleChartOption => Boolean(option)),
-    [optionsByNmId, selectedNmIds],
+    [optionsByKey, selectedArticleKeys],
   )
-  const selectedSet = useMemo(() => new Set(selected.map((option) => option.nmId)), [selected])
+  const selectedSet = useMemo(() => new Set(selected.map((option) => option.key)), [selected])
   const selectedMetricDefs = useMemo(
     () => selectedMetrics
       .map((key) => METRICS.find((item) => item.key === key))
@@ -95,7 +96,7 @@ export function ArticleComparisonChart({
     const row: Record<string, string | number> = { label: point.label }
     for (const option of selected) {
       for (const metricKey of selectedMetrics) {
-        row[seriesKey(option.nmId, metricKey)] = point.values[String(option.nmId)]?.[metricKey] ?? 0
+        row[seriesKey(option.key, metricKey)] = point.values[option.key]?.[metricKey] ?? 0
       }
     }
     return row
@@ -114,13 +115,13 @@ export function ArticleComparisonChart({
       .slice(0, 40)
   }, [options, query])
 
-  function toggleArticle(nmId: number) {
-    if (selectedSet.has(nmId)) {
-      setSelectedNmIds((current) => current.filter((item) => item !== nmId))
+  function toggleArticle(key: string) {
+    if (selectedSet.has(key)) {
+      setSelectedArticleKeys((current) => current.filter((item) => item !== key))
       return
     }
 
-    setSelectedNmIds((current) => [...current, nmId].slice(-6))
+    setSelectedArticleKeys((current) => [...current, key].slice(-6))
   }
 
   function toggleMetric(metricKey: MetricKey) {
@@ -155,12 +156,12 @@ export function ArticleComparisonChart({
         </div>
         <div className="max-h-[428px] space-y-1.5 overflow-y-auto pr-1">
           {filteredOptions.map((option) => {
-            const isSelected = selectedSet.has(option.nmId)
+            const isSelected = selectedSet.has(option.key)
             return (
               <button
-                key={option.nmId}
+                key={option.key}
                 type="button"
-                onClick={() => toggleArticle(option.nmId)}
+                onClick={() => toggleArticle(option.key)}
                 className={[
                   'flex w-full min-w-0 items-center gap-2 rounded-md border p-2 text-left transition-colors',
                   isSelected ? 'border-primary bg-primary/10' : 'bg-card hover:bg-secondary',
@@ -212,9 +213,9 @@ export function ArticleComparisonChart({
           <div className="flex flex-wrap justify-end gap-1.5">
             {selected.map((option) => (
               <button
-                key={option.nmId}
+                key={option.key}
                 type="button"
-                onClick={() => toggleArticle(option.nmId)}
+                onClick={() => toggleArticle(option.key)}
                 className="inline-flex h-8 max-w-[180px] items-center gap-1.5 rounded-md border bg-card px-2 text-xs font-semibold"
               >
                 <span className="truncate">{option.vendorCode || `WB ${option.nmId}`}</span>
@@ -293,7 +294,7 @@ export function ArticleComparisonChart({
                   }}
                 />
                 {selected.flatMap((option, articleIndex) => selectedMetricDefs.map((metricDef) => {
-                  const key = seriesKey(option.nmId, metricDef.key)
+                  const key = seriesKey(option.key, metricDef.key)
                   const articleLabel = option.vendorCode || `WB ${option.nmId}`
 
                   if (metricDef.chart === 'bar') {
@@ -349,7 +350,7 @@ function SeriesLegend({ selected, metrics }: { selected: ArticleChartOption[]; m
         const label = `${option.vendorCode || `WB ${option.nmId}`}: ${metric.label}`
         return (
           <span
-            key={`${option.nmId}-${metric.key}`}
+            key={`${option.key}-${metric.key}`}
             className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-md border bg-card px-2 text-[11px] font-semibold"
             title={label}
           >
@@ -401,8 +402,8 @@ function formatCompact(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value)
 }
 
-function seriesKey(nmId: number, metric: MetricKey): string {
-  return `nm${nmId}_${metric}`
+function seriesKey(articleKey: string, metric: MetricKey): string {
+  return `article_${encodeURIComponent(articleKey)}_${metric}`
 }
 
 function metricKindByKey(key: string): MetricKind {

@@ -7,9 +7,11 @@ import { CostPriceTab } from './cost-price-tab'
 import { SelfPurchaseTab } from './self-purchase-tab'
 import { ExternalAdTab } from './external-ad-tab'
 import { ArticleOverrideTab } from './article-override-tab'
+import { ArticleVersionTab } from './article-version-tab'
 import { ReplyTemplateTab } from './reply-template-tab'
 import type {
   CostPriceItem,
+  ArticleVersionRow,
   SelfPurchaseRow,
   ExternalAdRow,
   ArticleOverrideRow,
@@ -21,6 +23,7 @@ interface ReferencesClientProps {
   wbAccountId: string
   initialTab: string
   costPriceItems: CostPriceItem[]
+  articleVersions: ArticleVersionRow[]
   selfPurchases: SelfPurchaseRow[]
   externalAds: ExternalAdRow[]
   articleOverrides: ArticleOverrideRow[]
@@ -32,6 +35,7 @@ export function ReferencesClient({
   wbAccountId,
   initialTab,
   costPriceItems,
+  articleVersions,
   selfPurchases,
   externalAds,
   articleOverrides,
@@ -64,6 +68,7 @@ export function ReferencesClient({
         <div className="overflow-x-auto">
           <TabsList className="min-w-max">
           <TabsTrigger value="cost-price">Себестоимость</TabsTrigger>
+          <TabsTrigger value="article-versions">Версии артикулов</TabsTrigger>
           <TabsTrigger value="self-purchases">Самовыкупы</TabsTrigger>
           <TabsTrigger value="external-ads">Внешняя реклама</TabsTrigger>
           <TabsTrigger value="overrides">Переименования</TabsTrigger>
@@ -74,6 +79,15 @@ export function ReferencesClient({
         <TabsContent value="cost-price" className="mt-4">
           <CostPriceTab
             items={costPriceItems}
+            wbAccountId={wbAccountId}
+            onMutate={handleMutate}
+          />
+        </TabsContent>
+
+        <TabsContent value="article-versions" className="mt-4">
+          <ArticleVersionTab
+            rows={articleVersions}
+            vendorCodes={vendorCodes}
             wbAccountId={wbAccountId}
             onMutate={handleMutate}
           />

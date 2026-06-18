@@ -32,6 +32,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 - `product_sizes`: size/barcode/chrt links.
 - `product_materials`: materials for products.
 - `cost_prices`: cost by `wbAccountId + vendorCode`.
+- `article_versions`: dated business versions for one WB `nmId`; stores report/display name and optional version-specific cost price when the physical product/model changed under the same WB card. Used by financial reports plus date-based advertising, sales-plan, analytics-chart, and feedback displays.
 - `self_purchases`: self-purchase/cashback rows.
 - `external_ads`: external ad spend rows.
 - `article_overrides`: local article name/material overrides.
@@ -74,7 +75,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 - Products: unique `(wbAccountId, nmId)`, indexes `nmId`, `imtId`, `vendorCode`, `wbAccountId`.
 - Sizes/stocks: `product_sizes(productId/chrtId/barcode)`, `stock_snapshots(wbAccountId, syncedAt)`, `stock_items(snapshotId)`, `(wbAccountId, nmId)`, `warehouseId`, `chrtId`.
 - Feedback: unique `(wbAccountId, externalId)`, indexes by `(wbAccountId, createdDate)`, `(wbAccountId, nmId)`, `(wbAccountId, isAnswered)`, `rating`.
-- References: unique `(wbAccountId, vendorCode)` for cost/overrides; indexes by account/date/vendor.
+- References: unique `(wbAccountId, vendorCode)` for cost/overrides; `article_versions` unique `(wbAccountId, nmId, dateFrom)` with date-range index `(wbAccountId, nmId, dateFrom, dateTo)`; indexes by account/date/vendor.
 - Realization: unique `(wbAccountId, rrdId)`, indexes `wbAccountId`, `nmId`, `vendorCode`, `(dateFrom, dateTo)`, `(wbAccountId, nmId, dateFrom)`.
 - Paid storage: unique `(wbAccountId, date, nmId, chrtId)`, indexes `(wbAccountId)`, `(wbAccountId, date)`, `(wbAccountId, nmId)`.
 - Ads: unique `(wbAccountId, advertId)`, `(campaignId, date, source)`, `(campaignId, date, source, nmId)`, indexes by campaign, date, status, nmId.
