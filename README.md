@@ -1,106 +1,106 @@
 # NimbaOS
 
-NimbaOS is a private full-stack web service for digitizing Wildberries seller operations: products, stocks, financial reports, sales planning, advertising, reviews, reference data, background synchronization, and daily operational reporting.
+NimbaOS - приватный full-stack веб-сервис для оцифровки работы с кабинетами Wildberries: товары, остатки, финансовые отчеты, план продаж, реклама, отзывы, справочники, фоновые синхронизации и ежедневная операционная отчетность.
 
-This repository is not a landing page and not a toy demo. It is a working internal product built around a real marketplace workflow: collect data safely, normalize it in a local database, calculate business metrics, and give the owner a clear interface for daily decisions.
+Это не лендинг и не учебный макет. Проект построен вокруг реального сценария работы с маркетплейсом: безопасно забрать данные, нормализовать их в локальной базе, посчитать бизнес-метрики и дать владельцу понятный интерфейс для ежедневных решений.
 
-## What Problem It Solves
+## Какую задачу решает
 
-Marketplace work often turns into scattered Excel files, manual report checks, repeated cabinet logins, and risky one-off calculations. NimbaOS turns that into one controlled system:
+Работа с маркетплейсом быстро превращается в набор Excel-файлов, ручных сверок, повторных входов в кабинеты и рискованных разовых расчетов. NimbaOS собирает это в одну систему:
 
-- seller cabinets and API keys are managed in one place;
-- WB data is synchronized into PostgreSQL before analysis;
-- reports are calculated from local data, not from ad-hoc API calls;
-- financial, stock, advertising, and plan/fact metrics live in one interface;
-- background jobs track what was synced, when, and for which period;
-- daily Google Sheets reporting can run from the database without hitting live WB APIs during the report step.
+- кабинеты продавцов и API-ключи управляются из одного места;
+- данные WB сначала синхронизируются в PostgreSQL и только потом используются в аналитике;
+- отчеты считаются из локальной базы, а не из случайных live-ответов API;
+- финансовые показатели, остатки, реклама и план/факт находятся в одном интерфейсе;
+- фоновые задачи показывают, что именно было синхронизировано, когда и за какой период;
+- ежедневный отчет в Google Sheets может заполняться из базы без live-запросов к WB во время формирования отчета.
 
-## Product Areas
+## Основные разделы
 
-- **Authentication and access**: NextAuth credentials flow, roles, invitations, account selector.
-- **WB accounts**: encrypted API keys, seller metadata, tax settings, active/inactive cabinet control.
-- **Products and references**: product cards, prices, cost prices, article overrides, self-buyouts, external ads, reply templates, dated article versions.
-- **Financial reports**: realization reports, paid storage, ordered ruble volume, cost allocation, ROMI, buyout metrics, sticky table, XLSX export.
-- **Sales planning**: plan CRUD, article-level plan/fact, daily grid, funnel/order/sales sync, add-from-stock workflow, export.
-- **Advertising**: campaign list, campaign detail, nm stats, clusters, spend history, advertising-attributed order sum, XLSX export.
-- **Stocks and inventory**: warehouse stock snapshots, turnover days, size-level risk, no-stock/no-demand/excess classification.
-- **Reviews and questions**: read-only sync, workload analytics, reply templates and guarded write paths.
-- **Dashboard analytics**: summary metrics, freshness checks, problem center, product and stock risks, deterministic recommendations, forecasts and exports.
-- **Automations**: BullMQ-backed workflows, sync schedules, run history, and a DB-only morning WB report workflow for Google Sheets.
+- **Авторизация и доступ**: NextAuth, роли, приглашения, выбор кабинета.
+- **Кабинеты WB**: зашифрованные API-ключи, данные продавца, налоговые настройки, управление активностью кабинета.
+- **Товары и справочники**: карточки товаров, цены, себестоимость, переопределения артикулов, самовыкупы, внешняя реклама, шаблоны ответов, версии артикулов по датам.
+- **Финансовые отчеты**: отчеты реализации, платное хранение, заказано руб., распределение себестоимости, ROMI, выкупы, sticky-таблица, экспорт в XLSX.
+- **План продаж**: CRUD планов, план/факт по артикулам, дневная сетка, синхронизация заказов/продаж/воронки, добавление товаров из остатков, экспорт.
+- **Реклама**: список кампаний, детализация кампании, nm-статистика, кластеры, история расходов, рекламно-атрибутированная сумма заказов, экспорт.
+- **Остатки**: снимки складов WB, текущие остатки, оборачиваемость, риски по размерам, статусы "нет остатка", "нет продаж", "излишек".
+- **Отзывы и вопросы**: read-only синхронизация, аналитика нагрузки, шаблоны ответов и защищенные write-сценарии.
+- **Дашборд**: сводные метрики, свежесть данных, центр проблем, риски по товарам и остаткам, детерминированные рекомендации, прогнозы и экспорты.
+- **Автоматизации**: workflow на BullMQ, расписания синхронизаций, история запусков и DB-only утренний отчет WB для Google Sheets.
 
-## Engineering Highlights
+## Инженерные особенности
 
-The project follows a DB-first pipeline:
+В проекте используется DB-first pipeline:
 
 ```text
 WB API -> sync services -> PostgreSQL -> calculation services -> UI / XLSX / Google Sheets
 ```
 
-That choice is deliberate. It keeps analytics reproducible, avoids mixing live API responses with report calculations, and makes freshness/coverage visible.
+Это осознанное решение. Такой поток делает аналитику воспроизводимой, не смешивает live-ответы API с расчетами отчетов и позволяет явно видеть свежесть и покрытие данных.
 
-Notable implementation work:
+Что внутри особенно важно:
 
-- Next.js 14 App Router monolith with TypeScript, server actions, Prisma, and PostgreSQL.
-- BullMQ/Redis workers for manual and scheduled sync jobs.
-- Explicit sync coverage and run tracking for period-based data.
-- WB Finance API migration with pagination, selected fields, money normalization, and throttling.
-- Historical article versions so reports do not mix old and new physical products under the same WB `nmId`.
-- Advertising detail hardening for combined WB cards and primary `imtID` groups.
-- Safety boundaries around WB write actions: prices, ads, feedback answers, cards, and historical resyncs require explicit intent.
-- Project documentation split into core, development, and marketplace zones for handoff-friendly work.
+- монолит на Next.js 14 App Router с TypeScript, server actions, Prisma и PostgreSQL;
+- BullMQ/Redis workers для ручных и запланированных фоновых задач;
+- учет покрытия данных и истории запусков для синхронизаций по периодам;
+- миграция финансовых отчетов на WB Finance API с пагинацией, выбором нужных полей, нормализацией денежных значений и throttling;
+- версии артикулов по датам, чтобы отчеты не смешивали старый и новый физический товар под одним WB `nmId`;
+- доработка рекламной аналитики для объединенных карточек WB и primary `imtID`-групп;
+- safety-границы для WB write-действий: цены, реклама, ответы на отзывы, карточки и исторические пересинхронизации требуют явного намерения;
+- документация разделена на core, development и marketplace-зоны, чтобы проект можно было передавать между сессиями без потери контекста.
 
-## Tech Stack
+## Стек
 
 - **Frontend/backend**: Next.js 14 App Router, TypeScript, React, Tailwind CSS, shadcn/ui
 - **Auth**: NextAuth
 - **Database**: PostgreSQL, Prisma 7
 - **Jobs**: Redis, BullMQ
-- **Integrations**: Wildberries APIs, Google Sheets API
-- **Exports**: XLSX
-- **Deployment artifacts**: Dockerfile, Docker Compose, nginx example
+- **Интеграции**: Wildberries API, Google Sheets API
+- **Экспорты**: XLSX
+- **Deploy-артефакты**: Dockerfile, Docker Compose, пример nginx-конфига
 
-## Branch Map
+## Карта веток
 
-Development originally happened on one linear branch, so the repository also keeps milestone branches that point to meaningful points in the same preserved history:
+Разработка изначально велась в одной линейной ветке. Чтобы историю было проще читать, в репозитории оставлены milestone-ветки, которые указывают на логические этапы той же сохраненной истории:
 
-- `history/00-bootstrap-auth` - project bootstrap, auth, basic app structure.
-- `history/01-wb-products-references` - WB account setup, product cards, references.
-- `history/02-financial-reports` - report sync, formulas, UI, grouping, export.
-- `history/03-sales-plan` - plan/fact module, orders/sales sync, funnel analytics.
-- `history/04-advertising-sync` - advertising campaigns, background sync, queue hardening.
-- `history/05-dashboard-inventory-feedback` - dashboard analytics, stocks, reviews/questions, exports.
-- `history/06-docs-automations` - documentation split and morning WB automation.
-- `history/07-current-hardening` - Finance API migration, stock/ad/report fixes, article versions.
+- `history/00-bootstrap-auth` - старт проекта, авторизация, базовая структура приложения.
+- `history/01-wb-products-references` - настройки WB-кабинетов, карточки товаров, справочники.
+- `history/02-financial-reports` - синхронизация отчетов, формулы, UI, группировка, экспорт.
+- `history/03-sales-plan` - модуль план/факт, orders/sales sync, воронка.
+- `history/04-advertising-sync` - рекламные кампании, фоновая синхронизация, hardening очередей.
+- `history/05-dashboard-inventory-feedback` - дашборд, остатки, отзывы/вопросы, экспорты.
+- `history/06-docs-automations` - разделение документации и утренняя WB-автоматизация.
+- `history/07-current-hardening` - Finance API, исправления отчетов/остатков/рекламы, версии артикулов.
 
-`main` contains the current complete state.
+`main` содержит текущее полное состояние проекта.
 
-## Repository Safety
+## Безопасность репозитория
 
-This repo intentionally does not store real secrets, production `.env` files, decrypted WB API keys, or live credentials. Example env files are templates only.
+В репозитории намеренно не хранятся реальные секреты, production `.env` файлы, расшифрованные WB API-ключи или живые credentials. Файлы `.env.example` и `.env.production.example` - только шаблоны.
 
-Dangerous operations are documented and guarded in the project docs:
+Опасные действия описаны и ограничены в документации:
 
-- production migrations;
-- destructive database or filesystem actions;
-- full historical WB resync;
-- WB write actions for prices, cards, ads, budgets, stocks, and feedback answers.
+- production-миграции;
+- destructive-действия с базой или файловой системой;
+- полная историческая пересинхронизация WB;
+- любые WB write-действия: цены, карточки, реклама, бюджеты, остатки и ответы на отзывы.
 
-## Local Orientation
+## Быстрая ориентация
 
-For a quick technical overview:
+Для технического входа в проект:
 
-- `AGENTS.md` - operating rules for Codex agents;
-- `docs/DOCS_INDEX.md` - documentation navigator;
-- `docs/core/PROJECT_STATE.md` - current implementation state;
-- `docs/core/ARCHITECTURE.md` - architecture and data flow;
-- `docs/core/COMMANDS.md` - safe command guide;
-- `docs/core/SAFETY_RULES.md` - production and data safety rules.
+- `AGENTS.md` - правила работы Codex-агентов;
+- `docs/DOCS_INDEX.md` - навигатор по документации;
+- `docs/core/PROJECT_STATE.md` - текущее состояние реализации;
+- `docs/core/ARCHITECTURE.md` - архитектура и поток данных;
+- `docs/core/COMMANDS.md` - безопасные команды;
+- `docs/core/SAFETY_RULES.md` - правила безопасности для данных и production.
 
-Usually safe local checks:
+Обычно безопасные локальные проверки:
 
 ```bash
 npm run type-check
 npx prisma validate
 ```
 
-Commands that touch production data, live WB writes, historical resyncs, or migrations require explicit confirmation.
+Команды, которые затрагивают production-данные, live write-действия в WB, исторические пересинхронизации или миграции, требуют явного подтверждения.
