@@ -63,6 +63,9 @@ const JOB_LABELS: Record<SyncJobKind, string> = {
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'Остатки WB',
   [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'Отзывы',
   [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'Вопросы',
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: 'FBS: заказы и статусы',
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: 'FBS: остатки WB',
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 'FBS: маркировка',
 }
 
 const STATUS_LABELS: Record<SyncJobRunRow['status'], string> = {
@@ -88,6 +91,9 @@ const MANUAL_JOBS: SyncJobKind[] = [
   SYNC_JOB_KINDS.STOCKS_CURRENT,
   SYNC_JOB_KINDS.REVIEWS_REFRESH,
   SYNC_JOB_KINDS.QUESTIONS_REFRESH,
+  SYNC_JOB_KINDS.FBS_OPERATIONAL,
+  SYNC_JOB_KINDS.FBS_STOCKS_CURRENT,
+  SYNC_JOB_KINDS.FBS_MARKING_REPORT,
 ]
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
@@ -237,6 +243,7 @@ export function SyncClient({
       kind: schedule.kind,
       enabled: schedule.enabled,
       timeOfDay: schedule.timeOfDay,
+      intervalMinutes: schedule.intervalMinutes,
       rollingDays: schedule.rollingDays,
     })
     setSavingSchedule(null)
@@ -323,7 +330,7 @@ export function SyncClient({
                 <TableRow>
                   <TableHead>Тип</TableHead>
                   <TableHead>Вкл.</TableHead>
-                  <TableHead>Время МСК</TableHead>
+                  <TableHead>Время / интервал</TableHead>
                   <TableHead>Период</TableHead>
                   <TableHead>Следующий запуск</TableHead>
                   <TableHead className="text-right">Действие</TableHead>
@@ -344,13 +351,32 @@ export function SyncClient({
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="time"
-                        value={schedule.timeOfDay}
-                        disabled={!canEnqueue}
-                        onChange={(event) => patchSchedule(schedule.kind, { timeOfDay: event.target.value })}
-                        className="w-32"
-                      />
+                      {schedule.intervalMinutes === null ? (
+                        <Input
+                          type="time"
+                          value={schedule.timeOfDay}
+                          disabled={!canEnqueue}
+                          onChange={(event) => patchSchedule(schedule.kind, { timeOfDay: event.target.value })}
+                          className="w-32"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={1440}
+                            value={schedule.intervalMinutes}
+                            disabled={!canEnqueue}
+                            onChange={(event) =>
+                              patchSchedule(schedule.kind, {
+                                intervalMinutes: Number(event.target.value) || 1,
+                              })
+                            }
+                            className="w-24"
+                          />
+                          <span className="text-sm text-muted-foreground">мин.</span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -363,7 +389,8 @@ export function SyncClient({
                             !canEnqueue ||
                             schedule.kind === SYNC_JOB_KINDS.PRODUCTS_REFRESH ||
                             schedule.kind === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS ||
-                            schedule.kind === SYNC_JOB_KINDS.STOCKS_CURRENT
+                            schedule.kind === SYNC_JOB_KINDS.STOCKS_CURRENT ||
+                            schedule.kind === SYNC_JOB_KINDS.FBS_STOCKS_CURRENT
                           }
                           onChange={(event) =>
                             patchSchedule(schedule.kind, {

@@ -19,6 +19,9 @@ export const SCHEDULED_SYNC_KINDS: SyncJobKind[] = [
   SYNC_JOB_KINDS.STOCKS_CURRENT,
   SYNC_JOB_KINDS.REVIEWS_REFRESH,
   SYNC_JOB_KINDS.QUESTIONS_REFRESH,
+  SYNC_JOB_KINDS.FBS_OPERATIONAL,
+  SYNC_JOB_KINDS.FBS_STOCKS_CURRENT,
+  SYNC_JOB_KINDS.FBS_MARKING_REPORT,
 ]
 
 const DEFAULT_TIMES: Record<SyncJobKind, string> = {
@@ -31,6 +34,39 @@ const DEFAULT_TIMES: Record<SyncJobKind, string> = {
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: '05:30',
   [SYNC_JOB_KINDS.REVIEWS_REFRESH]: '06:00',
   [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: '06:15',
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: '00:00',
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: '00:00',
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: '00:00',
+}
+
+const DEFAULT_INTERVALS: Record<SyncJobKind, number | null> = {
+  [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: null,
+  [SYNC_JOB_KINDS.REPORTS_PERIOD]: null,
+  [SYNC_JOB_KINDS.SALES_PLAN_PERIOD]: null,
+  [SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS]: null,
+  [SYNC_JOB_KINDS.ADVERTISING_STATS]: null,
+  [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: null,
+  [SYNC_JOB_KINDS.STOCKS_CURRENT]: null,
+  [SYNC_JOB_KINDS.REVIEWS_REFRESH]: null,
+  [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: null,
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: 5,
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: 15,
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 60,
+}
+
+const DEFAULT_ENABLED: Record<SyncJobKind, boolean> = {
+  [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: true,
+  [SYNC_JOB_KINDS.REPORTS_PERIOD]: true,
+  [SYNC_JOB_KINDS.SALES_PLAN_PERIOD]: true,
+  [SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS]: true,
+  [SYNC_JOB_KINDS.ADVERTISING_STATS]: true,
+  [SYNC_JOB_KINDS.ADVERTISING_CLUSTERS]: false,
+  [SYNC_JOB_KINDS.STOCKS_CURRENT]: true,
+  [SYNC_JOB_KINDS.REVIEWS_REFRESH]: true,
+  [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: true,
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: false,
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: false,
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: false,
 }
 
 const LEGACY_SCHEDULER_IDS: Record<SyncJobKind, string> = {
@@ -43,6 +79,9 @@ const LEGACY_SCHEDULER_IDS: Record<SyncJobKind, string> = {
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'stocks-current-nightly',
   [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'reviews-refresh-nightly',
   [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'questions-refresh-nightly',
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: 'fbs-operational-interval',
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: 'fbs-stocks-interval',
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 'fbs-marking-report-interval',
 }
 
 type PrismaKind =
@@ -55,6 +94,9 @@ type PrismaKind =
   | 'STOCKS_CURRENT'
   | 'REVIEWS_REFRESH'
   | 'QUESTIONS_REFRESH'
+  | 'FBS_OPERATIONAL'
+  | 'FBS_STOCKS_CURRENT'
+  | 'FBS_MARKING_REPORT'
 
 const KIND_TO_PRISMA: Record<SyncJobKind, PrismaKind> = {
   [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: 'PRODUCTS_REFRESH',
@@ -66,6 +108,9 @@ const KIND_TO_PRISMA: Record<SyncJobKind, PrismaKind> = {
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'STOCKS_CURRENT',
   [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'REVIEWS_REFRESH',
   [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'QUESTIONS_REFRESH',
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: 'FBS_OPERATIONAL',
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: 'FBS_STOCKS_CURRENT',
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 'FBS_MARKING_REPORT',
 }
 
 const PRISMA_TO_KIND = Object.fromEntries(
@@ -101,8 +146,13 @@ function buildJobData(wbAccountId: string, kind: SyncJobKind, rollingDays: numbe
   } as SyncJobData
 }
 
-function getNextRunAt(timeOfDay: string, enabled: boolean): string | null {
+function getNextRunAt(
+  timeOfDay: string,
+  enabled: boolean,
+  intervalMinutes: number | null,
+): string | null {
   if (!enabled) return null
+  if (intervalMinutes) return new Date(Date.now() + intervalMinutes * 60_000).toISOString()
   validateTimeOfDay(timeOfDay)
   return getNextMoscowRunAt(timeOfDay).toISOString()
 }
@@ -114,9 +164,10 @@ export async function ensureDefaultSyncSchedules(wbAccountId: string) {
       create: {
         wbAccountId,
         kind: KIND_TO_PRISMA[kind],
-        enabled: true,
+        enabled: DEFAULT_ENABLED[kind],
         timeOfDay: DEFAULT_TIMES[kind],
-        rollingDays: 7,
+        intervalMinutes: DEFAULT_INTERVALS[kind],
+        rollingDays: DEFAULT_INTERVALS[kind] ? 1 : 7,
         timezone: TIMEZONE,
       },
       update: {},
@@ -136,17 +187,19 @@ export async function listSyncSchedules(wbAccountId: string): Promise<SyncSchedu
 
   return SCHEDULED_SYNC_KINDS.map((kind) => {
     const row = byKind.get(kind)
-    const enabled = row?.enabled ?? true
+    const enabled = row?.enabled ?? DEFAULT_ENABLED[kind]
     const timeOfDay = row?.timeOfDay ?? DEFAULT_TIMES[kind]
+    const intervalMinutes = row?.intervalMinutes ?? DEFAULT_INTERVALS[kind]
     return {
       id: row?.id ?? null,
       kind,
       enabled,
       timeOfDay,
-      rollingDays: row?.rollingDays ?? 7,
+      intervalMinutes,
+      rollingDays: row?.rollingDays ?? (intervalMinutes ? 1 : 7),
       timezone: row?.timezone ?? TIMEZONE,
       lastAppliedAt: row?.lastAppliedAt?.toISOString() ?? null,
-      nextRunAt: getNextRunAt(timeOfDay, enabled),
+      nextRunAt: getNextRunAt(timeOfDay, enabled, intervalMinutes),
     }
   })
 }
@@ -165,12 +218,15 @@ export async function applySyncSchedule(
   if (!row.enabled) {
     await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
   } else {
+    const repeat = row.intervalMinutes
+      ? { every: row.intervalMinutes * 60_000 }
+      : {
+          pattern: patternFromTime(row.timeOfDay),
+          tz: row.timezone,
+        }
     await queue.upsertJobScheduler(
       schedulerId(wbAccountId, kind),
-      {
-        pattern: patternFromTime(row.timeOfDay),
-        tz: row.timezone,
-      },
+      repeat,
       {
         name: kind,
         data: buildJobData(wbAccountId, kind, row.rollingDays),
@@ -189,10 +245,11 @@ export async function applySyncSchedule(
     kind,
     enabled: updated.enabled,
     timeOfDay: updated.timeOfDay,
+    intervalMinutes: updated.intervalMinutes,
     rollingDays: updated.rollingDays,
     timezone: updated.timezone,
     lastAppliedAt: updated.lastAppliedAt?.toISOString() ?? null,
-    nextRunAt: getNextRunAt(updated.timeOfDay, updated.enabled),
+    nextRunAt: getNextRunAt(updated.timeOfDay, updated.enabled, updated.intervalMinutes),
   }
 }
 
@@ -208,7 +265,13 @@ export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promis
   if (!SCHEDULED_SYNC_KINDS.includes(input.kind)) {
     throw new Error('Этот тип синхронизации не запускается по расписанию')
   }
-  validateTimeOfDay(input.timeOfDay)
+  if (input.intervalMinutes === null) validateTimeOfDay(input.timeOfDay)
+  if (
+    input.intervalMinutes !== null &&
+    (!Number.isInteger(input.intervalMinutes) || input.intervalMinutes < 1 || input.intervalMinutes > 1_440)
+  ) {
+    throw new Error('Интервал должен быть от 1 до 1440 минут')
+  }
   if (input.rollingDays < 1 || input.rollingDays > 30) {
     throw new Error('Период должен быть от 1 до 30 дней')
   }
@@ -225,12 +288,14 @@ export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promis
       kind: KIND_TO_PRISMA[input.kind],
       enabled: input.enabled,
       timeOfDay: input.timeOfDay,
+      intervalMinutes: input.intervalMinutes,
       rollingDays: input.rollingDays,
       timezone: TIMEZONE,
     },
     update: {
       enabled: input.enabled,
       timeOfDay: input.timeOfDay,
+      intervalMinutes: input.intervalMinutes,
       rollingDays: input.rollingDays,
       timezone: TIMEZONE,
     },

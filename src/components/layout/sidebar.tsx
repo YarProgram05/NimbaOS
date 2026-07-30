@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Landmark,
+  PackageCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/analytics', label: 'Аналитика', icon: BarChart3 },
   { href: '/sales-plan', label: 'План продаж', icon: TrendingUp },
   { href: '/stocks', label: 'Остатки', icon: Warehouse },
+  { href: '/fbs', label: 'FBS', icon: PackageCheck },
   { href: '/reviews', label: 'Отзывы и вопросы', icon: MessageSquareText },
   { href: '/references', label: 'Справочники', icon: BookOpen },
   { href: '/advertising', label: 'Реклама', icon: Megaphone },

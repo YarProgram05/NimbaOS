@@ -391,6 +391,33 @@ export async function enqueueManualSyncAction(
       return enqueueReviewsSyncAction(wbAccountId, dateFrom, dateTo)
     case SYNC_JOB_KINDS.QUESTIONS_REFRESH:
       return enqueueQuestionsSyncAction(wbAccountId, dateFrom, dateTo)
+    case SYNC_JOB_KINDS.FBS_OPERATIONAL:
+    case SYNC_JOB_KINDS.FBS_MARKING_REPORT:
+      try {
+        if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
+        const job = await enqueueSyncJob({
+          kind,
+          source: 'manual',
+          wbAccountId,
+          dateFrom,
+          dateTo,
+        })
+        return { success: true, data: job }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Ошибка постановки задачи FBS' }
+      }
+    case SYNC_JOB_KINDS.FBS_STOCKS_CURRENT:
+      try {
+        if (!wbAccountId) return { success: false, error: 'Кабинет не выбран' }
+        const job = await enqueueSyncJob({
+          kind: SYNC_JOB_KINDS.FBS_STOCKS_CURRENT,
+          source: 'manual',
+          wbAccountId,
+        })
+        return { success: true, data: job }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Ошибка постановки задачи FBS' }
+      }
     case SYNC_JOB_KINDS.ADVERTISING_CLUSTERS:
       return { success: false, error: 'Кластеры запускаются из карточки кампании с выбранным периодом' }
   }

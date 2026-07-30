@@ -8,6 +8,9 @@ export const SYNC_JOB_KINDS = {
   STOCKS_CURRENT: 'stocks.current',
   REVIEWS_REFRESH: 'reviews.refresh',
   QUESTIONS_REFRESH: 'questions.refresh',
+  FBS_OPERATIONAL: 'fbs.operational',
+  FBS_STOCKS_CURRENT: 'fbs.stocks.current',
+  FBS_MARKING_REPORT: 'fbs.marking-report',
 } as const
 
 export type SyncJobKind = (typeof SYNC_JOB_KINDS)[keyof typeof SYNC_JOB_KINDS]
@@ -44,6 +47,7 @@ export interface SyncScheduleRow {
   kind: SyncJobKind
   enabled: boolean
   timeOfDay: string
+  intervalMinutes: number | null
   rollingDays: number
   timezone: string
   lastAppliedAt: string | null
@@ -55,5 +59,6 @@ export interface UpdateSyncScheduleInput {
   kind: SyncJobKind
   enabled: boolean
   timeOfDay: string
+  intervalMinutes: number | null
   rollingDays: number
 }

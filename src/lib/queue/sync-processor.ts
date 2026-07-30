@@ -12,6 +12,11 @@ import { syncAdStats } from '@/lib/services/sync-ad-stats'
 import { syncAdClusters } from '@/lib/services/sync-ad-clusters'
 import { syncStocksCurrent } from '@/lib/services/sync-stocks'
 import { syncQuestions, syncReviews } from '@/lib/services/sync-feedback'
+import {
+  syncFbsMarkingReport,
+  syncFbsOperational,
+  syncFbsStocksCurrent,
+} from '@/lib/services/sync-fbs'
 import { DEFAULT_SYNC_JOB_OPTIONS, SYNC_JOB_KINDS, getSyncQueue, type SyncJobData } from '@/lib/queue'
 import { createRunForBullJob } from '@/lib/queue/sync-jobs'
 import { WbRateLimitError } from '@/lib/wb-api/client'
@@ -35,6 +40,9 @@ type PrismaKind =
   | 'STOCKS_CURRENT'
   | 'REVIEWS_REFRESH'
   | 'QUESTIONS_REFRESH'
+  | 'FBS_OPERATIONAL'
+  | 'FBS_STOCKS_CURRENT'
+  | 'FBS_MARKING_REPORT'
 
 const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.PRODUCTS_REFRESH]: 'PRODUCTS_REFRESH',
@@ -46,6 +54,9 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.STOCKS_CURRENT]: 'STOCKS_CURRENT',
   [SYNC_JOB_KINDS.REVIEWS_REFRESH]: 'REVIEWS_REFRESH',
   [SYNC_JOB_KINDS.QUESTIONS_REFRESH]: 'QUESTIONS_REFRESH',
+  [SYNC_JOB_KINDS.FBS_OPERATIONAL]: 'FBS_OPERATIONAL',
+  [SYNC_JOB_KINDS.FBS_STOCKS_CURRENT]: 'FBS_STOCKS_CURRENT',
+  [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 'FBS_MARKING_REPORT',
 }
 
 const SCHEDULED_START_GRACE_MINUTES = 10
@@ -83,10 +94,12 @@ async function shouldSkipScheduledJob(data: SyncJobData): Promise<string | null>
     select: {
       enabled: true,
       timeOfDay: true,
+      intervalMinutes: true,
     },
   })
 
   if (!schedule?.enabled) return 'scheduled job is disabled'
+  if (schedule.intervalMinutes) return null
 
   const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
   if (lateMinutes > SCHEDULED_START_GRACE_MINUTES) {
@@ -334,6 +347,30 @@ async function processSyncJobData(data: SyncJobData) {
       const { dateFrom, dateTo } = resolvePeriod(data)
       const result = await syncQuestions(data.wbAccountId, { dateFrom, dateTo })
       await markSyncCoverage(data.wbAccountId, SYNC_JOB_KINDS.QUESTIONS_REFRESH, dateFrom, dateTo)
+      return result
+    }
+    case SYNC_JOB_KINDS.FBS_OPERATIONAL: {
+      const period = resolvePeriod({ ...data, rollingDays: data.rollingDays ?? 1 })
+      const result = await syncFbsOperational(data.wbAccountId, period)
+      await markSyncCoverage(
+        data.wbAccountId,
+        SYNC_JOB_KINDS.FBS_OPERATIONAL,
+        period.dateFrom,
+        period.dateTo,
+      )
+      return result
+    }
+    case SYNC_JOB_KINDS.FBS_STOCKS_CURRENT:
+      return syncFbsStocksCurrent(data.wbAccountId)
+    case SYNC_JOB_KINDS.FBS_MARKING_REPORT: {
+      const period = resolvePeriod({ ...data, rollingDays: data.rollingDays ?? 1 })
+      const result = await syncFbsMarkingReport(data.wbAccountId, period.dateFrom, period.dateTo)
+      await markSyncCoverage(
+        data.wbAccountId,
+        SYNC_JOB_KINDS.FBS_MARKING_REPORT,
+        period.dateFrom,
+        period.dateTo,
+      )
       return result
     }
   }

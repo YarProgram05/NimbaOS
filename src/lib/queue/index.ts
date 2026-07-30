@@ -79,6 +79,25 @@ export interface QuestionsRefreshJobData extends SyncJobBase {
   dateTo?: string
 }
 
+export interface FbsOperationalJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.FBS_OPERATIONAL
+  wbAccountId: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export interface FbsStocksCurrentJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.FBS_STOCKS_CURRENT
+  wbAccountId: string
+}
+
+export interface FbsMarkingReportJobData extends SyncJobBase {
+  kind: typeof SYNC_JOB_KINDS.FBS_MARKING_REPORT
+  wbAccountId: string
+  dateFrom?: string
+  dateTo?: string
+}
+
 export type SyncJobData =
   | ProductsRefreshJobData
   | ReportsPeriodJobData
@@ -89,6 +108,9 @@ export type SyncJobData =
   | StocksCurrentJobData
   | ReviewsRefreshJobData
   | QuestionsRefreshJobData
+  | FbsOperationalJobData
+  | FbsStocksCurrentJobData
+  | FbsMarkingReportJobData
 
 export const DEFAULT_SYNC_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
