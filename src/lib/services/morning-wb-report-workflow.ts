@@ -11,6 +11,7 @@ const HEADER_ROW = [
   'Дата',
   'Заказано, руб',
   'Выкупили, руб',
+  'Выкупили, шт',
   '% выкупа',
   'Факт приход',
   'Логистика',
@@ -20,14 +21,18 @@ const HEADER_ROW = [
   'Реклама',
   'ДРР',
   'ЧП',
+  'ЧП на 1 ед',
   'Налоги в руб',
   'Налог %',
   'ОП факт без рекламы',
-  'ROMI',
 ]
 
 const DAY_ROWS = 31
-const FORMULA_COLUMNS = new Set([4, 11, 16])
+const YEAR_START_MONTH = 0
+const YEAR_START_DAY = 1
+const YEAR_TOTAL_ROW = 34
+const MONTH_PROGRESS_VALUE_ROW = 44
+const FORMULA_COLUMNS = new Set([5, 12, 14])
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
 
 interface WorkflowStepTiming {
@@ -107,6 +112,10 @@ function firstDayOfMonth(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1))
 }
 
+function firstDayOfYear(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), YEAR_START_MONTH, YEAR_START_DAY))
+}
+
 function daysInMonth(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).getUTCDate()
 }
@@ -160,6 +169,7 @@ function buildDailyValues(data: MorningReportData, taxRatePercent: number) {
   const summary = data.financial.summary
   const orderedRub = numberValue(summary.orderedRub)
   const sale = numberValue(summary.sale)
+  const boughtQty = numberValue(summary.boughtWithReturns)
   const toTransfer = numberValue(summary.toTransfer)
   const logistics = numberValue(summary.logistics)
   const storage = numberValue(summary.storageFee)
@@ -171,9 +181,10 @@ function buildDailyValues(data: MorningReportData, taxRatePercent: number) {
   const operatingProfitBeforeAds = operatingProfit + adAll
 
   return {
-    bc: [orderedRub, sale],
-    ej: [toTransfer, logistics, storage, turnover, costPrice, adAll],
-    lo: [operatingProfit, taxes, taxRatePercent / 100, operatingProfitBeforeAds],
+    bd: [orderedRub, sale, boughtQty],
+    fk: [toTransfer, logistics, storage, turnover, costPrice, adAll],
+    m: [operatingProfit],
+    oq: [taxes, taxRatePercent / 100, operatingProfitBeforeAds],
   }
 }
 
@@ -201,23 +212,29 @@ async function timedStep<T>(
   }
 }
 
-async function ensureReportSources(wbAccountId: string, dateFrom: string, dateTo: string) {
+async function ensureReportSources(params: {
+  wbAccountId: string
+  reportDateFrom: string
+  adDateFrom: string
+  dateTo: string
+}) {
+  const { wbAccountId, reportDateFrom, adDateFrom, dateTo } = params
   const steps: WorkflowStepTiming[] = []
 
   const reportCoverage = await timedStep(steps, 'coverage:reports', () =>
-    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, dateFrom, dateTo),
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.REPORTS_PERIOD, reportDateFrom, dateTo),
   )
   if (!reportCoverage.isCovered) {
-    throw new Error(`Нет локального покрытия отчетных данных за ${dateFrom} - ${dateTo}; запустите sync отчетов отдельно`)
+    throw new Error(`Нет локального покрытия отчетных данных за ${reportDateFrom} - ${dateTo}; запустите sync отчетов отдельно`)
   } else {
     steps.push(skippedStep('sync:reports', 'DB coverage complete; external sync disabled for this workflow'))
   }
 
   const adCoverage = await timedStep(steps, 'coverage:advertising', () =>
-    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, dateFrom, dateTo),
+    getSyncCoverage(wbAccountId, SYNC_JOB_KINDS.ADVERTISING_STATS, adDateFrom, dateTo),
   )
   if (!adCoverage.isCovered) {
-    throw new Error(`Нет локального покрытия рекламы за ${dateFrom} - ${dateTo}; запустите sync рекламы отдельно`)
+    throw new Error(`Нет локального покрытия рекламы за ${adDateFrom} - ${dateTo}; запустите sync рекламы отдельно`)
   } else {
     steps.push(skippedStep('sync:advertising', 'DB coverage complete; external sync disabled for this workflow'))
   }
@@ -247,7 +264,7 @@ async function prepareMonthIfNeeded(
   targetDate: Date,
 ) {
   const prefix = sheetNameA1(sheetName)
-  const values = await getSheetValues(spreadsheetId, `${prefix}!A1:P33`, 'FORMULA')
+  const values = await getSheetValues(spreadsheetId, `${prefix}!A1:Q${YEAR_TOTAL_ROW}`, 'FORMULA')
   validateHeaders(sheetName, values)
 
   const firstExistingDate = numberValue(values[1]?.[0])
@@ -263,9 +280,10 @@ async function prepareMonthIfNeeded(
   ])
 
   const clearRanges = [
-    `${prefix}!B2:C32`,
-    `${prefix}!E2:J32`,
-    `${prefix}!L2:O32`,
+    `${prefix}!B2:D32`,
+    `${prefix}!F2:K32`,
+    `${prefix}!M2:M32`,
+    `${prefix}!O2:Q32`,
   ]
   if (monthDays < DAY_ROWS) {
     clearRanges.push(`${prefix}!A${monthDays + 2}:A32`)
@@ -296,13 +314,20 @@ async function writeAccountReport(params: {
   const startedAt = Date.now()
   try {
     await timedStep(steps, 'sheet:prepare-month', () => prepareMonthIfNeeded(spreadsheetId, sheetName, targetDate))
-    steps.push(...(await ensureReportSources(wbAccountId, dateFrom, dateTo)))
+    const yearStart = formatDate(firstDayOfYear(targetDate))
+    steps.push(...(await ensureReportSources({
+      wbAccountId,
+      reportDateFrom: yearStart,
+      adDateFrom: dateFrom,
+      dateTo,
+    })))
 
     const from = parseDate(dateFrom)
     const to = parseDate(dateTo)
-    const bcValues: number[][] = []
-    const ejValues: number[][] = []
-    const loValues: number[][] = []
+    const bdValues: number[][] = []
+    const fkValues: number[][] = []
+    const mValues: number[][] = []
+    const oqValues: number[][] = []
 
     await timedStep(steps, 'report:build-daily-values', async () => {
       for (let day = from; day <= to; day = addDays(day, 1)) {
@@ -312,19 +337,33 @@ async function writeAccountReport(params: {
           throw new Error(`Нет покрытия финансовых данных за ${dayString}`)
         }
         const values = buildDailyValues(data, taxRatePercent)
-        bcValues.push(values.bc)
-        ejValues.push(values.ej)
-        loValues.push(values.lo)
+        bdValues.push(values.bd)
+        fkValues.push(values.fk)
+        mValues.push(values.m)
+        oqValues.push(values.oq)
       }
     })
 
-    const endRow = bcValues.length + 1
+    const yearData = await timedStep(steps, 'report:build-year-total-values', async () => {
+      const data = await getMorningReportData(wbAccountId, yearStart, dateTo)
+      if (!data.financial.coverage.isCovered) {
+        throw new Error(`Нет покрытия финансовых данных за ${yearStart} - ${dateTo}`)
+      }
+      return buildDailyValues(data, taxRatePercent)
+    })
+
+    const endRow = bdValues.length + 1
     const prefix = sheetNameA1(sheetName)
     await timedStep(steps, 'sheet:write-daily-values', () =>
       batchUpdateSheetValues(spreadsheetId, [
-        { range: `${prefix}!B2:C${endRow}`, values: bcValues },
-        { range: `${prefix}!E2:J${endRow}`, values: ejValues },
-        { range: `${prefix}!L2:O${endRow}`, values: loValues },
+        { range: `${prefix}!B2:D${endRow}`, values: bdValues },
+        { range: `${prefix}!F2:K${endRow}`, values: fkValues },
+        { range: `${prefix}!M2:M${endRow}`, values: mValues },
+        { range: `${prefix}!O2:Q${endRow}`, values: oqValues },
+        { range: `${prefix}!B${YEAR_TOTAL_ROW}:D${YEAR_TOTAL_ROW}`, values: [yearData.bd] },
+        { range: `${prefix}!F${YEAR_TOTAL_ROW}:K${YEAR_TOTAL_ROW}`, values: [yearData.fk] },
+        { range: `${prefix}!M${YEAR_TOTAL_ROW}:M${YEAR_TOTAL_ROW}`, values: [yearData.m] },
+        { range: `${prefix}!O${YEAR_TOTAL_ROW}:Q${YEAR_TOTAL_ROW}`, values: [yearData.oq] },
       ]),
     )
 
@@ -332,12 +371,12 @@ async function writeAccountReport(params: {
     const totalDays = daysInMonth(targetDate)
     await timedStep(steps, 'sheet:write-month-progress', () =>
       batchUpdateSheetValues(spreadsheetId, [
-        { range: `${prefix}!A43:C43`, values: [[workedDays, totalDays, totalDays - workedDays]] },
+        { range: `${prefix}!A${MONTH_PROGRESS_VALUE_ROW}:C${MONTH_PROGRESS_VALUE_ROW}`, values: [[workedDays, totalDays, totalDays - workedDays]] },
       ]),
     )
 
     return {
-      rowsWritten: bcValues.length,
+      rowsWritten: bdValues.length,
       durationMs: Date.now() - startedAt,
       steps,
     }
@@ -374,6 +413,7 @@ export async function runMorningWbReportWorkflow(options: { targetDate?: string 
 
   const targetDate = options.targetDate ? parseDate(options.targetDate) : getTargetDate()
   const monthStart = firstDayOfMonth(targetDate)
+  const yearStart = firstDayOfYear(targetDate)
   const dateFrom = formatDate(monthStart)
   const dateTo = formatDate(targetDate)
   const results: WorkflowAccountResult[] = []
@@ -420,7 +460,7 @@ export async function runMorningWbReportWorkflow(options: { targetDate?: string 
   return {
     spreadsheetId,
     targetDate: dateTo,
-    dateFrom,
+    dateFrom: formatDate(yearStart),
     dateTo,
     accountsProcessed: results.length,
     accountsFailed,
@@ -433,7 +473,7 @@ export function morningWbReportPayload(targetDate?: string) {
   return {
     kind: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
     targetDate: formatDate(target),
-    dateFrom: formatDate(firstDayOfMonth(target)),
+    dateFrom: formatDate(firstDayOfYear(target)),
     dateTo: formatDate(target),
   }
 }

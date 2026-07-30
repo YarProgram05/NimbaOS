@@ -185,7 +185,7 @@ export function AutomationsClient({
             <div>
               <CardTitle className="text-base">Утренний отчет WB</CardTitle>
               <CardDescription>
-                Ежедневно заполняет Google Sheet за текущий месяц до вчерашнего дня включительно.
+                Ежедневно заполняет Google Sheet за текущий месяц и строку итога с начала года.
               </CardDescription>
             </div>
             <Badge variant={workflow.enabled ? 'default' : 'secondary'}>
