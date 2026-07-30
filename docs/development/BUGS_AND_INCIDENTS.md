@@ -1,5 +1,167 @@
 # Bugs And Incidents
 
+## BUG-022: Nimba KIZs from July 28 were not created and metadata looked blocked
+
+Status:
+- Fixed and live-verified locally on 2026-07-30.
+
+Symptoms:
+- Nine Nimba FBS orders from 2026-07-28 were present as `complete/sorted`, required SGTIN and had no linked KIZ after a successful background sync.
+- The order table displayed the generic metadata state `Заблокировано` even after WB returned and NimbaOS linked a KIZ.
+
+Root cause:
+- Two sync-worker process trees were still running code loaded before automatic WB SGTIN ingestion was implemented. Their job payload correctly covered 2026-07-26 - 2026-07-30, so the date range was not the cause.
+- UI metadata readiness incorrectly required KIZ circulation state `IN_CIRCULATION`. Handed-over codes immediately become `WITHDRAWAL_REQUIRED`, so valid WB metadata was mislabeled as blocked.
+
+Fix:
+- Ran the bounded 2026-07-28 Nimba sync through the new implementation, safely stopped both stale worker trees after confirming zero active jobs, and started one current worker.
+- Split WB metadata readiness from Chestny Znak circulation state. The table now shows `Получены`, `Нет КИЗа`, `Не подтверждено`, `Конфликт`, `Ошибка WB` or `Не требуются`, with a safe explanatory tooltip.
+- Successful manual attachment now stores the same canonical `VALID` validation status as WB metadata readback.
+
+Verification:
+- Direct bounded sync created and assigned 9 KIZ units with 0 rejects, conflicts or GTIN mismatches.
+- A queued worker job for the same date succeeded and reported 9 already assigned, 0 created and 0 assigned.
+- Workspace readback shows 9/9 July 28 orders with KIZ and metadata label `Получены`, with 0 metadata issues.
+- `npm test`: 23/23; TypeScript passed.
+
+Related files:
+`src/lib/fbs/metadata.ts`, `src/lib/services/fbs-workspace.ts`, `src/lib/services/fbs-operations.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`
+
+## BUG-021: FBS statuses were untranslated and the assortment selector escaped the viewport
+
+Status:
+- Fixed on 2026-07-30.
+
+Symptoms:
+- Seller and WB order statuses were displayed as raw API values.
+- The long FBS assortment dropdown extended below the visible screen.
+- Stock and WB write-gate labels were ambiguous for operators.
+
+Fix:
+- Added centralized Russian labels for every documented seller/WB status and Russian action labels.
+- Replaced the long catalog select with a searchable popover limited to 60% of viewport height with internal scrolling and collision padding.
+- Clarified local stock metrics and renamed the write gate to explicit permission for WB operations.
+
+Verification:
+- `npm test`: 14/14.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with two pre-existing unrelated `<img>` warnings.
+- Authenticated visual browser verification remains pending because neither test browser had an active application session.
+
+Related files:
+`src/app/(dashboard)/fbs/fbs-client.tsx`, `src/lib/fbs/status-labels.ts`, `src/lib/fbs/status-labels.test.ts`
+
+## BUG-020: FBS live read contracts did not match the current WB API
+
+Status:
+- Fixed and read-only verified locally on 2026-07-30.
+
+Symptoms:
+- `FBS_MARKING_REPORT` failed with WB API 405 and an `Allow: POST` hint.
+- `FBS_OPERATIONAL` failed in `prisma.fbsSellerWarehouse.upsert()` because WB returned numeric `deliveryType` and `cargoType`, while Prisma expected strings.
+- A stock job could finish successfully with zero updated rows when the preceding operational job had failed before creating warehouses and assortment.
+- The `/fbs` page refreshed immediately after enqueueing a background job, before the job had actually completed.
+
+Cause:
+- The marking report wrapper used `GET /api/v1/analytics/excise-report`; the current WB contract requires POST with the period in query parameters.
+- Live warehouse and supply classifier fields are numeric.
+- Period FBS order parameters are Unix timestamps, not `YYYY-MM-DD` strings.
+- Stock reconciliation queried only assortment already discovered from orders, so it was not independently capable of finding all positive FBS stock positions.
+
+Fix:
+- Changed the marking report call to POST.
+- Added strict warehouse response normalization and converted numeric warehouse/supply classifiers to strings before Prisma persistence.
+- Changed FBS status batches to 100 IDs, period dates to Moscow Unix timestamps and B2B parsing to support `options.isB2b`.
+- Made stock reconciliation refresh seller warehouses and check all local catalog `chrtId` values, retaining existing zero-stock FBS positions and discovering new positive-stock positions.
+- Added job completion polling and automatic `/fbs` refresh, plus a separate `Остаток WB` metric and an explanation that local physical stock is not overwritten by reconciliation.
+
+Verification:
+- 11 FBS tests pass and TypeScript passes.
+- Read-only operational smoke test for the affected local cabinet returned 1 warehouse, 4 supplies and 12 orders for `2026-07-29`.
+- Read-only marking smoke test returned 30 report rows and performed 8 matching updates; 7 current assortment positions are distinctly marked.
+- Full stock smoke test checked 131 catalog sizes, retained/updated 16 FBS positions, discovered 9 new positions and read 215 WB stock units.
+- After restarting the sync worker, an end-to-end queued `fbs.stocks.current` job succeeded with 16 updated positions and 215 WB stock units.
+- No WB write endpoint, schedule or historical backfill was run.
+
+## BUG-019: FBS Prisma migration was missing from the local database
+
+Status:
+- Fixed locally on 2026-07-30.
+
+Symptoms:
+- The application failed while opening a report with `Invalid prisma.realizationReport.findMany()` and `The column (not available) does not exist in the current database`.
+- The runtime pointed to `src/lib/services/report-calculator.ts` where Prisma selected `RealizationReport`.
+
+Cause:
+- The generated Prisma Client and application code expected the new FBS fields on `realization_reports`, but migration `20260730120000_fbs_operations` had not been applied to the local development database.
+- A Prisma `findMany` without an explicit `select` attempted to read the newly declared columns and failed before the page could render.
+
+Fix:
+- Confirmed that `20260730120000_fbs_operations` was the only pending migration.
+- Applied it with `npx prisma migrate deploy --schema prisma/schema.prisma` to the local `wb_cabinet` development database only.
+
+Verification:
+- Direct read of `realization_reports.deliveryMethod` succeeds.
+- The new `fbs_seller_warehouses` table is queryable.
+- `http://localhost:3000` responds with HTTP 200.
+
+Prevention:
+- Deploy reviewed schema migrations before starting an application build that uses the corresponding generated Prisma Client.
+- Keep the rollout order explicit: migration, Prisma generation/build, application start, then read-only smoke tests.
+- Local migration recovery does not authorize production migration, FBS backfill, schedules, WB synchronization or WB write operations.
+
+## BUG-018: pnpm from a nested report folder broke the root npm installation
+
+Status:
+Fixed; prevention rule documented.
+
+Symptoms:
+`npm run dev` first failed with `Cannot find module ... node_modules/next/dist/bin/next`. After `npm ci`, Next.js started but requests failed with `Cannot find module '.prisma/client/default'`.
+
+Affected area:
+Local development dependencies only (`node_modules`). Application source files, PostgreSQL data, migrations, WB data and report artifacts were not deleted or rewritten.
+
+Investigation:
+During one-off Excel report generation on 2026-07-25, a bundled `pnpm` command was run from a nested work folder that did not have an isolated `package.json`. It resolved the parent NimbaOS project and moved 38 direct npm-managed dependencies, including `next`, `react` and Prisma, into root `node_modules/.ignored`. A separate junction from the report work folder to a large bundled `node_modules` tree also made VS Code/Git enumerate more than 10,000 apparent changes. The junction was removed without touching its target.
+
+Fix:
+Removed only the report-folder junction. Restored root dependencies from the existing lock file with `npm ci`, then regenerated the local Prisma Client with `npx prisma generate`.
+
+Verification:
+`next`, `@prisma/client` and generated `node_modules/.prisma/client` are available and the user confirmed the dev server starts. Git reports zero deleted tracked files. Read-only DB verification found both cabinets and their existing key data: Galioni — 64 products, 5,453 orders, 73 sales, 28 stock snapshots and 28,321 realization rows; Nimba — 87 products, 6,114 orders, 278 sales, 24 stock snapshots and 30,914 realization rows.
+
+Prevention:
+- This repository is npm-managed (`package-lock.json`); do not run `pnpm install`, `pnpm add` or other dependency-mutating pnpm commands anywhere inside the repository tree.
+- Before any package-manager command, verify the working directory and that the intended folder has its own `package.json` and lock file. A nested folder without them may resolve the parent project.
+- For one-off report tooling, use the bundled runtime through an explicit module path or an isolated temporary directory outside the repository. Do not create `node_modules` junctions inside the repository or its `outputs` tree.
+- Do not install report-only dependencies into the application root. If root dependencies ever become inconsistent, restore with `npm ci`; after a clean install, run `npx prisma generate` before starting NimbaOS.
+
+Related files:
+`package.json`, `package-lock.json`, `prisma/schema.prisma`, `docs/development/BUGS_AND_INCIDENTS.md`
+
+## BUG-017: Morning WB YTD guard required full-year ad coverage
+
+Status:
+Fixed.
+
+Symptoms:
+Manual workflow run for target `2026-06-27` failed for both cabinets with `Нет локального покрытия рекламы за 2026-01-01 - 2026-06-27`, even though reports were synchronized through 2026-06-27 and advertising stats covered the current June reporting window.
+
+Affected area:
+`Утренний отчет WB` automation after adding row `Итого с начала года`.
+
+Investigation:
+The YTD layout change reused the year-start range for all source checks. That made `ADVERTISING_STATS` require full-year coverage from Jan 1, while local ad coverage currently starts at 2026-04-01.
+
+Fix:
+`src/lib/services/morning-wb-report-workflow.ts` now checks `REPORTS_PERIOD` from Jan 1 through target date, but checks `ADVERTISING_STATS` only for the current month window being written.
+
+Verification:
+`npx tsc --noEmit --pretty false` passed. Direct verification for target `2026-06-27` succeeded for both `WB Nimba` and `WB Galioni` and updated the live sheet.
+
+Related files:
+`src/lib/services/morning-wb-report-workflow.ts`, docs.
+
 ## BUG-016: Financial report mixed old and new physical products under one WB nmId
 
 Status:

@@ -1,6 +1,6 @@
 # Database Access Guide
 
-Быстрый и безопасный доступ к данным. Last updated: 2026-06-16.
+Быстрый и безопасный доступ к данным. Last updated: 2026-06-28.
 
 ## Main Rule
 
@@ -12,7 +12,7 @@
 
 - Продажи/финансы: `calculateReport` in `src/lib/services/report-calculator.ts`; UI/action layer `src/lib/actions/reports.ts`.
 - Итоги report rows: `aggregateReportRows` in `src/lib/reports/aggregate-report-rows.ts`.
-- Утренний WB-отчет: `getMorningReportData` in `src/lib/services/morning-report.ts`; automation writer in `src/lib/services/morning-wb-report-workflow.ts` checks coverage first, then reads DB and writes Google Sheets. It must not call WB API or sync services.
+- Утренний WB-отчет: `getMorningReportData` in `src/lib/services/morning-report.ts`; automation writer in `src/lib/services/morning-wb-report-workflow.ts` checks coverage first, then reads DB and writes Google Sheets. It writes daily current-month rows and row `Итого с начала года` from Jan 1 through target date. It checks report coverage from Jan 1 and advertising coverage for the current month window. It must not call WB API or sync services.
 - План/факт: `calculatePlanDetail` in `src/lib/services/plan-calculator.ts`; actions in `src/lib/actions/sales-plan.ts`.
 - Dashboard: `getDashboardSummary`, `buildDashboardProblemCenter`, `buildDashboardExport`.
 - Остатки: `getStocksSummary`, `getPaginatedStocks`.
@@ -63,3 +63,13 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 - Local ad stats that existed on 2026-06-16 were backfilled for ordered rows; other database copies with old ad stats need a one-time `orderSum` backfill or bounded ad stats resync.
 - Dashboard summary if it grows beyond current service-level aggregation.
 - Any marketplace ad-hoc request that scans all raw rows across all accounts.
+
+## FBS Access
+
+- Read the `/fbs` workspace through `getFbsWorkspaceData`; do not join all FBS event/movement tables in page components.
+- Current sellable stock is `onHand - reserved` from `fbs_assortment_items`. `wbStock` is only a reconciliation value.
+- For an inventory audit, read `fbs_inventory_movements` by `itemId` and `occurredAt`; each row stores both deltas and resulting balances.
+- For order/KIZ investigations, start from `fbs_orders`, then bounded `fbs_order_events`, `kiz_units`, `kiz_events` and `kiz_compliance_tasks`.
+- Never select or print `encryptedCode`/`kizEncrypted` in analytics. Use `maskedCode`, `kizMasked` or `codeHash`.
+- FBS finance analytics must filter `realization_reports` by account, period and `deliveryMethod` containing `FBS`.
+- No historical backfill should bypass `scripts/backfill-fbs-2026-07-20-2026-07-30.ts` for the initial range.

@@ -77,6 +77,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 - Feedback: unique `(wbAccountId, externalId)`, indexes by `(wbAccountId, createdDate)`, `(wbAccountId, nmId)`, `(wbAccountId, isAnswered)`, `rating`.
 - References: unique `(wbAccountId, vendorCode)` for cost/overrides; `article_versions` unique `(wbAccountId, nmId, dateFrom)` with date-range index `(wbAccountId, nmId, dateFrom, dateTo)`; indexes by account/date/vendor.
 - Realization: unique `(wbAccountId, rrdId)`, indexes `wbAccountId`, `nmId`, `vendorCode`, `(dateFrom, dateTo)`, `(wbAccountId, nmId, dateFrom)`.
+- Realization FBS enrichment: nullable `orderId`, `orderUid`, `trbxId`, `deliveryMethod`, `isB2b` and encrypted/hashed/masked KIZ fields; indexes `(wbAccountId, deliveryMethod, dateFrom)`, `(wbAccountId, orderId)`, `(wbAccountId, kizHash)`.
 - Paid storage: unique `(wbAccountId, date, nmId, chrtId)`, indexes `(wbAccountId)`, `(wbAccountId, date)`, `(wbAccountId, nmId)`.
 - Ads: unique `(wbAccountId, advertId)`, `(campaignId, date, source)`, `(campaignId, date, source, nmId)`, indexes by campaign, date, status, nmId.
 - Orders/sales/funnel: unique `(wbAccountId, srid)` for orders/sales, indexes `(wbAccountId, nmId, date)`, `(wbAccountId, date)`, `(wbAccountId, lastChangeDate)`, unique `(wbAccountId, nmId, date)` for funnel.
@@ -84,3 +85,17 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 ## Potential Future Indexes/Aggregates
 
 Нужно уточнить на реальных объемах: aggregate tables/materialized views for daily account/nm sales, stock risk, ad spend, and dashboard periods may be useful if service-level aggregation becomes slow.
+
+## FBS Tables
+
+- `fbs_seller_warehouses`: WB seller warehouses; `writeEnabled=false` is the WB mutation gate.
+- `fbs_assortment_items`: warehouse/chrtId assortment, product/size link, marking flag/GTIN, local `onHand`, `reserved`, read-only `wbStock`.
+- `fbs_inventory_movements`: append-only deltas and post-movement balances with per-item idempotency.
+- `fbs_orders`, `fbs_order_events`: int64 WB order identity, status/meta/supply snapshot and immutable observed transitions.
+- `fbs_supplies`: local cache of WB FBS supplies.
+- `kiz_units`: encrypted full DataMatrix, SHA-256 identity, masked representation, physical/circulation state, current order and `wbValidationStatus` (`VALID`, GTIN/order/state conflict markers).
+- `kiz_events`: immutable KIZ lifecycle.
+- `kiz_compliance_tasks`, `kiz_operation_batches`: Stage 1 Chestny Znak operations and XLSX export audit.
+- `fbs_action_logs`: idempotent audit for every explicit WB mutation; request summaries never contain raw KIZ.
+
+Important uniqueness: warehouse `(wbAccountId, externalId)`, assortment `(warehouseId, chrtId)`, order/supply `(wbAccountId, externalId)`, KIZ `(wbAccountId, codeHash)`, action `(wbAccountId, kind, idempotencyKey)`.

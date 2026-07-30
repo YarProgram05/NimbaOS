@@ -6,6 +6,10 @@
 
 ## Last Development Session Summary
 
+2026-07-25: recovered and documented `BUG-018`, a local dependency incident caused by bundled `pnpm` resolving the parent npm project from a nested Excel-report work folder and moving 38 direct dependencies into `node_modules/.ignored`. Removed only the verified report-workspace junction that caused Git/VS Code to enumerate 10,000+ apparent changes; restored dependencies with `npm ci` and regenerated Prisma Client. The dev server starts, Git has zero deleted tracked files, and read-only DB verification confirmed both cabinets and key data remain present. Prevention rule: this is an npm repository; do not run dependency-mutating pnpm commands or create `node_modules` junctions anywhere inside it, and isolate one-off report tooling outside the repository.
+
+2026-06-28: updated `Утренний отчет WB` automation layout and writer. Removed morning-sheet `ROMI`, added `Выкупили, шт` after `Выкупили, руб`, added `ЧП на 1 ед` after `ЧП`, added `Итого с начала года` row calculated from 2026-01-01/Jan 1 of target year through target date. Workflow now checks YTD report coverage from year start, current-month advertising coverage, writes progress to `A44:C44`, and still stays DB-only with no WB API/sync calls. Live Google Sheet `Утренний отчет WB` tabs `WB Nimba` and `WB Galioni` were updated and filled through 2026-06-27; `npx tsc --noEmit --pretty false` passed.
+
 2026-06-19: implemented dated article versions to prevent historical financial reports from mixing old and new physical products under the same WB `nmId`. Added Prisma model/table `article_versions`, `/references` tab `Версии артикулов`, server actions with non-overlap validation, and `calculateReport` version resolution by report-row date. Reports now split one `nmId` into separate rows when a selected period crosses a version change; `ArticleVersion.costPrice` overrides regular `cost_prices` only for that version/date range. Ran `npx prisma generate`, `npm run type-check`, `npx prisma migrate deploy` against local `localhost:5432/wb_cabinet`, and a DB-only Nimba report smoke check. Existing versions were not backfilled; user should manually enter known transitions such as old `Парео синяя ракушка` to new `парео синяя разводы` with exact change date/cost.
 
 2026-06-18: fixed `BUG-015` code path for undercounted financial-report `Заказано руб.` on long periods. The report formula remains `Σ wb_orders.finishedPrice` including cancelled orders, but `REPORTS_PERIOD`/`SALES_PLAN_PERIOD` worker paths now force a full order fetch for the requested period instead of using an incremental `lastChangeDate` cursor from a potentially partial local range. `npm run type-check` passed. Concrete DB readback for `WB Nimba` and `WB Galioni`, 2026-01-01 - 2026-06-17, still needs a normal app-environment sync/readback because this shell has no `DATABASE_URL` and agents must not read `.env`.
@@ -63,6 +67,26 @@
 - Automation worker/scheduler are separate from sync worker; production enablement requires Redis/PostgreSQL and explicit rollout setup.
 - Старые flat `docs/*.md` теперь legacy redirects/archives.
 
+## FBS Implementation Handoff (2026-07-30)
+
+- `/fbs` is a separate workplace for seller warehouse stock, FBS assortment, orders, supplies/stickers, KIZ and Chestny Znak queue.
+- Migration: `prisma/migrations/20260730120000_fbs_operations/migration.sql`. It was schema-validated and applied to the local development `wb_cabinet` database on 2026-07-30 after BUG-019. It has not been applied to production.
+- FBS schedules: `fbs.operational` 5 min, `fbs.stocks.current` 15 min, `fbs.marking-report` 60 min. Defaults are disabled; scheduler was not applied.
+- Initial backfill script is fixed to `2026-07-20` - `2026-07-30`, dry-run by default and was not executed.
+- Full KIZ is encrypted; do not log `rawCode`, decrypted codes or finance KIZ. Use masks/hash.
+- All WB FBS writes require manager intent, a warehouse gate and `FbsActionLog`; only admin enables a gate. All gates default false.
+- Stage 2 True API is not implemented.
+- BUG-020 live-read verification passed for one local cabinet: 1 warehouse, 4 supplies, 12 one-day orders, 30 marking rows, 7 distinctly marked current positions, 16 positive/current FBS positions and 215 WB stock units. No WB write was made.
+- BUG-021 fixed raw FBS statuses and the overflowing assortment selector. All documented seller/WB statuses and order actions now have Russian labels; the catalog popover has search, collision padding, a 60vh/20rem height cap and internal scrolling.
+- Local/WB stock labels and the WB write gate were clarified in the interface. Permission alone sends nothing; publication remains a separate explicit action.
+- Official and live verification confirmed that FBS metadata already provides `orderId -> meta.sgtin.value[]` after the code is attached in WB. Across both local cabinets, 20 of 24 latest orders returned a non-empty SGTIN array; no raw code was printed or stored during verification.
+- Secure WB-metadata ingestion is implemented: SGTIN is extracted before sanitization, normalized/parsed, encrypted, hash-deduplicated, GTIN-validated and linked to its order; stored order metadata remains redacted. Conflicts are counted and flagged without exposing or moving the code.
+- Two-cabinet live verification for 2026-07-29 - 2026-07-30 created and assigned 20 KIZ units (11 Galioni, 9 Nimba), with 0 rejects, conflicts or GTIN mismatches. The idempotency rerun created/assigned 0 and recognized all 20 as already assigned.
+- All 20 imported units reconciled to `HANDED_OVER` and received open `WITHDRAWAL_REMOTE_SALE` tasks. This local DB mutation was expected; no WB write occurred. PDF import is now optional for pre-packing code-pool accounting.
+- BUG-022: 9 Nimba codes from 2026-07-28 were missing because two running sync workers had loaded pre-ingestion code. After a bounded direct repair, both stale worker trees were replaced by one current worker. A queued idempotency check succeeded with all 9 already assigned.
+- WB metadata readiness no longer depends on Chestny Znak circulation state. July 28 workspace readback is 9/9 KIZ with label `Получены`; exact safe reasons replace the former generic `Заблокировано`.
+- Verification completed: Prisma format/validate/generate, 14 FBS tests, TypeScript and lint. Authenticated visual verification of BUG-021 remains pending because the test browser had no active application session. Existing unrelated `<img>` warnings remain.
+
 ## Read Next If Needed
 
 - `docs/core/ARCHITECTURE.md`
@@ -81,4 +105,4 @@
 
 ## Last Updated
 
-2026-06-19 - added dated article versions for historical product identity across financial reports, advertising article stats, sales-plan metrics, analytics chart, and feedback display.
+2026-07-30 - implemented and live-verified FBS/KIZ Stage 1, including automatic order-to-SGTIN ingestion, repaired 9 missing Nimba July 28 KIZs under BUG-022, and restarted a single current sync worker; no production migration, schedule, historical backfill or WB write was run.

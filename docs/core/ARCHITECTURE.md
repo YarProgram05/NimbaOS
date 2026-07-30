@@ -50,6 +50,7 @@ Sync services read WB API and write local tables:
 - ads: `sync-ad-campaigns.ts`, `sync-ad-stats.ts`, `sync-ad-clusters.ts`;
 - stocks: `sync-stocks.ts`;
 - reviews/questions: `sync-feedback.ts`.
+- FBS operational data: `sync-fbs.ts`; local inventory/KIZ/write workflows: `fbs-operations.ts`; workspace read model: `fbs-workspace.ts`.
 
 UI-triggered sync should enqueue through `src/lib/actions/sync.ts` where possible.
 
@@ -57,3 +58,12 @@ UI-triggered sync should enqueue through `src/lib/actions/sync.ts` where possibl
 
 Regular analytics should call calculators/services/actions, not manually scan raw tables. Views/materialized views and persisted summary tables were not found in the current schema. Aggregation is service-level today.
 
+## FBS Boundary
+
+`/fbs` is a DB-backed operational workspace, not an extension of `/stocks`.
+
+- Read flow: WB Marketplace/Analytics/Finance APIs → FBS sync/enrichment services → PostgreSQL → `fbs-workspace.ts` → UI.
+- Local stock flow: every `onHand`/`reserved` change and the resulting balances are written in one transaction with an append-only `FbsInventoryMovement`.
+- KIZ flow: encrypted `KizUnit` current state + immutable `KizEvent` + auditable `KizComplianceTask`/export batch.
+- Write flow: Server Action → role check → warehouse `writeEnabled` check → idempotent `FbsActionLog` → WB wrapper. Background jobs never enter this path.
+- Stage 1 Chestny Znak flow stops at XLSX export and manual document confirmation; no True API client exists yet.

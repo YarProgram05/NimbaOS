@@ -1,5 +1,94 @@
 # Development Log
 
+## 2026-07-30 - BUG-022 Nimba July 28 KIZ and metadata-state fix
+
+Nine Nimba orders from 2026-07-28 had no KIZ despite successful jobs whose payload covered 2026-07-26 - 2026-07-30. The background jobs were handled by two stale sync-worker trees loaded before SGTIN ingestion existed. After confirming zero active BullMQ jobs, both exact worker trees were stopped and one current hidden worker was started.
+
+A bounded direct sync created/assigned all 9 codes with no reject, conflict or GTIN mismatch. A subsequent real queued job handled by the restarted worker succeeded with 9 `alreadyAssigned` and zero creates/assignments, proving both code freshness and idempotency.
+
+The generic `Заблокировано` metadata label was a separate UI bug: it conflated WB metadata with Chestny Znak circulation and required `IN_CIRCULATION`, while handed-over units correctly had `WITHDRAWAL_REQUIRED`. Metadata readiness now checks WB attachment/validation only and reports an exact safe label/reason. Workspace readback shows all 9 July 28 orders as `Получены`.
+
+Verification: 23 FBS tests and TypeScript passed. No WB write, full-code output, schema migration or historical backfill was performed.
+
+## 2026-07-30 - Automatic encrypted KIZ ingestion from WB FBS metadata
+
+### Implementation
+`syncFbsOperational` now extracts `meta.sgtin.value[]` before metadata sanitization, normalizes/parses each DataMatrix, encrypts the full code, deduplicates by account/code hash, validates a known assortment GTIN and attaches the unit to its WB order. Ordinary order/event JSON continues to store `[REDACTED]`. Reused codes, unavailable states and mismatches are counted/flagged without exposing values or aborting the entire sync.
+
+Late metadata is reconciled with existing order state: handed-over units become `HANDED_OVER`, returns become `RETURN_EXPECTED`, pre-handoff cancellations release the assignment, and withdrawal tasks are created at handoff rather than waiting for final sale. Multiple SGTIN values are handled per order even though normal FBS assembly orders contain one unit.
+
+### Verification
+`npm test` passes 20 FBS tests, `npm run type-check` passes, and `npm run lint` passes with two pre-existing unrelated `<img>` warnings. A bounded local read-only-WB sync for 2026-07-29 - 2026-07-30 created/assigned 11 Galioni and 9 Nimba KIZ units with no reject, conflict or GTIN mismatch. An immediate identical rerun created/assigned zero and reported all 20 as already assigned.
+
+The database contains 20 new `VALID` units linked to orders, 20 `ATTACHED_TO_WB` audit events and 20 open remote-sale withdrawal tasks. No full code was printed, no WB write was made, and no schema migration was required.
+
+## 2026-07-30 - Read-only verification of FBS order-to-KIZ metadata
+
+### Summary
+Official WB documentation confirms that `POST /api/marketplace/v3/orders/meta` returns `orders[].id` with `meta.sgtin.value[]`, and that codes attached through the FBS metadata write method can be read back through this endpoint.
+
+### Live verification
+A bounded read-only call through the existing WB wrapper checked the latest 12 local FBS orders in each cabinet. WB returned 12 metadata rows per cabinet; 9 Nimba orders and 11 Galioni orders had non-empty SGTIN arrays (20 of 24 total). Only counts were emitted; tokens and full marking codes were neither logged nor printed.
+
+### Gap found at investigation time
+At this point `syncFbsOperational` still replaced the SGTIN object with `[REDACTED]` before KIZ creation. This gap was resolved later the same day by the automatic encrypted KIZ-ingestion implementation recorded above.
+
+## 2026-07-30 - FBS Russian statuses and viewport-safe assortment selector
+
+### Summary
+Translated all documented seller and WB order statuses and order actions into Russian. Replaced the overflowing assortment selector with a searchable, viewport-limited popover with internal scrolling. Clarified physical/reserved/available/WB stock labels and made the WB write gate wording explicit that permission alone sends nothing.
+
+### Verification
+`npm test` passed all 14 FBS tests, `npm run type-check` passed, and `npm run lint` passed with only two pre-existing unrelated `<img>` warnings. Browser navigation reached the application login page; authenticated visual verification could not be completed without an active browser session.
+
+### Scope
+No WB write, synchronization, migration, backfill or database mutation was performed.
+
+## 2026-07-25 - Local dependency incident and recovery
+
+### Summary
+Documented and recovered a local development dependency incident caused by running bundled `pnpm` from a nested Excel-report work folder without an isolated package manifest. pnpm resolved the parent npm project and moved 38 direct dependencies into `node_modules/.ignored`. A report-workspace `node_modules` junction also caused VS Code/Git to enumerate more than 10,000 apparent changes.
+
+### Files changed
+Documentation only. The report-folder junction was removed; application source, database schema and data were not changed by the recovery.
+
+### Commands run
+Inspected the junction and dependency tree; removed only the verified junction; restored dependencies with `npm ci`; generated Prisma Client with `npx prisma generate`; checked Git deleted paths; performed read-only Prisma counts for both cabinets.
+
+### Result
+The dev server starts again. Git has zero deleted tracked files. PostgreSQL is reachable and contains both cabinets and their key product, order, sale, stock, realization-report, review and question data. Added a hard rule to keep pnpm dependency mutations and `node_modules` junctions out of this npm repository and to isolate one-off report tooling outside the repository.
+
+## 2026-06-28 - Morning WB report layout and YTD total
+
+### Summary
+Updated `Утренний отчет WB` workflow contract. The Google Sheet no longer has `ROMI`; it now has `Выкупили, шт` after `Выкупили, руб` and `ЧП на 1 ед` after `ЧП`. Added row `Итого с начала года`, calculated from January 1 of the target year through the target date.
+
+### Files changed
+`src/lib/services/morning-wb-report-workflow.ts`, docs. The live Google Sheet `Утренний отчет WB` was updated on tabs `WB Nimba` and `WB Galioni`.
+
+### Commands run
+Started local Docker dev PostgreSQL/Redis; ran a DB-only one-off sheet fill for 2026-06-01 - 2026-06-26 daily rows and 2026-01-01 - 2026-06-26 YTD totals; `npx tsc --noEmit --pretty false`.
+
+### Result
+Workflow remains DB-only and does not call WB API or sync services. It checks report coverage from `YYYY-01-01` for YTD totals and advertising coverage for the current month window, writes daily month values into `B:D`, `F:K`, `M`, `O:Q`, writes YTD row 34, and writes month progress to `A44:C44`.
+
+### Follow-up fix
+Manual run for target `2026-06-27` initially failed because the new YTD guard required `ADVERTISING_STATS` from `2026-01-01`, while local advertising coverage starts at `2026-04-01` and covers the current June window. Adjusted the guard: YTD report rows require `REPORTS_PERIOD` from Jan 1, but advertising freshness is checked for the current month being written. Direct verification run for `2026-06-27` succeeded for both cabinets and updated the sheet.
+
+## 2026-06-26 - Docker production build memory headroom
+
+### Summary
+Adjusted the Docker builder stage to give the Next.js production build explicit Node heap headroom. Mini-PC Docker builds can otherwise fail during `npm run build` with `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`.
+
+### Files changed
+`Dockerfile`.
+
+### Commands run
+Not run in this workspace; the failure was observed during the mini-PC Docker build.
+
+### Result
+The builder stage now sets `NODE_OPTIONS=--max-old-space-size=4096` before `npm run build`.
+
 ## 2026-06-19 - Article versions for historical product identity
 
 ### Summary
@@ -306,3 +395,55 @@ Read-only inspection: file listing, Markdown headings search, Prisma model/index
 
 ### Follow-up
 После подтверждения можно удалить или оставить старые flat docs; пока они сохранены.
+
+## 2026-07-30 — FBS and KIZ Stage 1
+
+### Summary
+Implemented the approved FBS plan as one code pass with a separate `/fbs` bounded context: seller warehouses and assortment, local stock/reservations, order state processing, supplies/stickers, KIZ encryption/state/events, manual Chestny Znak tasks/XLSX, finance enrichment, interval sync and guarded WB writes.
+
+### Files changed
+Prisma schema and migration, FBS types/parser/state machine/tests, WB wrappers, sync/queue/schedules, financial report enrichment, FBS services/actions/UI, sidebar, bounded backfill script and project documentation.
+
+### Commands run
+`npx prisma format`; `npx prisma validate`; `npx prisma generate`; `npm test`; `npm run type-check`; `npm run build`; `git diff --check`.
+
+### Result
+Schema validates, 8 FBS tests pass, TypeScript passes and Next production build succeeds. `/fbs` is included in the build. FBS schedules and warehouse write gates default disabled.
+
+### Not run
+No production migration deploy, live WB sync, backfill, scheduler application, production data mutation or WB write action. The local development migration was applied later while resolving BUG-019.
+
+### Follow-up
+Perform a reviewed production rollout: migration, read-only endpoint smoke test, exact `2026-07-20` - `2026-07-30` backfill with confirmation, reconciliation review, then optional schedule enablement. Stage 2 True API remains separate.
+
+## 2026-07-30 — BUG-019 local FBS schema mismatch
+
+### Summary
+The local application failed in `prisma.realizationReport.findMany()` because the generated Prisma Client expected FBS fields that were absent from the local database.
+
+### Fix
+Confirmed that `20260730120000_fbs_operations` was the only pending migration and applied it to the local development `wb_cabinet` database with `npx prisma migrate deploy --schema prisma/schema.prisma`.
+
+### Verification
+The new `realization_reports.deliveryMethod` column and `fbs_seller_warehouses` table are queryable, and `http://localhost:3000` responds with HTTP 200.
+
+### Scope
+No production migration, WB synchronization, FBS backfill, schedule enablement or WB write action was performed.
+
+## 2026-07-30 — BUG-020 FBS live read contract fixes
+
+### Summary
+Fixed the first live FBS synchronization failures: the mandatory-labeling report method, numeric warehouse/supply classifiers, period timestamp format, B2B response nesting and overly large status batches.
+
+### Stock reconciliation
+Made `fbs.stocks.current` independent of a successful order sync. It now refreshes seller warehouses, checks every local catalog `chrtId`, discovers positive-stock FBS positions and retains existing positions when their WB stock becomes zero. The `/fbs` client waits for the background job to finish, refreshes automatically and shows WB stock separately from local physical stock.
+
+### Verification
+`npm test` passes all 11 FBS tests and `npm run type-check` passes. Read-only live checks for the affected local cabinet returned 1 warehouse, 4 supplies, 12 orders for `2026-07-29`, 30 marking rows with 8 update operations and 7 distinctly marked current positions, and 16 FBS stock positions totaling 215 WB units after checking 131 catalog sizes.
+
+The existing sync worker was restarted after confirming zero active jobs. A new end-to-end queued `fbs.stocks.current` job then finished `SUCCEEDED` with `updated: 16`, `catalogSizes: 131`, `wbStockUnits: 215` and no error.
+
+Next compilation succeeded, but running `next build` concurrently with `next dev` caused a generated `.next` cache collision during page collection. The three verified dev processes were restarted, only the generated cache was moved to the Windows Recycle Bin, and `/api/health` returned 200 while `/` returned the expected authentication redirect.
+
+### Scope
+No WB write method, schedule, bounded historical backfill or production migration was executed. The stock/marking/order smoke tests read WB and updated only the local development database.

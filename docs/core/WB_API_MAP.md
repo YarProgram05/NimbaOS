@@ -59,12 +59,46 @@ These require explicit user intent and must not be triggered as analytics side e
 - Advertising: `syncAdCampaigns`, `syncAdStats`, `syncAdClusters`.
 - Stocks: `syncStocksCurrent`.
 - Reviews/questions: `syncReviews`, `syncQuestions`.
+- FBS: `syncFbsOperational` (warehouses, orders, statuses, metadata, supplies), `syncFbsStocksCurrent`, `syncFbsMarkingReport`.
 
 ## UI And Scheduled Refresh
 
 - User refresh buttons enqueue jobs through `src/lib/actions/sync.ts` where implemented.
 - BullMQ processing lives in `src/lib/queue/sync-processor.ts`.
 - Daily schedule helpers live in `src/lib/sync/schedules.ts` and `scripts/schedule-sync.ts`.
+
+## FBS Marketplace API
+
+Read-only:
+- `GET /api/v3/warehouses`;
+- `GET /api/v3/orders/new`, `GET /api/v3/orders`;
+- `POST /api/v3/orders/status`;
+- `POST /api/marketplace/v3/orders/meta`;
+- `GET /api/v3/supplies`;
+- `POST /api/v3/stocks/{warehouseId}`;
+- `POST /api/v3/orders/stickers`;
+- `POST /api/v1/analytics/excise-report`;
+- Finance `sales-reports/detailed` fields `orderId`, `orderUid`, `kiz`, `isB2b`, `trbxId`, `deliveryMethod`.
+
+Live FBS response notes:
+- `warehouses.deliveryType/cargoType` and `supplies.cargoType/crossBorderType` are numeric in live responses and are normalized to strings for the current Prisma schema.
+- Period order `dateFrom/dateTo` query values are Unix timestamps; application date inputs are converted using Moscow day boundaries.
+- Status and metadata reads are batched at 100 order IDs.
+- `POST /api/marketplace/v3/orders/meta` returns the concrete order-to-marking mapping as `orders[].id -> meta.sgtin.value[]` when a code has been attached in WB. A read-only check on 2026-07-30 found non-empty SGTIN arrays for 20 of 24 latest local FBS orders across both cabinets without logging any code values.
+- `syncFbsOperational` extracts `sgtin` before sanitization, normalizes and parses the code, encrypts the full value, deduplicates by account-scoped SHA-256 hash, validates GTIN when the assortment GTIN is known, and attaches the `KizUnit` to the WB order. The ordinary order/event metadata JSON still stores only `[REDACTED]`.
+- Sync results expose counts only: received, created, assigned, already assigned, released, rejected, conflicts and GTIN mismatches. Never include full codes in job results or logs.
+- The Finance report also exposes `orderId` with `kiz`, but it is delayed financial evidence and should be used as reconciliation/backfill, not the primary operational mapping.
+- Current stock reconciliation refreshes seller warehouses and checks every available local catalog `chrtId`, not only assortment previously observed in orders.
+- `options.isB2b` is the current nested order field; the direct legacy field remains a compatibility fallback.
+
+Explicit write wrappers:
+- `PUT /api/v3/orders/{orderId}/meta/sgtin`;
+- `PATCH /api/v3/orders/{orderId}/{confirm|complete|cancel}`;
+- `PATCH /api/v3/supplies/{supplyId}/orders/{orderId}`;
+- `PATCH /api/v3/supplies/{supplyId}/deliver`;
+- `PUT /api/v3/stocks/{warehouseId}`.
+
+These write wrappers require manager intent, an admin-enabled warehouse gate and `fbs_action_logs`. Never call them from sync, analytics or recommendation code.
 
 ## Limits And Errors
 

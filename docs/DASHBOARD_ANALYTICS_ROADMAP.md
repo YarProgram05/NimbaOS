@@ -98,7 +98,7 @@ Outdated or deferred parts:
 - Any dashboard implementation that rebuilds action/focus items directly in `src/app/(dashboard)/page.tsx` is outdated; new rules should go into `src/lib/services/dashboard-problem-center.ts`.
 - Phase 2 issue categories for low stock, out of stock, product without stock data, and unanswered review/question are now backed by Phase 3-4 data sources.
 - A fully DB-only advertising-spend source for the dashboard is deferred. To make the dashboard both DB-only and report-consistent, the advertising payment history used by the report calculator should be persisted in a later phase.
-- Optional PDF executive report, stock history, and FBS/seller-warehouse inventory remain future phases.
+- Optional PDF executive report and stock history remain future phases. FBS/seller-warehouse inventory moved to the dedicated `/fbs` workplace on 2026-07-30.
 
 ## Purpose
 

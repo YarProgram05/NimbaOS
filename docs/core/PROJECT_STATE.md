@@ -14,7 +14,9 @@ Update 2026-05-25: `Заказано руб.` now sums all WB order rows, includ
 
 Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period` now refreshes `wb_orders` for the selected report period, and orders are upserted so changed WB order sums/cancellations update local data.
 
-Текущее состояние NimbaOS. Last updated: 2026-06-04.
+Update 2026-07-30: FBS workplace is implemented at code level: seller warehouses/assortment, local inventory/reservations, orders/status/meta, supplies/stickers, KIZ lifecycle, manual Chestny Znak queue, FBS finance enrichment/analytics, interval sync and guarded WB writes. Operational sync securely imports the exact WB `orderId -> sgtin[]` mapping before redacting metadata. Initial live runs created/assigned 20 current codes; BUG-022 then repaired 9 Nimba mappings from 2026-07-28 and replaced two stale workers with one current worker. WB metadata readiness is separate from Chestny Znak circulation. No production migration, schedule enablement, bounded historical backfill or WB write was executed.
+
+Текущее состояние NimbaOS. Last updated: 2026-07-30.
 
 ## Current Phase
 
@@ -33,6 +35,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 - Automations: `/automations`, `AutomationWorkflowSetting`, `AutomationWorkflowAccount`, `AutomationRun`, separate automation queue, `Утренний отчет WB` Google Sheet workflow.
 - Dashboard analytics: summary, freshness, problem center, product risk, stock risk, feedback workload, forecasts, deterministic recommendations, dashboard exports.
 - Inventory: WB warehouse stock snapshots, current stock screen and turnover days.
+- FBS: seller-owned stock, assortment per warehouse/chrtId, operational orders, supplies/stickers, automatic encrypted order-to-KIZ ingestion from WB metadata, manual Chestny Znak XLSX flow, audited per-warehouse WB write gate.
 - Reviews/questions: read-only sync and dashboard workload.
 - Production artifacts: Dockerfile, compose files, healthcheck, nginx example.
 - Documentation memory split: `core`, `development`, `marketplace`.
@@ -47,7 +50,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 ## Not Implemented Yet
 
 - Full monitoring/alerting pipeline.
-- Stock history charts and FBS/seller warehouse inventory.
+- Stock history charts.
 - Automatic marketplace recommendations that perform WB write actions; current recommendations are advisory.
 - Scheduled owner reports as a production automation.
 - Production-enabled Google Sheet automation is not configured until service-account credentials, Sheet sharing, worker and scheduler are set up in the target environment.
@@ -62,6 +65,7 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 ## Important Risks
 
 - Financial report sync uses live-verified `POST /api/finance/v1/sales-reports/detailed`; broad historical refreshes still require confirmation.
+- The FBS migration is applied to the local development database only. It is not applied to production; interval schedules and the `2026-07-20` - `2026-07-30` backfill were not run. All FBS schedule defaults and warehouse write gates remain disabled.
 - Historical WB data must not be overwritten without explicit confirmation.
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.

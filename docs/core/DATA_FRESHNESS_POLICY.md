@@ -60,6 +60,10 @@ Operational rules:
 - Advertising: `ad_campaigns`, `ad_campaign_stats`, `ad_campaign_nm_stats`, `ad_campaign_clusters`.
 - Stocks: latest `stock_snapshots`, `stock_items`, `warehouses`; turnover also depends on recent non-return `wb_sales` and can fall back to local `realization_reports` sale quantities for article/size demand.
 - Reviews/questions: `product_reviews`, `product_questions`.
+- FBS operational: `fbs_orders`, `fbs_order_events`, `fbs_supplies`; target interval 5 minutes.
+- FBS stock reconciliation: `fbs_assortment_items.wbStock/wbStockSyncedAt`; target interval 15 minutes. Each run refreshes seller warehouses and checks all locally known product-size `chrtId` values so positive FBS positions can be discovered independently of orders. Local `onHand/reserved` changes are immediate and are not replaced by sync.
+- FBS marking: WB excise/marking report and order metadata; target interval 60 minutes.
+- FBS finance: enriched `realization_reports` with `deliveryMethod/orderId/KIZ`; normal finance coverage rules apply.
 
 ## API Rule
 
@@ -75,3 +79,6 @@ Operational rules:
 - Удаление данных.
 - Изменение WB цен, скидок, карточек, рекламы, ставок, бюджетов, остатков.
 - Массовые write operations.
+- FBS stock publication, KIZ attachment, order/supply status writes and enabling a warehouse write gate.
+
+Initial FBS history is a one-time bounded range `2026-07-20` - `2026-07-30`. The script is dry-run unless exact execution confirmation is passed. Do not widen or rerun it silently.

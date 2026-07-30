@@ -22,6 +22,7 @@
 - Advertising bid/budget/status changes.
 - Feedback answer writes or bulk writes.
 - Any command likely to call live WB API outside a requested sync/debug task.
+- Enabling an FBS warehouse write gate, publishing seller stock, attaching KIZ, changing order status or closing/moving a supply.
 
 ## Database Safety
 
@@ -36,10 +37,12 @@
 - Agent-manager must not change prices, cards, ads, bids, stocks or discounts.
 - Sync can update local DB only through existing sync services.
 - Write-capable methods in WB API map are dangerous.
+- Full KIZ/DataMatrix may exist only encrypted at rest or transiently inside a scanner/import/export/write operation. Never put it in logs, audit JSON, UI tables, errors or documentation.
+- FBS background jobs are read-only. Every WB mutation needs `MANAGER`, a warehouse gate and an audit row; only `ADMIN` may enable the gate.
+- Physical returns, damage and loss must stay unavailable until the explicit inspection/compliance transition is completed.
 
 ## Documentation Safety
 
 - Do not duplicate core truth into development/marketplace docs.
 - Put uncertain facts under `docs/core/OPEN_QUESTIONS.md`.
 - Update role docs after significant work.
-

@@ -34,6 +34,22 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-018-NESTED-PNPM-BROKE-NPM-INSTALL
+  Status: Done
+  Priority: High
+  Description: Recovered the local npm dependency tree after bundled pnpm was run from a nested report work folder and moved 38 direct packages into `node_modules/.ignored`. Removed a report-workspace `node_modules` junction that caused 10,000+ apparent Git changes, restored dependencies with `npm ci`, and regenerated Prisma Client.
+  Next step: Keep all one-off report dependency tooling in an isolated temporary directory outside this repository; use npm only for the NimbaOS root.
+  Related files: `package.json`, `package-lock.json`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: Running pnpm from any descendant folder without its own manifest can resolve the parent npm project; a junction inside `outputs` can make Git/VS Code recursively enumerate external dependencies.
+
+- ID: TASK-MORNING-WB-SHEET-YTD-LAYOUT
+  Status: Done
+  Priority: High
+  Description: Updated `Утренний отчет WB` layout and workflow writer: removed `ROMI`, added `Выкупили, шт`, added `ЧП на 1 ед`, added `Итого с начала года` from Jan 1 through target date, and shifted plan/progress/chart area down.
+  Next step: For the next target date, make sure `REPORTS_PERIOD` covers Jan 1 through target date and `ADVERTISING_STATS` covers the current month window through target date.
+  Related files: `src/lib/services/morning-wb-report-workflow.ts`, Google Sheet `Утренний отчет WB`.
+  Risks: YTD row requires report coverage from Jan 1; advertising freshness is checked for the current month being written.
+
 - ID: TASK-ARTICLE-VERSIONS-CROSS-SECTIONS
   Status: Done
   Priority: High
@@ -177,3 +193,11 @@ No active development task is currently assigned. Pick from `Next` after reading
   Next step: Monitor performance on real data.
   Related files: `src/lib/services/dashboard-summary.ts`, `dashboard-export.ts`.
   Risks: May need aggregates later.
+
+- ID: TASK-FBS-STAGE-1
+  Status: Done (code), Pending rollout
+  Priority: High
+  Description: Implemented separate FBS workplace, seller stock/reservations, orders/supplies/stickers, serialized KIZ lifecycle, manual Chestny Znak XLSX flow, FBS finance enrichment and audited WB write gates. Order statuses/actions are Russian and the assortment selector is searchable and viewport-safe.
+  Next step: Review the locally created withdrawal tasks (including the 9 repaired Nimba July 28 mappings) and define who confirms their Chestny Znak documents. Separately review and approve the production migration; keep all warehouse write gates off until opening balances are reconciled and a live write is explicitly approved. PDF import is optional for pre-packing code-pool accounting.
+  Related files: `prisma/schema.prisma`, `prisma/migrations/20260730120000_fbs_operations`, `src/app/(dashboard)/fbs`, `src/lib/services/sync-fbs.ts`, `src/lib/services/fbs-operations.ts`, `src/lib/actions/fbs.ts`.
+  Risks: Only codes actually scanned/attached in WB can be read back; codes with invalid format, order reuse, unavailable local state or GTIN mismatch are not silently reassigned and require operator review; local opening physical balances remain an explicit reconciliation task; PDF import is not implemented; no production migration or WB write was performed; True API is deferred.

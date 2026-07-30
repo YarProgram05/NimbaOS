@@ -1,6 +1,6 @@
 # Reports Guide
 
-Отчеты и экспорт в NimbaOS. Last updated: 2026-05-25.
+Отчеты и экспорт в NimbaOS. Last updated: 2026-06-28.
 
 ## Existing Reports
 
@@ -9,7 +9,7 @@
 - Dashboard summary/export: home dashboard, `dashboard-summary.ts`, `dashboard-export.ts`.
 - Advertising campaign exports: advertising actions and `exportAdStatsXlsxAction`.
 - Stocks and feedback screens: operational reports from local DB. Stocks include `Оборачиваемость, дн.`.
-- Morning report source: `getMorningReportData` in `src/lib/services/morning-report.ts`; automated Google Sheet filling is implemented through `/automations` and `src/lib/services/morning-wb-report-workflow.ts`.
+- Morning report source: `getMorningReportData` in `src/lib/services/morning-report.ts`; automated Google Sheet filling is implemented through `/automations` and `src/lib/services/morning-wb-report-workflow.ts`. The live sheet includes daily month rows, `Выкупили, шт`, `ЧП на 1 ед`, and `Итого с начала года` from Jan 1 through target date; morning-sheet `ROMI` is intentionally removed. Workflow freshness requires report coverage from Jan 1 and advertising coverage for the current month window.
 
 ## Data Needed
 
@@ -18,6 +18,8 @@
 - Ads: `ad_campaigns`, campaign stats/nm stats/clusters.
 - Stocks: latest stock snapshot + recent non-return `wb_sales` for turnover.
 - Cards: local products/product sizes.
+- FBS operations: `fbs_seller_warehouses`, `fbs_assortment_items`, `fbs_orders`, `fbs_supplies`, `kiz_units`, `kiz_compliance_tasks`.
+- FBS sales: `realization_reports` filtered by account, period and `deliveryMethod=FBS`; KIZ/order enrichment is populated by finance sync/backfill.
 
 ## Freshness Before Report
 
@@ -36,14 +38,15 @@ Long-period financial reports and ad allocations can be heavy. Use existing serv
 
 ## Desired Reports
 
-- `daily_wb_report`: sales, ordered rub, ROMI, margin, stock turnover, top risks, freshness.
+- `daily_wb_report`: sales, ordered rub, bought units, net profit, net profit per unit, DRR, stock turnover, YTD total, top risks, freshness.
 - `stock_risk_report`: stock coverage, days to OOS, replenishment candidates.
 - `plan_fact_report`: daily and cumulative plan/fact deviation.
 - `ads_efficiency_report`: spend, orders, carts, CPO, DRR, waste candidates.
 - `prices_monitoring_report`: price/margin/conversion risk.
 - `cards_quality_report`: conversion, reviews/questions, missing/weak card signals.
 - `weekly_owner_summary`: concise actions for owner.
+- `fbs_operations_report`: local/WB stock mismatch, open/overdue orders, KIZ assignment/metadata readiness, quarantine and compliance backlog.
 
 ## Exports
 
-XLSX is supported for financial reports, sales plans, dashboard exports and advertising stats. CSV/PDF were not found as first-class supported exports.
+XLSX is supported for financial reports, sales plans, dashboard exports, advertising stats and manual Chestny Znak operation batches. FBS order stickers are downloadable as per-order PNG. CSV/PDF were not found as first-class supported exports.

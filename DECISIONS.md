@@ -517,3 +517,29 @@ Analytics tables remain tables, not mobile cards. Phase 9 adds stable minimum wi
 
 **Decision 47: XLSX exports share a server-side helper**
 Financial reports and sales plan exports keep the existing `{ base64, filename }` Server Action contract, but workbook creation, safe filenames, sheet names, widths, autofilters and numeric formats live in `src/lib/xlsx/export.ts`.
+
+## FBS and serialized marking
+
+**Decision 48: FBS is a separate bounded context**
+`/stocks` keeps WB/FBW stock semantics. Seller warehouses, FBS assortment, orders, supplies, inventory movements and KIZ lifecycle live under `/fbs` and dedicated `fbs_*` / `kiz_*` tables.
+
+**Decision 49: NimbaOS owns seller stock; WB is reconciled**
+Local `onHand` and `reserved` balances are changed through append-only movements. WB stock is read for comparison. Publication to WB is never a background side effect.
+
+**Decision 50: KIZ identity is encrypted full code plus stable hash**
+Normalized DataMatrix is encrypted with the existing AES-256-GCM key. SHA-256 provides account-scoped uniqueness. Only masked KIZ values may be displayed or written to operational logs.
+
+**Decision 51: Chestny Znak integration is two-stage**
+Stage 1 tracks commissioning, withdrawal and return-to-circulation tasks with auditable XLSX export/manual confirmation. Direct True API integration is Stage 2 and requires separate credentials and rollout approval.
+
+**Decision 52: FBS writes use two explicit gates**
+The user must invoke a concrete action and the seller warehouse must have `writeEnabled=true`. The flag defaults to false and can only be changed by `ADMIN`. Every attempt is idempotent and stored in `fbs_action_logs`.
+
+**Decision 53: FBS sync uses intervals but is disabled at rollout**
+Read-only jobs default to 5 minutes for orders/status/meta, 15 minutes for WB stock reconciliation and 60 minutes for marking report. New FBS schedules are disabled until explicitly enabled in `/sync`.
+
+**Decision 54: Initial bounded history is fixed**
+The first FBS backfill is exactly `2026-07-20` through `2026-07-30`. The script is dry-run by default and needs both `--execute` and the exact confirmation phrase. It was implemented but not run.
+
+**Decision 55: WB FBS metadata is the operational order-to-KIZ source**
+When fulfillment attaches a code in WB, `POST /api/marketplace/v3/orders/meta` is the primary source of the exact order-to-SGTIN mapping. Sync extracts and encrypts the full code before sanitization, deduplicates it by account/hash, validates known GTIN, links it to the order and stores only redacted metadata/audit summaries. Finance `orderId + kiz` remains a delayed reconciliation source; PDF import is optional for the unused pre-packing code pool.

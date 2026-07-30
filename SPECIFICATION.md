@@ -44,6 +44,7 @@ In MVP, NimbaOS includes:
 - sales plan with orders, sales, funnel metrics, daily grid, Excel export;
 - advertising campaigns with campaign list, stats, clusters, breakdown, log, budget/bid/status actions;
 - stock snapshots, reviews/questions, dashboard summaries and XLSX exports;
+- separate FBS workplace for seller warehouses, orders, supplies, stickers, local inventory and serialized KIZ accounting;
 - BullMQ background sync scheduling and sync job history;
 - basic local/dev Docker setup and VPS Docker artifacts.
 
@@ -102,6 +103,23 @@ Key business rules:
 - Buyout percent uses bought-with-returns over delivered count.
 - Marginality is operating profit divided by sales.
 - Paid storage should use WB task-based paid storage API and per-article data when available.
+
+### FBS operations and KIZ
+
+`/fbs` is a separate operational domain. Existing `/stocks` remains the stock view for WB/FBW warehouses.
+
+Core rules:
+- NimbaOS is the source of truth for physical and reserved stock on seller warehouses; WB stock is a reconciliation value and is published only by an explicit user action.
+- A new/confirmed FBS order reserves one unit without reducing physical stock. Pre-handoff cancellation releases the reserve. Handoff reduces physical stock. Post-handoff cancellation or defect creates an expected return and never restores availability automatically.
+- FBS assortment is configured per seller warehouse and `chrtId`. Marking is inferred from WB metadata/report where possible and can be confirmed manually.
+- Each marked unit is stored as a KIZ. Full DataMatrix is AES-256-GCM encrypted; SHA-256 of the normalized code is the unique identity; UI and logs receive only a mask.
+- Scanner input accepts `]d2`, preserves ASCII GS and parses AIs `01`, `21`, `91`, `92`.
+- Marked orders cannot be completed through NimbaOS until a KIZ is assigned, required metadata is valid and the KIZ is confirmed in circulation.
+- Seller-side commissioning, withdrawal after FBS sale and return to circulation are tracked as immutable tasks/events. Stage 1 uses XLSX export plus manual confirmation of the Chestny Znak document.
+- Damaged, lost and physically returned units go to quarantine or exception handling and do not become available automatically.
+- WB mutations (attach KIZ, order status, supply movement/closure, stock publication) require a manager action, a per-warehouse write gate and an audit log. The gate is disabled by default and only an admin can enable it.
+
+Stage 2 direct Chestny Znak API integration is intentionally deferred until credentials, certificate/signature flow and production operating rules are confirmed.
 
 ### Sales plan
 

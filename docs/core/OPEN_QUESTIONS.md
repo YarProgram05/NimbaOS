@@ -29,3 +29,11 @@
 ## Documentation
 
 - Старые `docs/*.md` сохранены как legacy redirects/archives; можно ли удалить их позже после подтверждения?
+
+## FBS Stage 2
+
+- Which Chestny Znak True API environment, participant credentials, certificate/signature provider and document types will be used?
+- What SLA and owner should apply to commissioning, remote-sale withdrawal, B2B withdrawal and return-to-circulation tasks?
+- After live WB smoke tests, which seller warehouses may have `writeEnabled=true` and who approves stock publication?
+- Should sticker batches be combined into a printable PDF in addition to current per-order PNG?
+- What monitoring channel should receive FBS stock mismatch, overdue order and overdue compliance alerts?
