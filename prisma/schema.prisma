@@ -24,6 +24,9 @@ enum SyncJobKind {
   STOCKS_CURRENT
   REVIEWS_REFRESH
   QUESTIONS_REFRESH
+  FBS_OPERATIONAL
+  FBS_STOCKS_CURRENT
+  FBS_MARKING_REPORT
 }
 
 enum SyncJobStatus {
@@ -57,6 +60,82 @@ enum AutomationRunStatus {
   FAILED
 }
 
+enum FbsInventoryMovementType {
+  OPENING
+  RECEIPT
+  ADJUSTMENT
+  RESERVE
+  RELEASE
+  SHIPMENT
+  RETURN_RECEIVED
+  QUARANTINE
+  WRITE_OFF
+}
+
+enum KizPhysicalState {
+  IN_STOCK
+  RESERVED
+  HANDED_OVER
+  RETURN_EXPECTED
+  QUARANTINE
+  LOST
+  WRITTEN_OFF
+}
+
+enum KizCirculationState {
+  UNKNOWN
+  COMMISSIONING_REQUIRED
+  IN_CIRCULATION
+  WITHDRAWAL_REQUIRED
+  WITHDRAWN
+  RETURN_TO_CIRCULATION_REQUIRED
+}
+
+enum KizEventType {
+  IMPORTED
+  SCANNED
+  ASSIGNED
+  UNASSIGNED
+  ATTACHED_TO_WB
+  HANDED_OVER
+  SALE_DETECTED
+  RETURN_EXPECTED
+  RETURN_RECEIVED
+  QUARANTINED
+  COMPLIANCE_EXPORTED
+  COMPLIANCE_CONFIRMED
+}
+
+enum KizComplianceTaskType {
+  COMMISSIONING
+  WITHDRAWAL_REMOTE_SALE
+  WITHDRAWAL_B2B
+  RETURN_TO_CIRCULATION
+  RELABEL
+}
+
+enum KizComplianceTaskStatus {
+  OPEN
+  EXPORTED
+  CONFIRMED
+  CANCELED
+}
+
+enum FbsActionKind {
+  ATTACH_KIZ
+  SET_ORDER_STATUS
+  MOVE_TO_SUPPLY
+  CLOSE_SUPPLY
+  PUBLISH_STOCKS
+}
+
+enum FbsActionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 // ─── Auth ──────────────────────────────────────────────────────
 
 model User {
@@ -69,11 +148,16 @@ model User {
   invitedById  String?
   createdAt    DateTime @default(now())
 
-  invitedBy    User?        @relation("UserInvites", fields: [invitedById], references: [id])
-  invitees     User[]       @relation("UserInvites")
-  invitations  Invitation[] @relation("InvitationCreator")
-  preferences  UserPreference[]
-  feedbackWriteLogs FeedbackWriteActionLog[]
+  invitedBy             User?                    @relation("UserInvites", fields: [invitedById], references: [id])
+  invitees              User[]                   @relation("UserInvites")
+  invitations           Invitation[]             @relation("InvitationCreator")
+  preferences           UserPreference[]
+  feedbackWriteLogs     FeedbackWriteActionLog[]
+  fbsInventoryMovements FbsInventoryMovement[]
+  kizEvents             KizEvent[]
+  confirmedKizTasks     KizComplianceTask[]      @relation("KizTaskConfirmer")
+  createdKizBatches     KizOperationBatch[]
+  fbsActionLogs         FbsActionLog[]
 
   @@map("users")
 }
@@ -86,7 +170,7 @@ model UserPreference {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, key])
   @@index([userId])
@@ -94,15 +178,15 @@ model UserPreference {
 }
 
 model Invitation {
-  id          String    @id @default(uuid())
-  token       String    @unique @default(uuid())
-  role        Role      @default(VIEWER)
+  id          String   @id @default(uuid())
+  token       String   @unique @default(uuid())
+  role        Role     @default(VIEWER)
   createdById String
   usedById    String?
   expiresAt   DateTime
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
-  createdBy   User      @relation("InvitationCreator", fields: [createdById], references: [id])
+  createdBy User @relation("InvitationCreator", fields: [createdById], references: [id])
 
   @@map("invitations")
 }
@@ -110,40 +194,48 @@ model Invitation {
 // ─── WB Accounts ───────────────────────────────────────────────
 
 model WbAccount {
-  id           String    @id @default(uuid())
-  name         String
-  apiKey       String                       // AES-256-GCM encrypted
-  taxRate      Decimal   @default(0) @db.Decimal(5, 2)
-  sellerName   String?
-  sellerId     String?
-  tradeMark    String?
-  isActive     Boolean   @default(true)
-  lastSyncAt   DateTime?
-  createdAt    DateTime  @default(now())
+  id         String    @id @default(uuid())
+  name       String
+  apiKey     String // AES-256-GCM encrypted
+  taxRate    Decimal   @default(0) @db.Decimal(5, 2)
+  sellerName String?
+  sellerId   String?
+  tradeMark  String?
+  isActive   Boolean   @default(true)
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
 
-  products           Product[]
-  realizationReports RealizationReport[]
-  paidStorage        PaidStorage[]
-  adCampaigns        AdCampaign[]
-  salesPlans         SalesPlan[]
-  wbOrders           WbOrder[]
-  wbSales            WbSale[]
-  wbFunnelStats      WbFunnelStat[]
-  costPrices         CostPrice[]
-  articleVersions    ArticleVersion[]
-  selfPurchases      SelfPurchase[]
-  externalAds        ExternalAd[]
-  articleOverrides   ArticleOverride[]
-  syncJobRuns        SyncJobRun[]
-  syncSchedules      SyncScheduleSetting[]
-  syncCoverages      SyncDataCoverage[]
-  warehouses         Warehouse[]
-  stockSnapshots     StockSnapshot[]
-  productReviews     ProductReview[]
-  productQuestions   ProductQuestion[]
+  products            Product[]
+  realizationReports  RealizationReport[]
+  paidStorage         PaidStorage[]
+  adCampaigns         AdCampaign[]
+  salesPlans          SalesPlan[]
+  wbOrders            WbOrder[]
+  wbSales             WbSale[]
+  wbFunnelStats       WbFunnelStat[]
+  costPrices          CostPrice[]
+  articleVersions     ArticleVersion[]
+  selfPurchases       SelfPurchase[]
+  externalAds         ExternalAd[]
+  articleOverrides    ArticleOverride[]
+  syncJobRuns         SyncJobRun[]
+  syncSchedules       SyncScheduleSetting[]
+  syncCoverages       SyncDataCoverage[]
+  warehouses          Warehouse[]
+  stockSnapshots      StockSnapshot[]
+  productReviews      ProductReview[]
+  productQuestions    ProductQuestion[]
   replyTemplateGroups ReplyTemplateGroup[]
-  feedbackWriteLogs  FeedbackWriteActionLog[]
-  automationAccounts AutomationWorkflowAccount[]
+  feedbackWriteLogs   FeedbackWriteActionLog[]
+  automationAccounts  AutomationWorkflowAccount[]
+  fbsSellerWarehouses FbsSellerWarehouse[]
+  fbsAssortmentItems  FbsAssortmentItem[]
+  fbsOrders           FbsOrder[]
+  fbsSupplies         FbsSupply[]
+  kizUnits            KizUnit[]
+  kizComplianceTasks  KizComplianceTask[]
+  kizOperationBatches KizOperationBatch[]
+  fbsActionLogs       FbsActionLog[]
 
   @@map("wb_accounts")
 }
@@ -159,8 +251,8 @@ model AutomationWorkflowSetting {
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
-  accounts      AutomationWorkflowAccount[]
-  runs          AutomationRun[]
+  accounts AutomationWorkflowAccount[]
+  runs     AutomationRun[]
 
   @@map("automation_workflow_settings")
 }
@@ -174,8 +266,8 @@ model AutomationWorkflowAccount {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workflow    AutomationWorkflowSetting @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  wbAccount   WbAccount                 @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  workflow  AutomationWorkflowSetting @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount                 @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([workflowId, wbAccountId])
   @@index([workflowId])
@@ -184,22 +276,22 @@ model AutomationWorkflowAccount {
 }
 
 model AutomationRun {
-  id          String                 @id @default(uuid())
-  workflowId  String?
-  kind        AutomationWorkflowKind
-  status      AutomationRunStatus    @default(QUEUED)
-  source      String
-  payload     Json
-  result      Json?
-  error       String?
-  bullJobId   String?
-  attempts    Int                    @default(0)
-  startedAt   DateTime?
-  finishedAt  DateTime?
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  id         String                 @id @default(uuid())
+  workflowId String?
+  kind       AutomationWorkflowKind
+  status     AutomationRunStatus    @default(QUEUED)
+  source     String
+  payload    Json
+  result     Json?
+  error      String?
+  bullJobId  String?
+  attempts   Int                    @default(0)
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
 
-  workflow    AutomationWorkflowSetting? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  workflow AutomationWorkflowSetting? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
 
   @@index([kind, createdAt])
   @@index([status, createdAt])
@@ -223,7 +315,7 @@ model SyncJobRun {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  wbAccount   WbAccount?    @relation(fields: [wbAccountId], references: [id], onDelete: SetNull)
+  wbAccount WbAccount? @relation(fields: [wbAccountId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([kind, createdAt])
@@ -233,18 +325,19 @@ model SyncJobRun {
 }
 
 model SyncScheduleSetting {
-  id            String      @id @default(uuid())
-  wbAccountId   String
-  kind          SyncJobKind
-  enabled       Boolean     @default(true)
-  timeOfDay     String
-  rollingDays   Int         @default(7)
-  timezone      String      @default("Europe/Moscow")
-  lastAppliedAt DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(uuid())
+  wbAccountId     String
+  kind            SyncJobKind
+  enabled         Boolean     @default(true)
+  timeOfDay       String
+  intervalMinutes Int?
+  rollingDays     Int         @default(7)
+  timezone        String      @default("Europe/Moscow")
+  lastAppliedAt   DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  wbAccount     WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, kind])
   @@index([wbAccountId])
@@ -264,33 +357,34 @@ model SyncDataCoverage {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  wbAccount   WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@index([wbAccountId, kind, dateFrom, dateTo])
   @@map("sync_data_coverages")
 }
 
 model Product {
-  id               String   @id @default(uuid())
-  wbAccountId      String
-  nmId             Int
-  imtId            BigInt?
-  vendorCode       String
-  vendorCodeLocal  String?
-  brand            String?
-  category         String?
-  subjectId        Int?
-  title            String?
-  photoUrl         String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default(uuid())
+  wbAccountId     String
+  nmId            Int
+  imtId           BigInt?
+  vendorCode      String
+  vendorCodeLocal String?
+  brand           String?
+  category        String?
+  subjectId       Int?
+  title           String?
+  photoUrl        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  wbAccount  WbAccount      @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  sizes      ProductSize[]
-  materials  ProductMaterial[]
-  stockItems StockItem[]
-  reviews    ProductReview[]
-  questions  ProductQuestion[]
+  wbAccount          WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  sizes              ProductSize[]
+  materials          ProductMaterial[]
+  stockItems         StockItem[]
+  reviews            ProductReview[]
+  questions          ProductQuestion[]
+  fbsAssortmentItems FbsAssortmentItem[]
 
   @@unique([wbAccountId, nmId])
   @@index([nmId])
@@ -312,8 +406,10 @@ model ProductSize {
   spp       Decimal? @db.Decimal(10, 2)
   createdAt DateTime @default(now())
 
-  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stockItems StockItem[]
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItems         StockItem[]
+  fbsAssortmentItems FbsAssortmentItem[]
+  kizUnits           KizUnit[]
 
   @@index([productId])
   @@index([chrtId])
@@ -330,8 +426,8 @@ model Warehouse {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  stockItems  StockItem[]
+  wbAccount  WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  stockItems StockItem[]
 
   @@unique([wbAccountId, warehouseId])
   @@index([wbAccountId])
@@ -346,8 +442,8 @@ model StockSnapshot {
   source      String   @default("wb_warehouses")
   createdAt   DateTime @default(now())
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  items       StockItem[]
+  wbAccount WbAccount   @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  items     StockItem[]
 
   @@index([wbAccountId, syncedAt])
   @@map("stock_snapshots")
@@ -367,10 +463,10 @@ model StockItem {
   productSizeId   String?
   createdAt       DateTime @default(now())
 
-  snapshot        StockSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  product         Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productSize     ProductSize?  @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
-  warehouse       Warehouse    @relation(fields: [wbAccountId, warehouseId], references: [wbAccountId, warehouseId], onDelete: Cascade)
+  snapshot    StockSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  product     Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productSize ProductSize?  @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
+  warehouse   Warehouse     @relation(fields: [wbAccountId, warehouseId], references: [wbAccountId, warehouseId], onDelete: Cascade)
 
   @@unique([snapshotId, nmId, chrtId, warehouseId])
   @@index([snapshotId])
@@ -381,35 +477,35 @@ model StockItem {
 }
 
 model ProductReview {
-  id             String   @id @default(uuid())
-  wbAccountId    String
-  externalId     String
-  nmId           Int
-  rating         Int
-  text           String?  @db.Text
-  pros           String?  @db.Text
-  cons           String?  @db.Text
-  state          String?
-  answerText     String?  @db.Text
-  answerState    String?
-  answerEditable Boolean?
-  isAnswered     Boolean  @default(false)
-  hasMedia       Boolean  @default(false)
-  photos         Json?
-  videos         Json?
-  productId      String?
-  vendorCode     String?
-  productName    String?
-  brandName      String?
-  supplierName   String?
+  id              String   @id @default(uuid())
+  wbAccountId     String
+  externalId      String
+  nmId            Int
+  rating          Int
+  text            String?  @db.Text
+  pros            String?  @db.Text
+  cons            String?  @db.Text
+  state           String?
+  answerText      String?  @db.Text
+  answerState     String?
+  answerEditable  Boolean?
+  isAnswered      Boolean  @default(false)
+  hasMedia        Boolean  @default(false)
+  photos          Json?
+  videos          Json?
+  productId       String?
+  vendorCode      String?
+  productName     String?
+  brandName       String?
+  supplierName    String?
   productSnapshot Json?
-  createdDate    DateTime
-  fetchedAt      DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdDate     DateTime
+  fetchedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  wbAccount      WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  product        Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@unique([wbAccountId, externalId])
   @@index([wbAccountId, createdDate])
@@ -420,31 +516,31 @@ model ProductReview {
 }
 
 model ProductQuestion {
-  id               String   @id @default(uuid())
-  wbAccountId      String
-  externalId       String
-  nmId             Int
-  text             String   @db.Text
-  state            String?
-  wasViewed        Boolean  @default(false)
-  isWarned         Boolean  @default(false)
-  answerText       String?  @db.Text
-  answerEditable   Boolean?
+  id                String    @id @default(uuid())
+  wbAccountId       String
+  externalId        String
+  nmId              Int
+  text              String    @db.Text
+  state             String?
+  wasViewed         Boolean   @default(false)
+  isWarned          Boolean   @default(false)
+  answerText        String?   @db.Text
+  answerEditable    Boolean?
   answerCreatedDate DateTime?
-  isAnswered       Boolean  @default(false)
-  productId        String?
-  vendorCode       String?
-  productName      String?
-  brandName        String?
-  supplierName     String?
-  productSnapshot  Json?
-  createdDate      DateTime
-  fetchedAt        DateTime @default(now())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  isAnswered        Boolean   @default(false)
+  productId         String?
+  vendorCode        String?
+  productName       String?
+  brandName         String?
+  supplierName      String?
+  productSnapshot   Json?
+  createdDate       DateTime
+  fetchedAt         DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  wbAccount        WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  product          Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@unique([wbAccountId, externalId])
   @@index([wbAccountId, createdDate])
@@ -462,8 +558,8 @@ model ReplyTemplateGroup {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  wbAccount   WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  templates   ReplyTemplate[]
+  wbAccount WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  templates ReplyTemplate[]
 
   @@unique([wbAccountId, name])
   @@index([wbAccountId, sortOrder])
@@ -479,32 +575,32 @@ model ReplyTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  group     ReplyTemplateGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group ReplyTemplateGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([groupId, sortOrder])
   @@map("reply_templates")
 }
 
 model FeedbackWriteActionLog {
-  id                 String                    @id @default(uuid())
-  wbAccountId        String
-  userId             String?
-  kind               FeedbackWriteActionKind
-  status             FeedbackWriteActionStatus @default(QUEUED)
-  entityType         String
-  localEntityId      String?
-  externalId         String
-  answerText         String                    @db.Text
-  result             Json?
-  error              String?
-  queuedAt           DateTime                  @default(now())
-  startedAt          DateTime?
-  finishedAt         DateTime?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  id            String                    @id @default(uuid())
+  wbAccountId   String
+  userId        String?
+  kind          FeedbackWriteActionKind
+  status        FeedbackWriteActionStatus @default(QUEUED)
+  entityType    String
+  localEntityId String?
+  externalId    String
+  answerText    String                    @db.Text
+  result        Json?
+  error         String?
+  queuedAt      DateTime                  @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
 
-  wbAccount          WbAccount                 @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  user               User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([wbAccountId, createdAt])
   @@index([status, createdAt])
@@ -513,12 +609,12 @@ model FeedbackWriteActionLog {
 }
 
 model ProductMaterial {
-  id                String  @id @default(uuid())
-  productId         String
-  composition       String
-  compositionLocal  String?
+  id               String  @id @default(uuid())
+  productId        String
+  composition      String
+  compositionLocal String?
 
-  product           Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("product_materials")
 }
@@ -532,7 +628,7 @@ model CostPrice {
   costPrice   Decimal  @db.Decimal(10, 2)
   updatedAt   DateTime @updatedAt
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, vendorCode])
   @@index([wbAccountId])
@@ -541,18 +637,18 @@ model CostPrice {
 }
 
 model ArticleVersion {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   wbAccountId String
   nmId        Int
-  dateFrom    DateTime @db.Date
+  dateFrom    DateTime  @db.Date
   dateTo      DateTime? @db.Date
   vendorCode  String
-  costPrice   Decimal? @db.Decimal(10, 2)
+  costPrice   Decimal?  @db.Decimal(10, 2)
   note        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, nmId, dateFrom])
   @@index([wbAccountId])
@@ -571,7 +667,7 @@ model SelfPurchase {
   note        String?
   createdAt   DateTime @default(now())
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@index([wbAccountId])
   @@index([vendorCode])
@@ -589,7 +685,7 @@ model ExternalAd {
   note        String?
   createdAt   DateTime @default(now())
 
-  wbAccount   WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@index([wbAccountId])
   @@index([date])
@@ -605,7 +701,7 @@ model ArticleOverride {
   localSize        String?
   localComposition String?
 
-  wbAccount        WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, vendorCode])
   @@index([wbAccountId])
@@ -615,43 +711,51 @@ model ArticleOverride {
 // ─── Financial Reports ─────────────────────────────────────────
 
 model RealizationReport {
-  id                    String   @id @default(uuid())
-  wbAccountId           String
-  rrdId                 BigInt
-  realizationReportId   BigInt
-  dateFrom              DateTime @db.Date
-  dateTo                DateTime @db.Date
-  nmId                  Int
-  vendorCode            String
-  barcode               String?
-  docTypeName           String
-  quantity              Int
-  retailPrice           Decimal  @db.Decimal(10, 2)
-  retailPriceWithDisc   Decimal  @db.Decimal(10, 2)
-  ppvzForPay            Decimal  @db.Decimal(10, 2)
-  ppvzSppPrc            Decimal  @db.Decimal(5, 2)
-  deliveryRub           Decimal  @db.Decimal(10, 2)
-  penalty               Decimal  @db.Decimal(10, 2)
-  additionalPayment     Decimal  @db.Decimal(10, 2)
-  storageFee            Decimal  @db.Decimal(10, 2)
-  deduction             Decimal  @db.Decimal(10, 2)
-  acceptance            Decimal  @db.Decimal(10, 2)
-  acquiringFee          Decimal  @db.Decimal(10, 2)
-  commissionPercent     Decimal  @db.Decimal(5, 2)
-  ppvzSalesCommission   Decimal  @db.Decimal(10, 2)
-  salePercent           Decimal  @db.Decimal(5, 2)
-  bonusTypeName         String?
-  srid                  String?
-  subjectName           String?
-  brandName             String?
-  officeName            String?
-  supplierOperName      String?
-  orderDt               DateTime?
-  saleDt                DateTime?
-  rrDt                  DateTime? @db.Date
-  fetchedAt             DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  wbAccountId         String
+  rrdId               BigInt
+  realizationReportId BigInt
+  dateFrom            DateTime  @db.Date
+  dateTo              DateTime  @db.Date
+  nmId                Int
+  vendorCode          String
+  barcode             String?
+  docTypeName         String
+  quantity            Int
+  retailPrice         Decimal   @db.Decimal(10, 2)
+  retailPriceWithDisc Decimal   @db.Decimal(10, 2)
+  ppvzForPay          Decimal   @db.Decimal(10, 2)
+  ppvzSppPrc          Decimal   @db.Decimal(5, 2)
+  deliveryRub         Decimal   @db.Decimal(10, 2)
+  penalty             Decimal   @db.Decimal(10, 2)
+  additionalPayment   Decimal   @db.Decimal(10, 2)
+  storageFee          Decimal   @db.Decimal(10, 2)
+  deduction           Decimal   @db.Decimal(10, 2)
+  acceptance          Decimal   @db.Decimal(10, 2)
+  acquiringFee        Decimal   @db.Decimal(10, 2)
+  commissionPercent   Decimal   @db.Decimal(5, 2)
+  ppvzSalesCommission Decimal   @db.Decimal(10, 2)
+  salePercent         Decimal   @db.Decimal(5, 2)
+  bonusTypeName       String?
+  srid                String?
+  subjectName         String?
+  brandName           String?
+  officeName          String?
+  supplierOperName    String?
+  orderId             BigInt?
+  orderUid            String?
+  trbxId              String?
+  deliveryMethod      String?
+  isB2b               Boolean?
+  kizHash             String?
+  kizMasked           String?
+  kizEncrypted        String?   @db.Text
+  orderDt             DateTime?
+  saleDt              DateTime?
+  rrDt                DateTime? @db.Date
+  fetchedAt           DateTime  @default(now())
 
-  wbAccount             WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, rrdId])
   @@index([wbAccountId])
@@ -659,6 +763,9 @@ model RealizationReport {
   @@index([vendorCode])
   @@index([dateFrom, dateTo])
   @@index([wbAccountId, nmId, dateFrom])
+  @@index([wbAccountId, deliveryMethod, dateFrom])
+  @@index([wbAccountId, orderId])
+  @@index([wbAccountId, kizHash])
   @@map("realization_reports")
 }
 
@@ -679,7 +786,7 @@ model PaidStorage {
   cost          Decimal  @db.Decimal(10, 2)
   fetchedAt     DateTime @default(now())
 
-  wbAccount     WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, date, nmId, chrtId])
   @@index([wbAccountId])
@@ -691,24 +798,24 @@ model PaidStorage {
 // ─── Advertising Campaigns ─────────────────────────────────────
 
 model AdCampaign {
-  id               String   @id @default(uuid())
-  wbAccountId      String
-  advertId         Int
-  name             String
-  status           Int
-  bidType          String?
-  paymentType      String?
-  placementSearch  Boolean  @default(false)
-  placementReco    Boolean  @default(false)
-  budget           Decimal? @db.Decimal(12, 2)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default(uuid())
+  wbAccountId     String
+  advertId        Int
+  name            String
+  status          Int
+  bidType         String?
+  paymentType     String?
+  placementSearch Boolean  @default(false)
+  placementReco   Boolean  @default(false)
+  budget          Decimal? @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  wbAccount        WbAccount          @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  stats            AdCampaignStat[]
-  nmStats          AdCampaignNmStat[]
-  clusters         AdCampaignCluster[]
-  actionLogs       AdActionLog[]
+  wbAccount  WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  stats      AdCampaignStat[]
+  nmStats    AdCampaignNmStat[]
+  clusters   AdCampaignCluster[]
+  actionLogs AdActionLog[]
 
   @@unique([wbAccountId, advertId])
   @@index([wbAccountId])
@@ -720,7 +827,7 @@ model AdCampaignStat {
   id         String   @id @default(uuid())
   campaignId String
   date       DateTime @db.Date
-  source     String   // "search" | "recommendations" | "total"
+  source     String // "search" | "recommendations" | "total"
   views      Int      @default(0)
   clicks     Int      @default(0)
   ctr        Decimal  @default(0) @db.Decimal(6, 4)
@@ -731,7 +838,7 @@ model AdCampaignStat {
   orderSum   Decimal  @default(0) @db.Decimal(12, 2)
   bid        Decimal? @db.Decimal(10, 2)
 
-  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, date, source])
   @@index([campaignId])
@@ -743,7 +850,7 @@ model AdCampaignNmStat {
   id         String   @id @default(uuid())
   campaignId String
   date       DateTime @db.Date
-  source     String   // "search" | "recommendations" | "total"
+  source     String // "search" | "recommendations" | "total"
   nmId       Int
   views      Int      @default(0)
   clicks     Int      @default(0)
@@ -754,7 +861,7 @@ model AdCampaignNmStat {
   cartAdds   Int      @default(0)
   orderSum   Decimal  @default(0) @db.Decimal(12, 2)
 
-  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, date, source, nmId])
   @@index([campaignId])
@@ -777,7 +884,7 @@ model AdCampaignCluster {
   dateFrom   DateTime @db.Date
   dateTo     DateTime @db.Date
 
-  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([dateFrom, dateTo])
@@ -785,15 +892,15 @@ model AdCampaignCluster {
 }
 
 model AdActionLog {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   campaignId  String
   action      String
-  valueBefore Decimal?  @db.Decimal(10, 2)
-  valueAfter  Decimal?  @db.Decimal(10, 2)
+  valueBefore Decimal? @db.Decimal(10, 2)
+  valueAfter  Decimal? @db.Decimal(10, 2)
   note        String?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
-  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([createdAt])
@@ -813,23 +920,23 @@ model SalesPlan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  wbAccount   WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
-  items       SalesPlanItem[]
+  wbAccount WbAccount       @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  items     SalesPlanItem[]
 
   @@index([wbAccountId])
   @@map("sales_plans")
 }
 
 model SalesPlanItem {
-  id             String  @id @default(uuid())
-  planId         String
-  nmId           Int
-  vendorCode     String
-  plannedQty     Int
-  price          Decimal @db.Decimal(10, 2)
-  buyoutPercent  Decimal @db.Decimal(5, 2)
+  id            String  @id @default(uuid())
+  planId        String
+  nmId          Int
+  vendorCode    String
+  plannedQty    Int
+  price         Decimal @db.Decimal(10, 2)
+  buyoutPercent Decimal @db.Decimal(5, 2)
 
-  plan           SalesPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan SalesPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId])
   @@index([nmId])
@@ -839,20 +946,20 @@ model SalesPlanItem {
 // ─── WB Orders & Sales (for Sales Plan) ──────────────────────
 
 model WbOrder {
-  id              String   @id @default(uuid())
-  wbAccountId     String
-  srid            String
-  nmId            Int
-  vendorCode      String
-  date            DateTime @db.Date
-  lastChangeDate  DateTime
-  finishedPrice   Decimal  @db.Decimal(10, 2)
-  isCancel        Boolean  @default(false)
-  regionName      String?
-  warehouseName   String?
-  fetchedAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  wbAccountId    String
+  srid           String
+  nmId           Int
+  vendorCode     String
+  date           DateTime @db.Date
+  lastChangeDate DateTime
+  finishedPrice  Decimal  @db.Decimal(10, 2)
+  isCancel       Boolean  @default(false)
+  regionName     String?
+  warehouseName  String?
+  fetchedAt      DateTime @default(now())
 
-  wbAccount       WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, srid])
   @@index([wbAccountId, nmId, date])
@@ -862,20 +969,20 @@ model WbOrder {
 }
 
 model WbSale {
-  id              String   @id @default(uuid())
-  wbAccountId     String
-  srid            String
-  nmId            Int
-  vendorCode      String
-  date            DateTime @db.Date
-  lastChangeDate  DateTime
-  finishedPrice   Decimal? @db.Decimal(10, 2)  // фактическая цена покупателя (с учётом СПП)
-  priceWithDisc   Decimal  @db.Decimal(10, 2)
-  forPay          Decimal  @db.Decimal(10, 2)
-  isReturn        Boolean  @default(false)
-  fetchedAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  wbAccountId    String
+  srid           String
+  nmId           Int
+  vendorCode     String
+  date           DateTime @db.Date
+  lastChangeDate DateTime
+  finishedPrice  Decimal? @db.Decimal(10, 2) // фактическая цена покупателя (с учётом СПП)
+  priceWithDisc  Decimal  @db.Decimal(10, 2)
+  forPay         Decimal  @db.Decimal(10, 2)
+  isReturn       Boolean  @default(false)
+  fetchedAt      DateTime @default(now())
 
-  wbAccount       WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, srid])
   @@index([wbAccountId, nmId, date])
@@ -900,9 +1007,333 @@ model WbFunnelStat {
   ordersSumRub          Decimal  @db.Decimal(12, 2)
   fetchedAt             DateTime @default(now())
 
-  wbAccount             WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  wbAccount WbAccount @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
 
   @@unique([wbAccountId, nmId, date])
   @@index([wbAccountId, date])
   @@map("wb_funnel_stats")
+}
+
+// ─── FBS: seller warehouses, orders and serialized marking ───
+
+model FbsSellerWarehouse {
+  id           String    @id @default(uuid())
+  wbAccountId  String
+  externalId   BigInt
+  name         String
+  officeId     BigInt?
+  deliveryType String?
+  cargoType    String?
+  isEnabled    Boolean   @default(true)
+  writeEnabled Boolean   @default(false)
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  wbAccount       WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  assortmentItems FbsAssortmentItem[]
+  orders          FbsOrder[]
+  supplies        FbsSupply[]
+  kizUnits        KizUnit[]
+  actionLogs      FbsActionLog[]
+
+  @@unique([wbAccountId, externalId])
+  @@index([wbAccountId, isEnabled])
+  @@map("fbs_seller_warehouses")
+}
+
+model FbsAssortmentItem {
+  id              String    @id @default(uuid())
+  wbAccountId     String
+  warehouseId     String
+  productId       String?
+  productSizeId   String?
+  nmId            Int
+  chrtId          Int
+  barcode         String
+  vendorCode      String?
+  isEnabled       Boolean   @default(true)
+  requiresKiz     Boolean   @default(false)
+  markingGtin     String?
+  onHand          Int       @default(0)
+  reserved        Int       @default(0)
+  wbStock         Int       @default(0)
+  wbStockSyncedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  wbAccount   WbAccount              @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  warehouse   FbsSellerWarehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product     Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productSize ProductSize?           @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
+  orders      FbsOrder[]
+  movements   FbsInventoryMovement[]
+  kizUnits    KizUnit[]
+  actionLogs  FbsActionLog[]
+
+  @@unique([warehouseId, chrtId])
+  @@index([wbAccountId, nmId])
+  @@index([warehouseId, isEnabled])
+  @@index([barcode])
+  @@map("fbs_assortment_items")
+}
+
+model FbsSupply {
+  id              String    @id @default(uuid())
+  wbAccountId     String
+  warehouseId     String?
+  externalId      String
+  name            String?
+  done            Boolean   @default(false)
+  isB2b           Boolean   @default(false)
+  cargoType       String?
+  crossBorderType String?
+  createdAtWb     DateTime?
+  closedAt        DateTime?
+  fetchedAt       DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  wbAccount  WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  warehouse  FbsSellerWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  orders     FbsOrder[]
+  actionLogs FbsActionLog[]
+
+  @@unique([wbAccountId, externalId])
+  @@index([wbAccountId, done])
+  @@index([warehouseId])
+  @@map("fbs_supplies")
+}
+
+model FbsOrder {
+  id                 String    @id @default(uuid())
+  wbAccountId        String
+  externalOrderId    BigInt
+  rid                String?
+  orderUid           String?
+  warehouseId        String?
+  assortmentItemId   String?
+  supplyId           String?
+  nmId               Int
+  chrtId             Int
+  barcode            String
+  vendorCode         String?
+  createdAtWb        DateTime
+  deliveryDate       DateTime?
+  priceRaw           Int?
+  convertedPriceRaw  Int?
+  currencyCode       Int?
+  isB2b              Boolean   @default(false)
+  requiredMeta       Json?
+  optionalMeta       Json?
+  metadataStatus     Json?
+  supplierStatus     String
+  wbStatus           String
+  reservationApplied Boolean   @default(false)
+  shipmentApplied    Boolean   @default(false)
+  shippedAt          DateTime?
+  soldAt             DateTime?
+  fetchedAt          DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  wbAccount       WbAccount              @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  warehouse       FbsSellerWarehouse?    @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  assortmentItem  FbsAssortmentItem?     @relation(fields: [assortmentItemId], references: [id], onDelete: SetNull)
+  supply          FbsSupply?             @relation(fields: [supplyId], references: [id], onDelete: SetNull)
+  events          FbsOrderEvent[]
+  movements       FbsInventoryMovement[]
+  kizUnits        KizUnit[]
+  kizEvents       KizEvent[]
+  complianceTasks KizComplianceTask[]
+  actionLogs      FbsActionLog[]
+
+  @@unique([wbAccountId, externalOrderId])
+  @@index([wbAccountId, createdAtWb])
+  @@index([wbAccountId, supplierStatus, wbStatus])
+  @@index([warehouseId, createdAtWb])
+  @@index([supplyId])
+  @@map("fbs_orders")
+}
+
+model FbsOrderEvent {
+  id               String   @id @default(uuid())
+  orderId          String
+  eventKey         String
+  supplierStatus   String?
+  wbStatus         String?
+  supplyExternalId String?
+  metadataStatus   Json?
+  observedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  order FbsOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, eventKey])
+  @@index([orderId, observedAt])
+  @@map("fbs_order_events")
+}
+
+model FbsInventoryMovement {
+  id                   String                   @id @default(uuid())
+  itemId               String
+  orderId              String?
+  kizUnitId            String?
+  userId               String?
+  type                 FbsInventoryMovementType
+  onHandDelta          Int                      @default(0)
+  reservedDelta        Int                      @default(0)
+  balanceAfterOnHand   Int
+  balanceAfterReserved Int
+  source               String
+  idempotencyKey       String
+  note                 String?
+  occurredAt           DateTime                 @default(now())
+  createdAt            DateTime                 @default(now())
+
+  item    FbsAssortmentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  order   FbsOrder?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  kizUnit KizUnit?          @relation(fields: [kizUnitId], references: [id], onDelete: SetNull)
+  user    User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([itemId, idempotencyKey])
+  @@index([itemId, occurredAt])
+  @@index([orderId])
+  @@index([kizUnitId])
+  @@map("fbs_inventory_movements")
+}
+
+model KizUnit {
+  id                 String              @id @default(uuid())
+  wbAccountId        String
+  warehouseId        String?
+  assortmentItemId   String?
+  productSizeId      String?
+  currentOrderId     String?
+  encryptedCode      String              @db.Text
+  codeHash           String
+  maskedCode         String
+  gtin               String?
+  serialMasked       String?
+  physicalState      KizPhysicalState    @default(IN_STOCK)
+  circulationState   KizCirculationState @default(UNKNOWN)
+  wbValidationStatus String?
+  importedAt         DateTime            @default(now())
+  lastScannedAt      DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  wbAccount       WbAccount              @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  warehouse       FbsSellerWarehouse?    @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  assortmentItem  FbsAssortmentItem?     @relation(fields: [assortmentItemId], references: [id], onDelete: SetNull)
+  productSize     ProductSize?           @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
+  currentOrder    FbsOrder?              @relation(fields: [currentOrderId], references: [id], onDelete: SetNull)
+  events          KizEvent[]
+  movements       FbsInventoryMovement[]
+  complianceTasks KizComplianceTask[]
+
+  @@unique([wbAccountId, codeHash])
+  @@index([wbAccountId, physicalState, circulationState])
+  @@index([currentOrderId])
+  @@index([gtin])
+  @@map("kiz_units")
+}
+
+model KizEvent {
+  id         String       @id @default(uuid())
+  kizUnitId  String
+  orderId    String?
+  userId     String?
+  type       KizEventType
+  details    Json?
+  occurredAt DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+
+  kizUnit KizUnit   @relation(fields: [kizUnitId], references: [id], onDelete: Cascade)
+  order   FbsOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user    User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([kizUnitId, occurredAt])
+  @@index([orderId])
+  @@map("kiz_events")
+}
+
+model KizComplianceTask {
+  id             String                  @id @default(uuid())
+  wbAccountId    String
+  kizUnitId      String
+  orderId        String?
+  batchId        String?
+  type           KizComplianceTaskType
+  status         KizComplianceTaskStatus @default(OPEN)
+  idempotencyKey String                  @unique
+  dueAt          DateTime?
+  documentNumber String?
+  documentDate   DateTime?               @db.Date
+  exportedAt     DateTime?
+  confirmedAt    DateTime?
+  confirmedById  String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  wbAccount   WbAccount          @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  kizUnit     KizUnit            @relation(fields: [kizUnitId], references: [id], onDelete: Cascade)
+  order       FbsOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  batch       KizOperationBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  confirmedBy User?              @relation("KizTaskConfirmer", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  @@index([wbAccountId, status, dueAt])
+  @@index([kizUnitId])
+  @@index([orderId])
+  @@index([batchId])
+  @@map("kiz_compliance_tasks")
+}
+
+model KizOperationBatch {
+  id          String   @id @default(uuid())
+  wbAccountId String
+  createdById String?
+  filename    String
+  taskCount   Int
+  checksum    String
+  createdAt   DateTime @default(now())
+
+  wbAccount WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  createdBy User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tasks     KizComplianceTask[]
+
+  @@index([wbAccountId, createdAt])
+  @@map("kiz_operation_batches")
+}
+
+model FbsActionLog {
+  id               String          @id @default(uuid())
+  wbAccountId      String
+  userId           String?
+  warehouseId      String?
+  assortmentItemId String?
+  orderId          String?
+  supplyId         String?
+  kind             FbsActionKind
+  status           FbsActionStatus @default(PENDING)
+  idempotencyKey   String
+  requestSummary   Json?
+  result           Json?
+  error            String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  wbAccount      WbAccount           @relation(fields: [wbAccountId], references: [id], onDelete: Cascade)
+  user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  warehouse      FbsSellerWarehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  assortmentItem FbsAssortmentItem?  @relation(fields: [assortmentItemId], references: [id], onDelete: SetNull)
+  order          FbsOrder?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  supply         FbsSupply?          @relation(fields: [supplyId], references: [id], onDelete: SetNull)
+
+  @@unique([wbAccountId, kind, idempotencyKey])
+  @@index([wbAccountId, createdAt])
+  @@index([status, createdAt])
+  @@map("fbs_action_logs")
 }

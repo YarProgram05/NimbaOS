@@ -3,6 +3,7 @@ import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
 import { fetchRealizationReportPage, REALIZATION_REPORT_API } from '@/lib/wb-api/reports'
 import type { WbRealizationRow, ReportSyncResult } from '@/types/reports'
+import { prepareKizForStorage } from '@/lib/fbs/kiz'
 
 /**
  * Synchronises realization report data for a WB account into the database.
@@ -19,6 +20,7 @@ export async function syncRealizationReport(
     sourceApi: REALIZATION_REPORT_API,
     totalRows: 0,
     upserted: 0,
+    enriched: 0,
     pages: 0,
     errors: 0,
     durationMs: 0,
@@ -68,6 +70,32 @@ export async function syncRealizationReport(
         skipDuplicates: true,
       })
       result.upserted += count
+      const enrichmentRows = page.rows.filter((row) =>
+        row.order_id ||
+        row.order_uid ||
+        row.delivery_method ||
+        row.trbx_id ||
+        row.is_b2b !== null ||
+        row.kiz,
+      )
+      for (let index = 0; index < enrichmentRows.length; index += 200) {
+        const batch = enrichmentRows.slice(index, index + 200)
+        await prisma.$transaction(
+          batch.map((row) =>
+            prisma.realizationReport.updateMany({
+              where: {
+                wbAccountId,
+                rrdId: BigInt(row.rrd_id),
+              },
+              data: mapEnrichment(row),
+            }),
+          ),
+        )
+        result.enriched += batch.length
+      }
+      for (const row of enrichmentRows) {
+        await reconcileFinanceKiz(wbAccountId, row)
+      }
     } catch (error) {
       result.errors++
       result.durationMs = Date.now() - startMs
@@ -91,6 +119,7 @@ function getReportDate(row: WbRealizationRow): string | null {
 }
 
 function mapRowToPrisma(wbAccountId: string, row: WbRealizationRow) {
+  const enrichment = mapEnrichment(row)
   return {
     wbAccountId,
     rrdId:                BigInt(row.rrd_id),
@@ -122,8 +151,135 @@ function mapRowToPrisma(wbAccountId: string, row: WbRealizationRow) {
     brandName:            row.brand_name ?? null,
     officeName:           row.office_name ?? null,
     supplierOperName:     row.supplier_oper_name ?? null,
+    ...enrichment,
     orderDt:              row.order_dt ? new Date(row.order_dt) : null,
     saleDt:               row.sale_dt ? new Date(row.sale_dt) : null,
     rrDt:                 row.rr_dt ? new Date(row.rr_dt) : null,
   }
+}
+
+function mapEnrichment(row: WbRealizationRow) {
+  const preparedKiz = safePrepareKiz(row.kiz)
+  return {
+    orderId: row.order_id ? BigInt(row.order_id) : null,
+    orderUid: row.order_uid,
+    trbxId: row.trbx_id,
+    deliveryMethod: row.delivery_method,
+    isB2b: row.is_b2b,
+    kizHash: preparedKiz?.codeHash ?? null,
+    kizMasked: preparedKiz?.maskedCode ?? null,
+    kizEncrypted: preparedKiz?.encryptedCode ?? null,
+  }
+}
+
+function safePrepareKiz(value: string | null) {
+  if (!value) return null
+  try {
+    return prepareKizForStorage(value)
+  } catch {
+    // A malformed value must not stop the financial report sync and must never
+    // be echoed to logs. It remains discoverable through the missing hash.
+    return null
+  }
+}
+
+async function reconcileFinanceKiz(wbAccountId: string, row: WbRealizationRow) {
+  if (!row.delivery_method?.toLowerCase().includes('fbs')) return
+  const prepared = safePrepareKiz(row.kiz)
+  if (!prepared) return
+
+  await prisma.$transaction(async (tx) => {
+    const order = row.order_id
+      ? await tx.fbsOrder.findUnique({
+          where: {
+            wbAccountId_externalOrderId: {
+              wbAccountId,
+              externalOrderId: BigInt(row.order_id),
+            },
+          },
+          select: { id: true, warehouseId: true, assortmentItemId: true },
+        })
+      : null
+    const existing = await tx.kizUnit.findUnique({
+      where: {
+        wbAccountId_codeHash: {
+          wbAccountId,
+          codeHash: prepared.codeHash,
+        },
+      },
+    })
+    const isReturn = row.doc_type_name.toLowerCase().includes('возврат')
+    const isSale = row.doc_type_name.toLowerCase().includes('продаж')
+    const unit = existing
+      ? await tx.kizUnit.update({
+          where: { id: existing.id },
+          data: {
+            ...(existing.currentOrderId ? {} : { currentOrderId: order?.id ?? null }),
+            ...(existing.warehouseId ? {} : { warehouseId: order?.warehouseId ?? null }),
+            ...(existing.assortmentItemId
+              ? {}
+              : { assortmentItemId: order?.assortmentItemId ?? null }),
+            ...(isReturn ? { physicalState: 'RETURN_EXPECTED' } : {}),
+            ...(
+              isSale &&
+              !['WITHDRAWAL_REQUIRED', 'WITHDRAWN', 'RETURN_TO_CIRCULATION_REQUIRED'].includes(
+                existing.circulationState,
+              )
+                ? { circulationState: 'WITHDRAWAL_REQUIRED' }
+                : {}
+            ),
+          },
+        })
+      : await tx.kizUnit.create({
+          data: {
+            wbAccountId,
+            warehouseId: order?.warehouseId ?? null,
+            assortmentItemId: order?.assortmentItemId ?? null,
+            currentOrderId: order?.id ?? null,
+            encryptedCode: prepared.encryptedCode,
+            codeHash: prepared.codeHash,
+            maskedCode: prepared.maskedCode,
+            gtin: prepared.parsed.gtin,
+            serialMasked: prepared.serialMasked,
+            physicalState: isReturn ? 'RETURN_EXPECTED' : 'HANDED_OVER',
+            circulationState: isSale ? 'WITHDRAWAL_REQUIRED' : 'UNKNOWN',
+          },
+        })
+
+    if (isSale) {
+      const taskType = row.is_b2b ? 'WITHDRAWAL_B2B' : 'WITHDRAWAL_REMOTE_SALE'
+      await tx.kizComplianceTask.upsert({
+        where: {
+          idempotencyKey: `finance:${row.rrd_id}:${taskType}`,
+        },
+        create: {
+          wbAccountId,
+          kizUnitId: unit.id,
+          orderId: order?.id ?? null,
+          type: taskType,
+          idempotencyKey: `finance:${row.rrd_id}:${taskType}`,
+          dueAt: row.sale_dt ? new Date(row.sale_dt) : new Date(),
+        },
+        update: {},
+      })
+    }
+
+    const shouldRecordEvent =
+      !existing ||
+      (isReturn && existing.physicalState !== 'RETURN_EXPECTED') ||
+      (
+        isSale &&
+        !['WITHDRAWAL_REQUIRED', 'WITHDRAWN'].includes(existing.circulationState)
+      )
+    if (shouldRecordEvent) {
+      await tx.kizEvent.create({
+        data: {
+          kizUnitId: unit.id,
+          orderId: order?.id ?? null,
+          type: isReturn ? 'RETURN_EXPECTED' : 'SALE_DETECTED',
+          details: { source: 'finance_report', rrdId: String(row.rrd_id) },
+        },
+      })
+    }
+  })
 }

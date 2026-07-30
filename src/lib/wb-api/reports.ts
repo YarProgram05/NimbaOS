@@ -50,6 +50,12 @@ const REALIZATION_REPORT_FIELDS = [
   'deduction',
   'paidAcceptance',
   'srid',
+  'orderId',
+  'orderUid',
+  'kiz',
+  'isB2b',
+  'trbxId',
+  'deliveryMethod',
 ]
 
 /**
@@ -122,6 +128,12 @@ function normalizeFinanceRow(row: WbFinanceRealizationRow): WbRealizationRow {
     brand_name: row.brandName ?? null,
     office_name: row.officeName ?? null,
     supplier_oper_name: row.sellerOperName ?? null,
+    order_id: row.orderId == null ? null : String(row.orderId),
+    order_uid: row.orderUid ?? null,
+    kiz: row.kiz ?? null,
+    is_b2b: row.isB2b ?? null,
+    trbx_id: row.trbxId ?? null,
+    delivery_method: row.deliveryMethod ?? null,
     order_dt: row.orderDt ?? null,
     sale_dt: row.saleDt ?? null,
     rr_dt: row.rrDate ?? null,

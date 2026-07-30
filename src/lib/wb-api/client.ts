@@ -166,4 +166,18 @@ export class WbApiClient {
       body: JSON.stringify(body),
     })
   }
+
+  put<T>(domain: WbApiDomain, path: string, body: unknown) {
+    return this.request<T>(domain, path, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+  }
+
+  delete<T>(domain: WbApiDomain, path: string, body?: unknown) {
+    return this.request<T>(domain, path, {
+      method: 'DELETE',
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  }
 }

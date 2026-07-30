@@ -32,6 +32,12 @@ export interface WbRealizationRow {
   brand_name: string | null
   office_name: string | null
   supplier_oper_name: string | null
+  order_id: string | null
+  order_uid: string | null
+  kiz: string | null
+  is_b2b: boolean | null
+  trbx_id: string | null
+  delivery_method: string | null
   order_dt: string | null
   sale_dt: string | null
   rr_dt: string | null
@@ -72,6 +78,12 @@ export interface WbFinanceRealizationRow {
   deduction?: string | number
   paidAcceptance?: string | number
   srid?: string | null
+  orderId?: number | string | null
+  orderUid?: string | null
+  kiz?: string | null
+  isB2b?: boolean | null
+  trbxId?: string | null
+  deliveryMethod?: string | null
 }
 
 // ── WB API — Paid storage responses (analytics domain, task-based flow) ──────
@@ -133,6 +145,7 @@ export interface ReportSyncResult {
   }
   totalRows: number
   upserted: number
+  enriched: number
   pages: number
   errors: number
   durationMs: number
