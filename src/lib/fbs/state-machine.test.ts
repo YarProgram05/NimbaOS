@@ -54,6 +54,69 @@ test('an order first observed as canceled is never reserved', () => {
   )
 })
 
+test('an order first observed declined before handoff never creates shipment or withdrawal', () => {
+  assert.deepEqual(
+    deriveFbsTransition(null, {
+      supplierStatus: 'complete',
+      wbStatus: 'declined_by_client',
+      reservationApplied: false,
+      shipmentApplied: false,
+      hasKiz: true,
+      requiresKiz: true,
+    }, { enforceShipmentGuard: false }),
+    ['UNASSIGN_KIZ'],
+  )
+})
+
+test('cancellation at pickup never unassigns the KIZ even when shipment flag arrived late', () => {
+  assert.deepEqual(
+    deriveFbsTransition(
+      {
+        supplierStatus: 'complete',
+        wbStatus: 'sorted',
+        reservationApplied: false,
+        shipmentApplied: false,
+        hasKiz: true,
+        requiresKiz: true,
+      },
+      {
+        supplierStatus: 'complete',
+        wbStatus: 'canceled_by_client',
+        reservationApplied: false,
+        shipmentApplied: false,
+        hasKiz: true,
+        requiresKiz: true,
+      },
+      { enforceShipmentGuard: false },
+    ),
+    ['SHIP', 'MARK_HANDED_OVER', 'CANCEL_PENDING_WITHDRAWAL'],
+  )
+})
+
+test('defect after handoff keeps the assigned KIZ and marks its return expected', () => {
+  assert.deepEqual(
+    deriveFbsTransition(
+      {
+        supplierStatus: 'complete',
+        wbStatus: 'sorted',
+        reservationApplied: false,
+        shipmentApplied: true,
+        hasKiz: true,
+        requiresKiz: true,
+      },
+      {
+        supplierStatus: 'complete',
+        wbStatus: 'defect',
+        reservationApplied: false,
+        shipmentApplied: true,
+        hasKiz: true,
+        requiresKiz: true,
+      },
+    ),
+    ['CANCEL_PENDING_WITHDRAWAL', 'MARK_RETURN_EXPECTED'],
+  )
+})
+
 test('an order first observed as canceled releases an attached KIZ without reserving stock', () => {
   assert.deepEqual(
     deriveFbsTransition(null, {

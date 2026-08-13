@@ -13,6 +13,7 @@ import {
   attachAssignedKizToWb,
   closeFbsSupplyInWb,
   configureFbsAssortment,
+  confirmKizComplianceBatch,
   confirmKizComplianceTask,
   exportKizComplianceTasks,
   markPhysicalKizReturn,
@@ -31,6 +32,8 @@ import { decrypt } from '@/lib/encryption'
 import { WbApiClient } from '@/lib/wb-api/client'
 import { fetchFbsOrderStickers } from '@/lib/wb-api/fbs'
 import type { WbFbsSticker } from '@/types/fbs'
+import type { KizComplianceExportKind } from '@/lib/fbs/compliance-export'
+import { getFbsHistoryPage, type FbsHistorySection } from '@/lib/services/fbs-history'
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -301,12 +304,13 @@ export async function markKizExceptionAction(input: {
 
 export async function exportKizComplianceTasksAction(input: {
   wbAccountId: string
-  taskIds?: string[]
+  kind: KizComplianceExportKind
 }): Promise<ActionResult<{
   base64: string
   filename: string
   batchId: string
   taskCount: number
+  kind: KizComplianceExportKind
 }>> {
   try {
     const session = await requireManagerSession()
@@ -331,6 +335,48 @@ export async function confirmKizComplianceTaskAction(input: {
     return { success: true, data }
   } catch (error) {
     return failure(error, 'Не удалось подтвердить операцию Честного знака')
+  }
+}
+
+export async function getFbsHistoryPageAction(input: {
+  wbAccountId: string
+  section: FbsHistorySection
+  query?: string
+  filter?: string
+  sortKey?: string
+  sortDirection?: 'asc' | 'desc'
+  page?: number
+  pageSize?: number
+  dateFrom?: string
+  dateTo?: string
+}) {
+  try {
+    const session = await requireSession()
+    const account = await prisma.wbAccount.findUnique({ where: { id: input.wbAccountId }, select: { id: true } })
+    if (!account) return { success: false, error: 'Кабинет WB не найден' } as const
+    const data = await getFbsHistoryPage({
+      ...input,
+      canViewFullKiz: checkRole(session, 'MANAGER'),
+    })
+    return { success: true, data } as const
+  } catch (error) {
+    return failure(error, 'Не удалось загрузить историю FBS')
+  }
+}
+
+export async function confirmKizComplianceBatchAction(input: {
+  wbAccountId: string
+  batchId: string
+  documentNumber: string
+  documentDate: string
+}): Promise<ActionResult<{ batchId: string; confirmed: number; alreadyProcessed: boolean }>> {
+  try {
+    const session = await requireManagerSession()
+    const data = await confirmKizComplianceBatch({ ...input, userId: session.user.id })
+    refreshFbs()
+    return { success: true, data }
+  } catch (error) {
+    return failure(error, 'Не удалось подтвердить пакет операций Честного знака')
   }
 }
 

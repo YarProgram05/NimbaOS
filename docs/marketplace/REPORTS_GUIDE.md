@@ -19,7 +19,7 @@
 - Stocks: latest stock snapshot + recent non-return `wb_sales` for turnover.
 - Cards: local products/product sizes.
 - FBS operations: `fbs_seller_warehouses`, `fbs_assortment_items`, `fbs_orders`, `fbs_supplies`, `kiz_units`, `kiz_compliance_tasks`.
-- FBS sales: `realization_reports` filtered by account, period and `deliveryMethod=FBS`; KIZ/order enrichment is populated by finance sync/backfill.
+- FBS analytics: orders/cancellations from bounded `fbs_orders`; buyouts/returns/revenue/transfer from bounded `realization_reports` linked by account-scoped `orderId` to `fbs_orders.externalOrderId`. Do not filter sale rows only by `deliveryMethod=FBS`, because WB often sets it on a related logistics row.
 
 ## Freshness Before Report
 

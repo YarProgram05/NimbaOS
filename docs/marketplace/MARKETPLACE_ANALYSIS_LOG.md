@@ -1,5 +1,76 @@
 # Marketplace Analysis Log
 
+## 2026-08-13 - Late FBS withdrawal audit: Nimba and Galioni
+
+Official CRPT guidance requires light-industry remote-sale withdrawal after shipment, within three working days and before actual delivery. That remains the normal prospective rule. A historical sync can first reveal the order/KIZ after WB already reports pickup cancellation or defect. If NimbaOS has no confirmed withdrawal in that case, submitting a late withdrawal solely to immediately return the code to circulation adds no useful state transition and creates avoidable operator work.
+
+Local account audit found Nimba's latest 28-row export contained 27 pickup cancellations and one defect, all unconfirmed and already `RETURN_EXPECTED`. Galioni had 40 open unconfirmed withdrawal tasks on canceled orders; 11 were present in two prior export files. All 68 tasks were canceled locally with audit records, circulation was restored to `IN_CIRCULATION`, and physical state remained `RETURN_EXPECTED`. Confirmed withdrawal records were not changed. Final audit found zero open canceled-order withdrawal tasks in either cabinet. Future state transitions and export selection now enforce the same rule.
+
+## 2026-08-13 - FBS archive access, profitability and buyout
+
+The FBS page now preserves fast initial rendering while making all retained account history searchable. Heavy journals query the server with account, optional date range, query/filter, sort and page size; only the requested page reaches the browser. KIZ exact-text search preserves encrypted-at-rest storage and is evaluated only inside the trusted application process. Local smoke checks demonstrated matches beyond the former 100-row window.
+
+Analytics adds two distinct ratios. Margin uses direct FBS OP divided by net revenue. Profitability uses direct FBS OP divided by modeled total FBS expenses (`revenue - OP`). Buyout uses net sold units divided by completed sale/cancellation outcomes, so orders still being assembled or delivered do not lower the ratio. Shared advertising is still excluded from direct FBS OP due to the absence of a reliable FBS/FBO allocation key.
+
+## 2026-08-13 - FBS article OP and KIZ correction
+
+Article-level FBS analytics now joins operational FBS orders with account-scoped realization rows. Orders/cancellations use order creation dates; buyouts/returns/revenue/transfer/direct expenses use finance operation dates. Direct FBS OP subtracts realization logistics/storage/acceptance/additions/penalties/deductions, current cost-price references and the account tax rate. Shared ad spend is excluded because it has no auditable FBS/FBO allocation, so this metric is a fulfillment contribution view rather than the complete company OP.
+
+The user-authorized KIZ correction was preceded by exact encrypted-code verification. One unit matched, its current order is sold, and its prior test withdrawal/return events matched the user's description. Its local circulation state changed once from `IN_CIRCULATION` to `WITHDRAWN`, with an audit event recording the correction. The operation did not contact WB or CRPT; the user stated they would perform the actual Chestny Znak withdrawal separately.
+
+## 2026-08-13 - CRPT MOD/FIAS rejection for remote-sale withdrawal
+
+The exact processing error was `МОД по указанным ИНН 501709065638, КПП null, ФИАС null не найдены`. The 12-digit INN identifies an individual entrepreneur, for whom a null KPP is normal. The failure is caused by the absent FIAS ID / registered place of business. Current official light-industry guidance states that from 2026-03-01 remote-sale withdrawal requires MOD/FIAS data and that all market participants must register the place under the relevant product group in the CRPT profile. Required recovery: add an active MOD in `Профиль -> МОД -> Легкая промышленность`, use that location in a newly created withdrawal document, and resubmit the same KIZ file. CRPT documents processed with errors are not accounted for, so the codes were not withdrawn by those failed documents and must not be returned to circulation first.
+
+## 2026-08-13 - CRPT withdrawal prices and apparent warehouse KIZ audit
+
+The CRPT withdrawal upload requires a numeric `Цена за единицу с НДС`. The local withdrawal queue has a linked FBS order price for every audited task. Future files use `convertedPriceRaw / 100` in rubles; no VAT is added because the seller uses VAT 0%. Four prior withdrawal workbooks were rebuilt as separate corrected copies containing 9, 16, 163 and 179 unique rows. All 367 source rows matched, no duplicate code existed within a file, and price ranges were 622-1,582; 992-1,399; 622-1,993.36; and 614-1,879 rubles respectively. The originals and application data were not changed.
+
+A bounded read-only audit found 57 units displayed as physical `IN_STOCK` with unspecified CRPT circulation: 29 Galioni and 28 Nimba. All 57 were imported from `wb_fbs_metadata` on 2026-08-11, none was manually imported/scanned, every unit had a historical order link, and all linked orders were post-handoff `complete/canceled_by_client` or `complete/defect`. Therefore these are not anonymous warehouse labels. They are historical records created by the old cancellation classification, which cleared the current order and left the initial circulation unknown. The already implemented state-machine/workspace repair can recover them on the next normal bounded operational sync; no sync, DB write, WB write or CRPT operation was executed during this audit.
+
+## 2026-08-12 - FBS canceled/defect KIZ and unknown circulation audit
+
+### Question
+Почему отменённые при получении и бракованные FBS-заказы показывают отсутствие КИЗа, что означает неопределённый оборот и как заполнять номер документа ЧЗ?
+
+### Data Used
+Локальная схема и сервисы FBS, ограниченный read-only аудит связей заказов/KIZ/compliance events, интерфейс пользователя и официальная инструкция CRPT. WB API, CRPT API и production writes не вызывались; сырые КИЗы не выводились.
+
+### Findings
+`canceled_by_client` и `defect` ошибочно попадали в отмену до передачи при позднем локальном shipment flag и могли отвязать код. `UNKNOWN` создаётся при импорте/WB metadata без явно подтверждённого исходного состояния ЧЗ; это не сигнал о перемаркировке. Поля CRPT отмечаются обязательными символом `*`; показанные пользователем номер/дата/наименование первичного документа без звёздочек необязательны.
+
+### Recommendations
+Сохранять исходный КИЗ за заказом до физического возврата и проверки. В NimbaOS после обработки файла фиксировать реальный номер или ID подписанного документа из списка документов ЧЗ, а не случайные значения. Для старых записей сначала выполнить обычную ограниченную FBS-синхронизацию: связь восстановится, если WB ещё отдаёт SGTIN; код нельзя угадывать, если его нет ни в WB, ни в локальной истории.
+
+### Follow-up
+После выкладки визуально проверить фильтр «Отмена при получении / брак», отображение `01GTIN21serial`, статус «Статус в ЧЗ не указан» и массовое подтверждение одного CRPT-файла.
+
+## 2026-08-12 - Nimba legacy KIZ export reconciliation
+
+For 2026-07-28 - 2026-08-12, Nimba has 201 FBS orders and 34 currently canceled orders, leaving 167 non-canceled orders. This is not the denominator for withdrawal: six non-canceled orders had not reached handoff and therefore had no withdrawal task, and one withdrawal task had already been confirmed before the legacy export. The file also contains three tasks for orders canceled after handoff; they remain in the withdrawal lifecycle because the goods had already been handed over. Reconciliation: `167 - 6 - 1 + 3 = 163` exported KIZs.
+
+The provided legacy workbook contained 163 unique tasks, 163 unique orders and 163 unique KIZs, all `WITHDRAWAL_REMOTE_SALE`. It was converted to one first-sheet column `Код маркировки`; every value was converted to the KIZ identification part and checked for uniqueness and the absence of Excel GS escape suffixes. No DB, WB or CRPT data was changed.
+
+## 2026-08-12 - Mass Chestny Znak file workflow
+
+NimbaOS tracks KIZ circulation locally through lifecycle events and compliance tasks; it does not currently read the authoritative live status from Chestny Znak. To make Stage 1 operational at volume, withdrawal and return-to-circulation are now separate XLSX exports, and each generated file is a tracked batch. Download changes tasks to `EXPORTED` only. After CRPT accepts the document, one batch confirmation changes all relevant tasks and KIZ states and records the shared document number/date. Single-KIZ confirmation remains only for exceptions.
+
+The CRPT upload file contains one `Код маркировки` column on the first sheet. Codes use the identification part `01 + GTIN + 21 + serial`; the verification key and crypto signature are omitted. No live WB/CRPT call or data mutation was made during implementation and verification.
+
+## 2026-08-12 - FBS analytics repair and KIZ withdrawal timing
+
+### Problem and evidence
+`/fbs` showed zero after applying a period. A bounded local-DB audit found non-zero FBS activity, but `deliveryMethod=FBS` appeared mainly on logistics rows with `quantity=0`; connected sale/return rows had an empty delivery method. The reliable local identity is `realization_reports.orderId -> fbs_orders.externalOrderId`.
+
+### Corrected metrics
+For 2026-08-01 - 2026-08-11, Nimba: 161 orders, 26 cancellations, 52 buyouts, 0 returns, 73,432.86 RUB net revenue and 52,763.15 RUB net transfer. Galioni: 199 orders, 34 cancellations, 33 buyouts, 0 returns, 43,925.11 RUB net revenue and 30,201.17 RUB net transfer. Orders/cancellations are grouped by FBS order creation date; buyouts/returns/revenue/transfer use financial operation date.
+
+### KIZ conclusion
+For light-industry distance sales, the official Chestny Znak guidance based on paragraph 76 of PPRF No. 1956 requires submitting withdrawal information no later than three business days after warehouse shipment and no later than actual delivery. Waiting for WB `sold`/buyout is therefore not a compliant default. NimbaOS correctly reserves a code on order, creates the withdrawal task only at handoff, and quarantines a returned unit until return-to-circulation or remarking is confirmed. Sources: `https://markirovka.ru/knowledge/tovarnye-gruppy/legkaya-promishlennost/onlayn-torgovlya-internet-magazin-vyvod-iz-oborota-legprom` and `https://markirovka.ru/knowledge/tovarnye-gruppy/legkaya-promishlennost/vozvrat-v-oborot-legprom`.
+
+### Safety
+No WB API call, sync, WB write, migration, historical rewrite or production mutation was performed. Verification used bounded local database reads only.
+
 ## 2026-07-30 - Nimba July 28 KIZ recovery and metadata semantics
 
 Nine Nimba `complete/sorted` orders from 2026-07-28 required SGTIN but had no KIZ after successful jobs. The jobs covered the date; two stale workers were executing code loaded before automatic ingestion. A bounded repair created/assigned all 9 codes, and a queued job through the restarted worker confirmed 9 already assigned with no duplicate, reject, conflict or GTIN mismatch.
@@ -339,3 +410,6 @@ Roll out in one controlled Stage 1: migrate, smoke-test read-only sync, run the 
 
 ### Follow-up
 Stage 2 direct True API requires separate credentials, certificate/signature and document-flow decisions.
+## 2026-08-13 - Corrected Galioni withdrawal workbooks
+
+Compared both historical Galioni export batches with the reconciled local compliance queue. The 2026-07-30 batch contains 11 still-required withdrawals and 5 canceled tasks; the 2026-08-12 batch contains 173 still-required withdrawals and 6 canceled tasks. Generated separate corrected copies with all 11 canceled rows removed, preserved numeric unit prices (VAT 0%), and verified 184 unique KIZs with no overlap across the two files.

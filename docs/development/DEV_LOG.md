@@ -1,5 +1,89 @@
 # Development Log
 
+## 2026-08-13 - BUG-025 late withdrawal after FBS cancellation
+
+- Audited the latest and prior withdrawal batches for both local cabinets without exposing raw KIZ values.
+- Nimba's newest 28-row file contained only already canceled/defect orders, all `RETURN_EXPECTED`, all never confirmed as withdrawn; all 28 were canceled locally and restored from `WITHDRAWAL_REQUIRED` to `IN_CIRCULATION`.
+- Galioni had 40 unconfirmed withdrawal tasks tied to currently canceled orders; all 40 were canceled locally and restored to `IN_CIRCULATION`. Eleven belonged to two old exported files; the files are now stale and must not be uploaded unchanged.
+- Preserved physical `RETURN_EXPECTED`: cancellation is not proof that the product has physically returned. Availability still requires the normal receive/inspection workflow.
+- Confirmed withdrawals were explicitly excluded from reconciliation. If such a product returns physically, it still creates/needs a return-to-circulation task.
+- State machine now cancels pending withdrawal instead of creating/recreating it when a post-handoff return is already known. Export has a second fail-safe excluding canceled orders.
+- Final local audit: Nimba 0 open withdrawal tasks on canceled orders; Galioni 0. Tests 36/36, type-check and production build passed. No WB/CRPT call or migration was run.
+
+## 2026-08-13 - Full FBS server archive and profitability/buyout KPIs
+
+- Added an authenticated, account-scoped FBS history service/server action for orders, KIZs, CRPT tasks, supplies and WB action logs.
+- Search, filters, date range and header sorting now query the full retained history; only one selected 25/50/100-row page is sent to the browser.
+- Added a single optional history calendar shared by all heavy FBS journals and a `Вся история` reset.
+- The history-period control is hidden on `Сводка` and `Свой склад`, where it has no effect; it remains visible only on tabs backed by historical datasets.
+- Preserved encrypted-at-rest KIZ storage: exact KIZ searches decrypt only inside the server process after account/date/status scoping. No full decrypted archive is sent to the client or logged.
+- Reworked analytics layout so the article/nmId search occupies a compact column and the freed space contains total direct OP, margin, profitability and buyout percentage.
+- Added article-level profitability and buyout columns and sortable headers. Definitions: margin = OP / revenue; profitability = OP / total expenses; buyout = net sales / (sales + cancellations) over completed outcomes.
+- Real DB smoke: an order query returned 81 total matches with a 25-row first page; a Russian KIZ circulation query returned 164 matches, proving results are not limited to the initial 100-row workspace payload.
+- Verification: `npm test` 35/35, `npx tsc --noEmit` passed, `npm run build` passed; only two unrelated existing `<img>` warnings remain.
+
+## 2026-08-13 - FBS bounded history, sorting, counters and article analytics
+
+- Kept all historical rows in PostgreSQL; no cleanup/delete job was introduced.
+- Bounded orders, KIZ, compliance, supplies and WB action payloads to an operationally prioritised window of up to 100 rows; added client pagination (25 rows, action journal 10) so DOM size stays stable as history grows.
+- Added exact account-scoped database totals and visible row counters. Every FBS data table now sorts ascending/descending by clicking its column header.
+- Replaced the two native analytics date inputs with the shared NimbaOS range calendar.
+- Added article-level FBS orders/cancellations and direct FBS OP/margin. Formula: `toTransfer - delivery - storage - acceptance - additional payment - penalty - deduction - COGS - tax`. Shared ads/external ads are intentionally excluded because they cannot currently be allocated reliably between FBS and FBO.
+- Removed the standalone `Статус в ЧЗ не указан` explanatory banner.
+- Verified the requested encrypted KIZ resolves to exactly one unit and a sold order; transactionally changed only that unit from `IN_CIRCULATION` to `WITHDRAWN` and wrote a `COMPLIANCE_CONFIRMED` audit event with the previous/next state and user-requested correction source.
+- Verification: `npm test` 35/35, `npx tsc --noEmit` passed, `npm run build` passed. Build retained two unrelated pre-existing `<img>` warnings.
+
+## 2026-08-13 - CRPT withdrawal unit price and historical file repair
+
+- Added the mandatory second withdrawal column `Цена за единицу с НДС`; values are numeric rubles from `FbsOrder.convertedPriceRaw / 100`.
+- Applied no VAT markup because the seller uses VAT 0%; the stored WB converted price is used as the final per-unit amount.
+- Kept return-to-circulation exports code-only and kept export selection restricted to `OPEN` tasks, so already exported batches are not silently duplicated.
+- Added fail-closed validation for missing, zero or non-integer raw order prices and unit tests for conversion/validation.
+- Rebuilt four existing withdrawal files as separate `_с_ценами.xlsx` copies: 9, 16, 163 and 179 data rows. Every source row matched a local withdrawal task/code, no duplicates or invalid prices were found, and each saved workbook passed re-import plus visual verification. Originals were preserved.
+- Read-only lifecycle audit: all 57 units shown as `IN_STOCK` with unspecified CRPT state (29 Galioni, 28 Nimba) originated from WB FBS metadata for post-handoff pickup cancellation/defect orders; none was a manually imported/scanned free warehouse KIZ. They are historical misclassification records, not labels requiring a new product assignment.
+- Verification: `npm test` 35/35, `npm run type-check` passed, `npm run lint` passed with two pre-existing unrelated `<img>` warnings. No sync, DB write, WB/CRPT call or migration was performed.
+
+## 2026-08-12 - BUG-024 post-handoff KIZ link and FBS filters
+
+- Removed `canceled_by_client` and `defect` from pre-handoff cancellation handling and made their post-handoff classification override a late/missing `shipmentApplied` flag.
+- Added regression tests proving pickup cancellation keeps the KIZ and a defect transitions it to expected return.
+- Added workspace recovery of order-to-KIZ display through withdrawal tasks and KIZ events for already affected records.
+- Decrypts only for authorized FBS manager/admin rendering, then reduces the value to `01GTIN21serial`; viewers continue to receive the stored mask and no decrypted value is logged.
+- Renamed local circulation `UNKNOWN` to «Статус в ЧЗ не указан» and added a UI explanation that NimbaOS has no live CRPT status check.
+- Clarified CRPT document confirmation: optional primary-document fields without `*` may be blank; NimbaOS requires the number/ID of the already signed document from the CRPT documents list.
+- Added search and relevant filters to overview, orders, assortment, KIZ, Chestny Znak tasks, supplies, analytics articles and WB action journal.
+- Verification: `npm test -- --runInBand` 33/33; `npm run type-check` passed; `npm run lint` passed with the two pre-existing unrelated `<img>` warnings. No WB/CRPT write, migration or production data mutation was performed.
+- `npm run build` compiled the application and passed its lint/type phase, but the final prerender failed on missing generated Next.js `vendor-chunks/next.js` / `/_document` artifacts while a local `next dev` process was active. A separate build directory reproduced the `/_document` failure; the temporary config change was reverted and generated output was moved out of the workspace. This is recorded as an environment/build-artifact issue, not counted as a successful production build.
+
+## 2026-08-12 - Russian FBS status labels
+
+- Added Russian labels for all KIZ compliance task statuses and WB action execution statuses shown in `/fbs`.
+- Added Russian names for WB write action kinds, including KIZ attachment, order status change, supply movement/closure and stock publication.
+- Clarified circulation labels to «Требуется вывод из оборота», «Выведен из оборота» and «Требуется возврат в оборот».
+- Kept raw enum/API values unchanged internally while removing them from user-facing labels and tooltips.
+- Added fallback labels for unknown future values and unit tests for every new mapping.
+- `npm test -- --runInBand` passed 31 tests; `npm run type-check` passed; `npm run lint` passed with two pre-existing `<img>` warnings outside FBS.
+
+## 2026-08-12 - Bulk KIZ file export and confirmation
+
+- Split the manual Chestny Znak queue into withdrawal and return-to-circulation XLSX exports.
+- Aligned the export with CRPT file upload: the first and only column is `Код маркировки`; values are KIZ identification codes without verification key/signature AIs 91/92.
+- Kept every generated file as a `KizOperationBatch` and exposed recent batches in the FBS workspace.
+- Added mass confirmation for a complete batch with one document number and date; the operation updates every task, its KIZ circulation state, audit events and return inventory movement where applicable.
+- Kept single-task confirmation only as an exception fallback.
+- Added unit coverage for export task separation and KIZ identification-code conversion. `npm test -- --runInBand`, `npm run type-check` and `npm run lint` passed; lint has only the two existing `<img>` warnings outside FBS.
+- No WB/CRPT API call, migration or production/data mutation was performed.
+
+## 2026-08-12 - BUG-023 FBS analytics and KIZ timing verification
+
+`/fbs` analytics returned zero because it filtered every financial row by `deliveryMethod contains FBS`. Local DB evidence showed that WB sets this value mainly on related logistics rows with zero quantity and zero sales amounts; the actual `Продажа` and `Возврат` rows commonly have an empty delivery method.
+
+Implemented a bounded FBS analytics helper and joined financial sale/return rows to operational FBS orders through `realization_reports.orderId = fbs_orders.externalOrderId`. Added FBS order, cancellation, buyout, return, net revenue and net transfer cards, plus revenue and transfer in the article table. Orders/cancellations use Moscow order-date boundaries; financial metrics keep report operation-date semantics.
+
+Read-only DB verification for 2026-08-01 - 2026-08-11: Nimba 161 orders / 26 cancellations / 52 buyouts / 0 returns / 73,432.86 RUB revenue / 52,763.15 RUB transfer; Galioni 199 / 34 / 33 / 0 / 43,925.11 / 30,201.17. `npm test` passed 26 tests; TypeScript passed; lint passed with two pre-existing `<img>` warnings.
+
+Official light-industry guidance based on paragraph 76 of PPRF No. 1956 requires distance-sale withdrawal submission no later than three business days after shipment and no later than actual delivery. Therefore the existing KIZ task trigger remains at WB handoff, not order creation or final buyout. No sync, migration, WB write, historical rewrite or production mutation was run.
+
 ## 2026-07-30 - BUG-022 Nimba July 28 KIZ and metadata-state fix
 
 Nine Nimba orders from 2026-07-28 had no KIZ despite successful jobs whose payload covered 2026-07-26 - 2026-07-30. The background jobs were handled by two stale sync-worker trees loaded before SGTIN ingestion existed. After confirming zero active BullMQ jobs, both exact worker trees were stopped and one current hidden worker was started.
@@ -447,3 +531,4 @@ Next compilation succeeded, but running `next build` concurrently with `next dev
 
 ### Scope
 No WB write method, schedule, bounded historical backfill or production migration was executed. The stock/marking/order smoke tests read WB and updated only the local development database.
+2026-08-13 - Corrected the two stale Galioni withdrawal workbooks produced before canceled-order reconciliation. Removed exactly 5 canceled rows from the 16-row 2026-07-30 batch and 6 from the 179-row 2026-08-12 batch. Artifact-tool import/export, readback, price comparison, duplicate scan, status comparison and rendered previews passed. Final total: 184 unique `WITHDRAWAL_REQUIRED` KIZs; originals preserved.

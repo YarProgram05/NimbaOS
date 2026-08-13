@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import type { DateRange } from 'react-day-picker'
 import {
   AlertTriangle,
   Barcode,
@@ -13,11 +14,13 @@ import {
   PackageCheck,
   RefreshCw,
   ScanLine,
+  Search,
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DateRangePicker } from '@/components/date-range-picker'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,9 +52,11 @@ import {
   attachAssignedKizToWbAction,
   closeFbsSupplyInWbAction,
   configureFbsAssortmentAction,
+  confirmKizComplianceBatchAction,
   confirmKizComplianceTaskAction,
   exportKizComplianceTasksAction,
   getFbsSyncJobStatusAction,
+  getFbsHistoryPageAction,
   getFbsOrderStickersAction,
   importKizXlsxAction,
   markPhysicalKizReturnAction,
@@ -66,10 +71,15 @@ import {
 } from '@/lib/actions/fbs'
 import { SYNC_JOB_KINDS, type SyncJobKind } from '@/types/sync'
 import type { FbsWorkspaceData } from '@/types/fbs'
+import type { KizComplianceExportKind } from '@/lib/fbs/compliance-export'
+import type { FbsHistoryRow, FbsHistorySection } from '@/lib/services/fbs-history'
 import {
   FBS_STATUS_ACTION_LABELS,
+  getFbsActionKindLabel,
+  getFbsActionStatusLabel,
   getFbsSupplierStatusLabel,
   getFbsWbStatusLabel,
+  getKizComplianceStatusLabel,
 } from '@/lib/fbs/status-labels'
 
 interface FbsClientProps {
@@ -90,16 +100,16 @@ const PHYSICAL_LABELS: Record<string, string> = {
 }
 
 const CIRCULATION_LABELS: Record<string, string> = {
-  UNKNOWN: 'Не определён',
+  UNKNOWN: 'Статус в ЧЗ не указан',
   COMMISSIONING_REQUIRED: 'Нужен ввод',
   IN_CIRCULATION: 'В обороте',
-  WITHDRAWAL_REQUIRED: 'Нужно выбытие',
-  WITHDRAWN: 'Выведен',
-  RETURN_TO_CIRCULATION_REQUIRED: 'Нужен возврат в оборот',
+  WITHDRAWAL_REQUIRED: 'Требуется вывод из оборота',
+  WITHDRAWN: 'Выведен из оборота',
+  RETURN_TO_CIRCULATION_REQUIRED: 'Требуется возврат в оборот',
 }
 
 const WB_KIZ_VALIDATION_LABELS: Record<string, string> = {
-  VALID: 'Получен из WB',
+  VALID: 'Подтверждён WB',
   GTIN_MISMATCH: 'Не совпадает GTIN',
   ORDER_CONFLICT: 'КИЗ в другом заказе',
   STATE_CONFLICT: 'Конфликт состояния',
@@ -107,7 +117,7 @@ const WB_KIZ_VALIDATION_LABELS: Record<string, string> = {
 
 const TASK_LABELS: Record<string, string> = {
   COMMISSIONING: 'Ввод в оборот',
-  WITHDRAWAL_REMOTE_SALE: 'Вывод: дистанционная продажа',
+  WITHDRAWAL_REMOTE_SALE: 'Вывод после отгрузки: дистанционная продажа',
   WITHDRAWAL_B2B: 'Вывод: B2B',
   RETURN_TO_CIRCULATION: 'Возврат в оборот',
   RELABEL: 'Перемаркировка',
@@ -148,14 +158,124 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
   )
   const [documentNumber, setDocumentNumber] = useState('')
   const [documentDate, setDocumentDate] = useState(new Date().toISOString().slice(0, 10))
+  const [selectedBatchId, setSelectedBatchId] = useState(
+    data.operationBatches.find((batch) => batch.pendingCount > 0)?.id ?? '',
+  )
+  const [batchDocumentNumber, setBatchDocumentNumber] = useState('')
+  const [batchDocumentDate, setBatchDocumentDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  )
   const [analyticsFrom, setAnalyticsFrom] = useState(dateFrom)
   const [analyticsTo, setAnalyticsTo] = useState(dateTo)
+  const [overviewQuery, setOverviewQuery] = useState('')
+  const [orderQuery, setOrderQuery] = useState('')
+  const [orderFilter, setOrderFilter] = useState('ALL')
+  const [assortmentQuery, setAssortmentQuery] = useState('')
+  const [assortmentFilter, setAssortmentFilter] = useState('ALL')
+  const [kizQuery, setKizQuery] = useState('')
+  const [kizFilter, setKizFilter] = useState('ALL')
+  const [complianceQuery, setComplianceQuery] = useState('')
+  const [complianceFilter, setComplianceFilter] = useState('ALL')
+  const [supplyQuery, setSupplyQuery] = useState('')
+  const [supplyFilter, setSupplyFilter] = useState('ALL')
+  const [analyticsQuery, setAnalyticsQuery] = useState('')
+  const [actionQuery, setActionQuery] = useState('')
+  const [activeTab, setActiveTab] = useState('orders')
+  const [historyRange, setHistoryRange] = useState<DateRange>({ from: undefined, to: undefined })
+  const [orderSort, setOrderSort] = useState<TableSort>({ key: 'createdAtWb', direction: 'desc' })
+  const [assortmentSort, setAssortmentSort] = useState<TableSort>({ key: 'vendorCode', direction: 'asc' })
+  const [kizSort, setKizSort] = useState<TableSort>({ key: 'code', direction: 'asc' })
+  const [complianceSort, setComplianceSort] = useState<TableSort>({ key: 'status', direction: 'asc' })
+  const [supplySort, setSupplySort] = useState<TableSort>({ key: 'done', direction: 'asc' })
+  const [analyticsSort, setAnalyticsSort] = useState<TableSort>({ key: 'revenue', direction: 'desc' })
   const fileRef = useRef<HTMLInputElement>(null)
 
   const availableKiz = useMemo(
     () => data.kizUnits.filter((unit) => ['IN_STOCK', 'RESERVED'].includes(unit.physicalState)),
     [data.kizUnits],
   )
+
+  const filteredWarehouses = useMemo(
+    () => data.warehouses.filter((warehouse) => matchesSearch(
+      overviewQuery,
+      warehouse.name,
+      warehouse.externalId,
+    )),
+    [data.warehouses, overviewQuery],
+  )
+
+  const orderHistory = useFbsServerTable<FbsWorkspaceData['orders'][number]>({
+    wbAccountId: data.account.id, section: 'orders', initialRows: data.orders,
+    initialTotal: data.rowCounts.orders, query: orderQuery, filter: orderFilter, sort: orderSort,
+    dateRange: historyRange,
+  })
+
+  const filteredAssortment = useMemo(() => data.assortment.filter((item) => {
+    const matchesFilter = assortmentFilter === 'ALL'
+      || (assortmentFilter === 'MARKED' && item.requiresKiz)
+      || (assortmentFilter === 'UNMARKED' && !item.requiresKiz)
+      || (assortmentFilter === 'MISMATCH' && item.available !== item.wbStock)
+
+    return matchesFilter && matchesSearch(
+      assortmentQuery,
+      item.vendorCode,
+      item.barcode,
+      item.nmId,
+      item.chrtId,
+      item.warehouseName,
+      item.markingGtin,
+    )
+  }), [assortmentFilter, assortmentQuery, data.assortment])
+
+  const kizHistory = useFbsServerTable<FbsWorkspaceData['kizUnits'][number]>({
+    wbAccountId: data.account.id, section: 'kizUnits', initialRows: data.kizUnits,
+    initialTotal: data.rowCounts.kizUnits, query: kizQuery, filter: kizFilter, sort: kizSort,
+    dateRange: historyRange,
+  })
+
+  const complianceHistory = useFbsServerTable<FbsWorkspaceData['complianceTasks'][number]>({
+    wbAccountId: data.account.id, section: 'complianceTasks', initialRows: data.complianceTasks,
+    initialTotal: data.rowCounts.complianceTasks, query: complianceQuery, filter: complianceFilter, sort: complianceSort,
+    dateRange: historyRange,
+  })
+
+  const supplyHistory = useFbsServerTable<FbsWorkspaceData['supplies'][number]>({
+    wbAccountId: data.account.id, section: 'supplies', initialRows: data.supplies,
+    initialTotal: data.rowCounts.supplies, query: supplyQuery, filter: supplyFilter, sort: supplySort,
+    dateRange: historyRange,
+  })
+
+  const filteredFinanceByArticle = useMemo(
+    () => data.financeByArticle.filter((row) => matchesSearch(
+      analyticsQuery,
+      row.vendorCode,
+      row.nmId,
+    )),
+    [analyticsQuery, data.financeByArticle],
+  )
+
+  const actionHistory = useFbsServerTable<FbsWorkspaceData['recentActions'][number]>({
+    wbAccountId: data.account.id, section: 'recentActions', initialRows: data.recentActions,
+    initialTotal: data.rowCounts.recentActions, query: actionQuery,
+    filter: 'ALL', sort: { key: 'createdAt', direction: 'desc' },
+    dateRange: historyRange,
+  })
+
+  const assortmentView = useTableView(filteredAssortment, assortmentSort, assortmentSortValue)
+  const analyticsView = useTableView(filteredFinanceByArticle, analyticsSort, analyticsSortValue)
+  const analyticsRange = useMemo<DateRange>(() => ({
+    from: parseDateValue(analyticsFrom),
+    to: parseDateValue(analyticsTo),
+  }), [analyticsFrom, analyticsTo])
+
+  useEffect(() => {
+    const selectedIsPending = data.operationBatches.some(
+      (batch) => batch.id === selectedBatchId && batch.pendingCount > 0,
+    )
+    if (!selectedIsPending) {
+      setSelectedBatchId(data.operationBatches.find((batch) => batch.pendingCount > 0)?.id ?? '')
+    }
+  }, [data.operationBatches, selectedBatchId])
 
   function refresh() {
     router.refresh()
@@ -241,15 +361,45 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
     })
   }
 
-  async function exportCompliance() {
+  async function exportCompliance(kind: KizComplianceExportKind, label: string) {
     startTransition(async () => {
-      const result = await exportKizComplianceTasksAction({ wbAccountId: data.account.id })
+      const result = await exportKizComplianceTasksAction({ wbAccountId: data.account.id, kind })
       if (!result.success) {
         toast.error(result.error)
         return
       }
       downloadBase64(result.data.base64, result.data.filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      toast.success(`Выгружено операций: ${result.data.taskCount}`)
+      setSelectedBatchId(result.data.batchId)
+      toast.success(`${label}: ${result.data.taskCount}`)
+      refresh()
+    })
+  }
+
+  function confirmComplianceBatch() {
+    const batch = data.operationBatches.find((candidate) => candidate.id === selectedBatchId)
+    if (!batch) {
+      toast.error('Выберите выгруженный пакет')
+      return
+    }
+    if (!window.confirm(`Подтвердить обработку всего файла «${batch.filename}» (${batch.pendingCount} КИЗ)?`)) {
+      return
+    }
+    startTransition(async () => {
+      const result = await confirmKizComplianceBatchAction({
+        wbAccountId: data.account.id,
+        batchId: batch.id,
+        documentNumber: batchDocumentNumber,
+        documentDate: batchDocumentDate,
+      })
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(
+        result.data.alreadyProcessed
+          ? 'Этот пакет уже был подтверждён'
+          : `Массово подтверждено КИЗов: ${result.data.confirmed}`,
+      )
       refresh()
     })
   }
@@ -331,7 +481,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
         независимый локальный учёт NimbaOS: физический остаток минус резерв заказов равен доступному остатку.
       </p>
 
-      <Tabs defaultValue="orders" className="min-w-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
         <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="overview">Сводка</TabsTrigger>
           <TabsTrigger value="orders">Заказы</TabsTrigger>
@@ -341,6 +491,18 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
           <TabsTrigger value="supplies">Поставки</TabsTrigger>
           <TabsTrigger value="analytics">Аналитика</TabsTrigger>
         </TabsList>
+        {!['overview', 'warehouse'].includes(activeTab) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border bg-card p-3">
+            <span className="text-xs font-medium text-muted-foreground">Период истории:</span>
+            <DateRangePicker value={historyRange} onChange={setHistoryRange} />
+            {(historyRange.from || historyRange.to) && (
+              <Button variant="ghost" size="sm" onClick={() => setHistoryRange({ from: undefined, to: undefined })}>
+                Вся история
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">Применяется к заказам, КИЗам, ЧЗ, поставкам и журналу WB.</span>
+          </div>
+        )}
 
         <TabsContent value="overview" className="mt-4 grid gap-4 lg:grid-cols-2">
           <Card>
@@ -349,7 +511,15 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               <CardDescription>NimbaOS — источник локального остатка; WB показывается для сверки.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {data.warehouses.map((warehouse) => (
+              <FilterBar
+                query={overviewQuery}
+                onQueryChange={setOverviewQuery}
+                placeholder="Поиск по складу или WB ID"
+              />
+              <p className="text-xs text-muted-foreground">
+                Складов: {filteredWarehouses.length} из {data.rowCounts.warehouses}
+              </p>
+              {filteredWarehouses.map((warehouse) => (
                 <div key={warehouse.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
                   <div>
                     <p className="font-medium">{warehouse.name}</p>
@@ -363,7 +533,9 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                   </div>
                 </div>
               ))}
-              {!data.warehouses.length && <Empty text="Запустите синхронизацию FBS, чтобы загрузить склады." />}
+              {!filteredWarehouses.length && (
+                <Empty text={data.warehouses.length ? 'Склады по фильтру не найдены.' : 'Запустите синхронизацию FBS, чтобы загрузить склады.'} />
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -400,7 +572,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                 <SelectTrigger><SelectValue placeholder="Доступный КИЗ" /></SelectTrigger>
                 <SelectContent>
                   {availableKiz.map((unit) => (
-                    <SelectItem key={unit.id} value={unit.id}>{unit.maskedCode}</SelectItem>
+                    <SelectItem key={unit.id} value={unit.id}>{unit.code}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -458,16 +630,37 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
             </CardContent>
           </Card>
 
+          <FilterBar
+            query={orderQuery}
+            onQueryChange={setOrderQuery}
+            placeholder="Заказ, артикул, склад, КИЗ или статус"
+          >
+            <Select value={orderFilter} onValueChange={setOrderFilter}>
+              <SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все заказы</SelectItem>
+                <SelectItem value="ACTIVE">Активные</SelectItem>
+                <SelectItem value="CANCELED">Отменённые</SelectItem>
+                <SelectItem value="RETURN">Отмена при получении / брак</SelectItem>
+                <SelectItem value="NEEDS_KIZ">Требуют КИЗ</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
           <DataTable>
             <TableHeader>
               <TableRow>
-                <TableHead>Заказ WB</TableHead><TableHead>Создан</TableHead><TableHead>Артикул</TableHead>
-                <TableHead>Склад</TableHead><TableHead>Статусы</TableHead><TableHead>КИЗ</TableHead>
-                <TableHead>Метаданные WB</TableHead><TableHead>Стикер</TableHead>
+                <SortableHead label="Заказ WB" sortKey="externalOrderId" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="Создан" sortKey="createdAtWb" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="Артикул" sortKey="vendorCode" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="Склад" sortKey="warehouseName" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="Статусы" sortKey="status" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="КИЗ" sortKey="kizCode" sort={orderSort} onSort={setOrderSort} />
+                <SortableHead label="Метаданные WB" sortKey="metadata" sort={orderSort} onSort={setOrderSort} />
+                <TableHead>Стикер</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.orders.map((order) => (
+              {orderHistory.rows.map((order) => (
                 <TableRow key={order.id}>
                   <TableCell className="font-medium">{order.externalOrderId}</TableCell>
                   <TableCell>{formatDate(order.createdAtWb)}</TableCell>
@@ -477,19 +670,17 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                     <div className="flex flex-wrap gap-1">
                       <Badge
                         variant="outline"
-                        title={`Статус продавца: ${order.supplierStatus}`}
                       >
                         Продавец: {getFbsSupplierStatusLabel(order.supplierStatus)}
                       </Badge>
                       <Badge
                         variant="secondary"
-                        title={`Статус WB: ${order.wbStatus}`}
                       >
                         WB: {getFbsWbStatusLabel(order.wbStatus)}
                       </Badge>
                     </div>
                   </TableCell>
-                  <TableCell>{order.kizMasked ?? (order.requiresKiz ? <Badge variant="destructive">Нужен КИЗ</Badge> : '—')}</TableCell>
+                  <TableCell className="font-mono text-xs">{order.kizCode ?? (order.requiresKiz ? <Badge variant="destructive">Нужен КИЗ</Badge> : '—')}</TableCell>
                   <TableCell>
                     <Badge
                       variant={order.metadataReady ? 'secondary' : 'destructive'}
@@ -510,9 +701,10 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.orders.length && <EmptyRow colSpan={8} text="Заказы FBS ещё не синхронизированы." />}
+              {!orderHistory.rows.length && <EmptyRow colSpan={8} text={data.rowCounts.orders ? 'Заказы по фильтру не найдены.' : 'Заказы FBS ещё не синхронизированы.'} />}
             </TableBody>
           </DataTable>
+          <ServerTablePager table={orderHistory} />
         </TabsContent>
 
         <TabsContent value="warehouse" className="mt-4 space-y-4">
@@ -580,16 +772,36 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
             </CardContent>
           </Card>
 
+          <FilterBar
+            query={assortmentQuery}
+            onQueryChange={setAssortmentQuery}
+            placeholder="Артикул, barcode, nmId, chrtId или склад"
+          >
+            <Select value={assortmentFilter} onValueChange={setAssortmentFilter}>
+              <SelectTrigger className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Весь ассортимент</SelectItem>
+                <SelectItem value="MARKED">С маркировкой</SelectItem>
+                <SelectItem value="UNMARKED">Без маркировки</SelectItem>
+                <SelectItem value="MISMATCH">Расхождение с WB</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
           <DataTable>
             <TableHeader>
               <TableRow>
-                <TableHead>Склад</TableHead><TableHead>Артикул</TableHead><TableHead>chrtId</TableHead>
-                <TableHead>Физически на складе</TableHead><TableHead>Резерв заказов</TableHead><TableHead>Доступно локально</TableHead>
-                <TableHead>Остаток WB</TableHead><TableHead>Маркировка</TableHead>
+                <SortableHead label="Склад" sortKey="warehouseName" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Артикул" sortKey="vendorCode" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="chrtId" sortKey="chrtId" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Физически на складе" sortKey="onHand" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Резерв заказов" sortKey="reserved" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Доступно локально" sortKey="available" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Остаток WB" sortKey="wbStock" sort={assortmentSort} onSort={setAssortmentSort} />
+                <SortableHead label="Маркировка" sortKey="marking" sort={assortmentSort} onSort={setAssortmentSort} />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.assortment.map((item) => (
+              {assortmentView.rows.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>{item.warehouseName}</TableCell>
                   <TableCell className="font-medium">{item.vendorCode ?? item.barcode}</TableCell>
@@ -621,9 +833,10 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.assortment.length && <EmptyRow colSpan={8} text="FBS-артикулы появятся после загрузки заказов." />}
+              {!filteredAssortment.length && <EmptyRow colSpan={8} text={data.assortment.length ? 'Товары по фильтру не найдены.' : 'FBS-артикулы появятся после загрузки заказов.'} />}
             </TableBody>
           </DataTable>
+          <TablePager view={assortmentView} loadedCount={data.assortment.length} totalCount={data.rowCounts.assortment} />
 
           <Card>
             <CardHeader>
@@ -695,7 +908,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                 <Select value={circulationState} onValueChange={(value) => setCirculationState(value as typeof circulationState)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="UNKNOWN">Статус оборота не определён</SelectItem>
+                    <SelectItem value="UNKNOWN">Статус в ЧЗ не указан</SelectItem>
                     <SelectItem value="COMMISSIONING_REQUIRED">Нужно ввести в оборот</SelectItem>
                     <SelectItem value="IN_CIRCULATION">Уже в обороте</SelectItem>
                   </SelectContent>
@@ -759,7 +972,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                       <SelectTrigger><SelectValue placeholder="КИЗ после осмотра" /></SelectTrigger>
                       <SelectContent>
                         {data.kizUnits.filter((unit) => unit.physicalState === 'QUARANTINE').map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>{unit.maskedCode}</SelectItem>
+                          <SelectItem key={unit.id} value={unit.id}>{unit.code}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -794,7 +1007,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                 <SelectTrigger><SelectValue placeholder="КИЗ на складе" /></SelectTrigger>
                 <SelectContent>
                   {data.kizUnits.filter((unit) => unit.physicalState === 'IN_STOCK').map((unit) => (
-                    <SelectItem key={unit.id} value={unit.id}>{unit.maskedCode}</SelectItem>
+                    <SelectItem key={unit.id} value={unit.id}>{unit.code}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -837,18 +1050,45 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
             </CardContent>
           </Card>
 
+          <FilterBar
+            query={kizQuery}
+            onQueryChange={setKizQuery}
+            placeholder="КИЗ, GTIN, артикул, склад или заказ"
+          >
+            <Select value={kizFilter} onValueChange={setKizFilter}>
+              <SelectTrigger className="w-full sm:w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все КИЗы</SelectItem>
+                <SelectItem value="IN_STOCK">Физически на складе</SelectItem>
+                <SelectItem value="RESERVED">В резерве</SelectItem>
+                <SelectItem value="HANDED_OVER">Переданы WB</SelectItem>
+                <SelectItem value="RETURN_EXPECTED">Ожидается возврат</SelectItem>
+                <SelectItem value="QUARANTINE">В карантине</SelectItem>
+                <SelectItem value="UNKNOWN">Статус в ЧЗ не указан</SelectItem>
+                <SelectItem value="IN_CIRCULATION">В обороте</SelectItem>
+                <SelectItem value="WITHDRAWAL_REQUIRED">Требуется вывод</SelectItem>
+                <SelectItem value="WITHDRAWN">Выведены из оборота</SelectItem>
+                <SelectItem value="RETURN_TO_CIRCULATION_REQUIRED">Требуется возврат в оборот</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
           <DataTable>
             <TableHeader>
               <TableRow>
-                <TableHead>КИЗ</TableHead><TableHead>GTIN</TableHead><TableHead>Артикул</TableHead>
-                <TableHead>Склад</TableHead><TableHead>Физический статус</TableHead>
-                <TableHead>Оборот</TableHead><TableHead>Проверка WB</TableHead><TableHead>Заказ WB</TableHead>
+                <SortableHead label="КИЗ" sortKey="code" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="GTIN" sortKey="gtin" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Артикул" sortKey="vendorCode" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Склад" sortKey="warehouseName" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Физический статус" sortKey="physicalState" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Оборот" sortKey="circulationState" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Проверка WB" sortKey="wbValidationStatus" sort={kizSort} onSort={setKizSort} />
+                <SortableHead label="Заказ WB" sortKey="externalOrderId" sort={kizSort} onSort={setKizSort} />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.kizUnits.map((unit) => (
+              {kizHistory.rows.map((unit) => (
                 <TableRow key={unit.id}>
-                  <TableCell className="font-mono text-xs">{unit.maskedCode}</TableCell>
+                  <TableCell className="font-mono text-xs">{unit.code}</TableCell>
                   <TableCell>{unit.gtin ?? '—'}</TableCell><TableCell>{unit.vendorCode ?? '—'}</TableCell>
                   <TableCell>{unit.warehouseName ?? '—'}</TableCell>
                   <TableCell>{PHYSICAL_LABELS[unit.physicalState] ?? unit.physicalState}</TableCell>
@@ -869,70 +1109,175 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                   <TableCell>{unit.externalOrderId ?? '—'}</TableCell>
                 </TableRow>
               ))}
-              {!data.kizUnits.length && <EmptyRow colSpan={8} text="КИЗы ещё не зарегистрированы." />}
+              {!kizHistory.rows.length && <EmptyRow colSpan={8} text={data.rowCounts.kizUnits ? 'КИЗы по фильтру не найдены.' : 'КИЗы ещё не зарегистрированы.'} />}
             </TableBody>
           </DataTable>
+          <ServerTablePager table={kizHistory} />
         </TabsContent>
 
         <TabsContent value="compliance" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-4 w-4" /> Ручная очередь Честного знака</CardTitle>
-              <CardDescription>Этап 1: выгрузка XLSX и подтверждение документа после операции в Честном знаке.</CardDescription>
+              <CardDescription>
+                Задача вывода создаётся после передачи заказа WB, а не при его создании и не
+                после выкупа. Невыкупленный товар после фактического вывода возвращается в
+                оборот только после физического возврата и проверки КИЗа.
+                Состояние оборота хранится локально: сама выгрузка меняет статус задачи на
+                «экспортирована», а статус КИЗа меняется массово после подтверждения принятого
+                документа. Файл вывода содержит фактическую цену заказа WB за единицу;
+                при вашем НДС 0% никакая надбавка к ней не применяется. Прямой онлайн-проверки
+                статуса в Честном знаке пока нет.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button disabled={!data.permissions.canOperate || pending} onClick={exportCompliance}>
-                <Download className="mr-2 h-4 w-4" /> Выгрузить открытые операции
-              </Button>
-              <div className="grid gap-3 border-t pt-4 md:grid-cols-[1fr_1fr_180px_auto]">
-                <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
-                  <SelectTrigger><SelectValue placeholder="Операция" /></SelectTrigger>
-                  <SelectContent>
-                    {data.complianceTasks.filter((task) => task.status !== 'CONFIRMED').map((task) => (
-                      <SelectItem key={task.id} value={task.id}>
-                        {TASK_LABELS[task.type] ?? task.type} · {task.maskedCode}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} placeholder="Номер документа ЧЗ" />
-                <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} />
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  disabled={!selectedTaskId || !documentNumber || !data.permissions.canOperate || pending}
+                  disabled={!data.permissions.canOperate || pending}
+                  onClick={() => exportCompliance('WITHDRAWAL', 'Выгружено КИЗов на вывод')}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Выгрузить на вывод из оборота
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!data.permissions.canOperate || pending}
                   onClick={() =>
-                    run(
-                      () => confirmKizComplianceTaskAction({
-                        wbAccountId: data.account.id,
-                        taskId: selectedTaskId,
-                        documentNumber,
-                        documentDate,
-                      }),
-                      'Операция ЧЗ подтверждена',
+                    exportCompliance(
+                      'RETURN_TO_CIRCULATION',
+                      'Выгружено КИЗов на возврат в оборот',
                     )
                   }
                 >
-                  Подтвердить
+                  <Download className="mr-2 h-4 w-4" /> Выгрузить на возврат в оборот
                 </Button>
+              </div>
+              <div className="space-y-3 border-t pt-4">
+                <div>
+                  <Label>Массовое подтверждение выгруженного файла</Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    После успешной обработки XLSX в Честном знаке выберите файл и укажите один
+                    подписанный документ для всех входящих в него КИЗов. В форме ЧЗ обязательны
+                    только поля со звёздочкой. Поля блока «Первичный документ» на вашем экране без
+                    звёздочек можно оставить пустыми. После подписания скопируйте номер или ID
+                    документа из раздела «Документы» ЧЗ сюда — придумывать случайные значения не нужно.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_1fr_180px_auto]">
+                  <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+                    <SelectTrigger><SelectValue placeholder="Выгруженный файл" /></SelectTrigger>
+                    <SelectContent>
+                      {data.operationBatches.filter((batch) => batch.pendingCount > 0).map((batch) => (
+                        <SelectItem key={batch.id} value={batch.id}>
+                          {batch.filename} · {batch.pendingCount} КИЗ
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={batchDocumentNumber}
+                    onChange={(event) => setBatchDocumentNumber(event.target.value)}
+                    placeholder="Номер или ID подписанного документа из ЧЗ"
+                  />
+                  <Input
+                    type="date"
+                    value={batchDocumentDate}
+                    onChange={(event) => setBatchDocumentDate(event.target.value)}
+                  />
+                  <Button
+                    disabled={
+                      !selectedBatchId ||
+                      !batchDocumentNumber ||
+                      !batchDocumentDate ||
+                      !data.permissions.canOperate ||
+                      pending
+                    }
+                    onClick={confirmComplianceBatch}
+                  >
+                    Подтвердить весь файл
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-3 border-t pt-4">
+                <Label>Точечное подтверждение (для исключений)</Label>
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_auto]">
+                  <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
+                    <SelectTrigger><SelectValue placeholder="Операция" /></SelectTrigger>
+                    <SelectContent>
+                      {data.complianceTasks.filter((task) => task.status !== 'CONFIRMED').map((task) => (
+                        <SelectItem key={task.id} value={task.id}>
+                          {TASK_LABELS[task.type] ?? task.type} · {task.code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} placeholder="Номер или ID подписанного документа из ЧЗ" />
+                  <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} />
+                  <Button
+                    disabled={!selectedTaskId || !documentNumber || !data.permissions.canOperate || pending}
+                    onClick={() =>
+                      run(
+                        () => confirmKizComplianceTaskAction({
+                          wbAccountId: data.account.id,
+                          taskId: selectedTaskId,
+                          documentNumber,
+                          documentDate,
+                        }),
+                        'Операция ЧЗ подтверждена',
+                      )
+                    }
+                  >
+                    Подтвердить
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
+          <FilterBar
+            query={complianceQuery}
+            onQueryChange={setComplianceQuery}
+            placeholder="КИЗ, заказ, операция или документ"
+          >
+            <Select value={complianceFilter} onValueChange={setComplianceFilter}>
+              <SelectTrigger className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все операции</SelectItem>
+                <SelectItem value="OPEN">Открытые</SelectItem>
+                <SelectItem value="EXPORTED">Экспортированные</SelectItem>
+                <SelectItem value="CONFIRMED">Подтверждённые</SelectItem>
+                <SelectItem value="CANCELED">Отменённые</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
           <DataTable>
             <TableHeader>
-              <TableRow><TableHead>Операция</TableHead><TableHead>КИЗ</TableHead><TableHead>Заказ</TableHead><TableHead>Статус</TableHead><TableHead>Документ</TableHead></TableRow>
+              <TableRow>
+                <SortableHead label="Операция" sortKey="type" sort={complianceSort} onSort={setComplianceSort} />
+                <SortableHead label="КИЗ" sortKey="code" sort={complianceSort} onSort={setComplianceSort} />
+                <SortableHead label="Заказ" sortKey="externalOrderId" sort={complianceSort} onSort={setComplianceSort} />
+                <SortableHead label="Статус" sortKey="status" sort={complianceSort} onSort={setComplianceSort} />
+                <SortableHead label="Документ" sortKey="documentNumber" sort={complianceSort} onSort={setComplianceSort} />
+              </TableRow>
             </TableHeader>
             <TableBody>
-              {data.complianceTasks.map((task) => (
+              {complianceHistory.rows.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell>{TASK_LABELS[task.type] ?? task.type}</TableCell>
-                  <TableCell className="font-mono text-xs">{task.maskedCode}</TableCell>
+                  <TableCell className="font-mono text-xs">{task.code}</TableCell>
                   <TableCell>{task.externalOrderId ?? '—'}</TableCell>
-                  <TableCell><Badge variant={task.status === 'CONFIRMED' ? 'default' : 'secondary'}>{task.status}</Badge></TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={task.status === 'CONFIRMED' ? 'default' : 'secondary'}
+                    >
+                      {getKizComplianceStatusLabel(task.status)}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{task.documentNumber ?? '—'}</TableCell>
                 </TableRow>
               ))}
-              {!data.complianceTasks.length && <EmptyRow colSpan={5} text="Открытых операций нет." />}
+              {!complianceHistory.rows.length && <EmptyRow colSpan={5} text={data.rowCounts.complianceTasks ? 'Операции по фильтру не найдены.' : 'Операций ЧЗ нет.'} />}
             </TableBody>
           </DataTable>
+          <ServerTablePager table={complianceHistory} />
         </TabsContent>
 
         <TabsContent value="supplies" className="mt-4 space-y-4">
@@ -964,12 +1309,34 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               </Button>
             </CardContent>
           </Card>
+          <FilterBar
+            query={supplyQuery}
+            onQueryChange={setSupplyQuery}
+            placeholder="Поставка, WB ID или склад"
+          >
+            <Select value={supplyFilter} onValueChange={setSupplyFilter}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все поставки</SelectItem>
+                <SelectItem value="OPEN">Открытые</SelectItem>
+                <SelectItem value="CLOSED">Закрытые</SelectItem>
+                <SelectItem value="B2B">Только B2B</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterBar>
           <DataTable>
             <TableHeader>
-              <TableRow><TableHead>Поставка</TableHead><TableHead>Склад</TableHead><TableHead>Заказов</TableHead><TableHead>B2B</TableHead><TableHead>Статус</TableHead><TableHead /></TableRow>
+              <TableRow>
+                <SortableHead label="Поставка" sortKey="name" sort={supplySort} onSort={setSupplySort} />
+                <SortableHead label="Склад" sortKey="warehouseName" sort={supplySort} onSort={setSupplySort} />
+                <SortableHead label="Заказов" sortKey="orderCount" sort={supplySort} onSort={setSupplySort} />
+                <SortableHead label="B2B" sortKey="isB2b" sort={supplySort} onSort={setSupplySort} />
+                <SortableHead label="Статус" sortKey="done" sort={supplySort} onSort={setSupplySort} />
+                <TableHead />
+              </TableRow>
             </TableHeader>
             <TableBody>
-              {data.supplies.map((supply) => (
+              {supplyHistory.rows.map((supply) => (
                 <TableRow key={supply.id}>
                   <TableCell className="font-medium">{supply.name ?? supply.externalId}</TableCell>
                   <TableCell>{supply.warehouseName ?? '—'}</TableCell><TableCell>{supply.orderCount}</TableCell>
@@ -995,68 +1362,358 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.supplies.length && <EmptyRow colSpan={6} text="Поставки ещё не синхронизированы." />}
+              {!supplyHistory.rows.length && <EmptyRow colSpan={6} text={data.rowCounts.supplies ? 'Поставки по фильтру не найдены.' : 'Поставки ещё не синхронизированы.'} />}
             </TableBody>
           </DataTable>
+          <ServerTablePager table={supplyHistory} />
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">FBS-продажи по финансовому отчёту</CardTitle>
-              <CardDescription>Фильтр deliveryMethod=FBS. Период применяется только к этому блоку.</CardDescription>
+              <CardTitle className="text-base">FBS-аналитика</CardTitle>
+              <CardDescription>
+                Заказы и отмены — по дате заказа. Выкупы, возвраты и суммы — по дате
+                финансовой операции WB. ОП FBS учитывает перечисление, прямые расходы WB,
+                себестоимость и налог; общая реклама между FBS и FBO здесь не распределяется.
+                Маржинальность — ОП к выручке, рентабельность — ОП к совокупным затратам,
+                процент выкупа — чистые выкупы к завершённым исходам (выкупы плюс отмены).
+                Период применяется только к этому блоку.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex flex-wrap gap-2">
-                <Input type="date" value={analyticsFrom} className="w-44" onChange={(event) => setAnalyticsFrom(event.target.value)} />
-                <Input type="date" value={analyticsTo} className="w-44" onChange={(event) => setAnalyticsTo(event.target.value)} />
+                <DateRangePicker
+                  value={analyticsRange}
+                  onChange={(range) => {
+                    if (range.from) setAnalyticsFrom(formatDateValue(range.from))
+                    if (range.to) setAnalyticsTo(formatDateValue(range.to))
+                  }}
+                />
                 <Button variant="outline" onClick={applyPeriod}>Применить</Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric label="К перечислению FBS" value={formatRub(Number(data.metrics.fbsRevenue))} />
-                <Metric label="Продажи FBS" value={formatNumber(data.metrics.fbsSales)} />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <Metric label="Заказы FBS" value={formatNumber(data.metrics.fbsOrders)} />
+                <Metric label="Отмены FBS" value={formatNumber(data.metrics.fbsCancellations)} warning={data.metrics.fbsCancellations > 0} />
+                <Metric label="Выкупы FBS" value={formatNumber(data.metrics.fbsSales)} />
                 <Metric label="Возвраты FBS" value={formatNumber(data.metrics.fbsReturns)} warning={data.metrics.fbsReturns > 0} />
+                <Metric label="Выручка FBS" value={formatRub(Number(data.metrics.fbsRevenue))} />
+                <Metric label="К перечислению FBS" value={formatRub(Number(data.metrics.fbsToTransfer))} />
               </div>
             </CardContent>
           </Card>
+          <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(240px,0.7fr)_repeat(4,minmax(0,1fr))]">
+            <FilterBar
+              query={analyticsQuery}
+              onQueryChange={setAnalyticsQuery}
+              placeholder="Артикул или nmId"
+              className="h-full"
+            />
+            <Metric label="ОП FBS" value={formatRub(Number(data.metrics.fbsOperatingProfit))} warning={Number(data.metrics.fbsOperatingProfit) < 0} />
+            <Metric label="Общая маржинальность" value={formatPercent(Number(data.metrics.fbsMarginality))} warning={Number(data.metrics.fbsMarginality) < 0} />
+            <Metric label="Рентабельность FBS" value={formatPercent(Number(data.metrics.fbsProfitability))} warning={Number(data.metrics.fbsProfitability) < 0} />
+            <Metric label="Процент выкупа FBS" value={formatPercent(Number(data.metrics.fbsBuyoutPercent))} />
+          </div>
           <DataTable>
             <TableHeader>
               <TableRow>
-                <TableHead>Артикул</TableHead><TableHead>nmId</TableHead>
-                <TableHead>Продажи</TableHead><TableHead>Возвраты</TableHead>
-                <TableHead>К перечислению</TableHead>
+                <SortableHead label="Артикул" sortKey="vendorCode" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="nmId" sortKey="nmId" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Заказы" sortKey="orders" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Отмены" sortKey="cancellations" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Выкупы" sortKey="sales" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Возвраты" sortKey="returns" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Выручка" sortKey="revenue" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="К перечислению" sortKey="toTransfer" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="ОП FBS" sortKey="operatingProfit" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Маржинальность" sortKey="marginality" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="Рентабельность" sortKey="profitability" sort={analyticsSort} onSort={setAnalyticsSort} />
+                <SortableHead label="% выкупа" sortKey="buyoutPercent" sort={analyticsSort} onSort={setAnalyticsSort} />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.financeByArticle.map((row) => (
+              {analyticsView.rows.map((row) => (
                 <TableRow key={`${row.nmId}-${row.vendorCode}`}>
                   <TableCell className="font-medium">{row.vendorCode}</TableCell>
                   <TableCell>{row.nmId}</TableCell>
+                  <TableCell>{row.orders}</TableCell>
+                  <TableCell>{row.cancellations}</TableCell>
                   <TableCell>{row.sales}</TableCell>
                   <TableCell>{row.returns}</TableCell>
                   <TableCell>{formatRub(Number(row.revenue))}</TableCell>
+                  <TableCell>{formatRub(Number(row.toTransfer))}</TableCell>
+                  <TableCell>{formatRub(Number(row.operatingProfit))}</TableCell>
+                  <TableCell>{formatPercent(Number(row.marginality))}</TableCell>
+                  <TableCell>{formatPercent(Number(row.profitability))}</TableCell>
+                  <TableCell>{formatPercent(Number(row.buyoutPercent))}</TableCell>
                 </TableRow>
               ))}
-              {!data.financeByArticle.length && <EmptyRow colSpan={5} text="За период нет строк deliveryMethod=FBS." />}
+              {!filteredFinanceByArticle.length && <EmptyRow colSpan={12} text={data.financeByArticle.length ? 'Артикулы по фильтру не найдены.' : 'За период нет заказов или финансовых операций FBS.'} />}
             </TableBody>
           </DataTable>
+          <TablePager view={analyticsView} loadedCount={data.financeByArticle.length} totalCount={data.rowCounts.financeByArticle} />
           <Card>
             <CardHeader><CardTitle className="text-base">Последние записи в WB</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {data.recentActions.map((action) => (
+              <FilterBar
+                query={actionQuery}
+                onQueryChange={setActionQuery}
+                placeholder="Действие, статус, дата или ошибка"
+              />
+              {actionHistory.rows.map((action) => (
                 <div key={action.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm">
-                  <span>{action.kind} · {formatDate(action.createdAt)}</span>
-                  <Badge variant={action.status === 'SUCCEEDED' ? 'default' : action.status === 'FAILED' ? 'destructive' : 'secondary'}>{action.status}</Badge>
+                  <span>
+                    {getFbsActionKindLabel(action.kind)} · {formatDate(action.createdAt)}
+                  </span>
+                  <Badge
+                    variant={action.status === 'SUCCEEDED' ? 'default' : action.status === 'FAILED' ? 'destructive' : 'secondary'}
+                  >
+                    {getFbsActionStatusLabel(action.status)}
+                  </Badge>
                   {action.error && <span className="basis-full text-xs text-destructive">{action.error}</span>}
                 </div>
               ))}
-              {!data.recentActions.length && <Empty text="Записей в WB ещё не было." />}
+              {!actionHistory.rows.length && <Empty text={data.rowCounts.recentActions ? 'Записи по фильтру не найдены.' : 'Записей в WB ещё не было.'} />}
+              <ServerTablePager table={actionHistory} />
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
   )
+}
+
+type SortValue = string | number | boolean | null | undefined
+
+function useFbsServerTable<T extends FbsHistoryRow>({
+  wbAccountId,
+  section,
+  initialRows,
+  initialTotal,
+  query,
+  filter,
+  sort,
+  dateRange,
+}: {
+  wbAccountId: string
+  section: FbsHistorySection
+  initialRows: T[]
+  initialTotal: number
+  query: string
+  filter: string
+  sort: TableSort
+  dateRange: DateRange
+}) {
+  const [state, setState] = useState({
+    rows: initialRows.slice(0, 25),
+    total: initialTotal,
+    page: 1,
+    pageSize: 25,
+    loading: false,
+  })
+  const requestId = useRef(0)
+
+  const load = useCallback(async (page: number, pageSize: number) => {
+    const currentRequest = ++requestId.current
+    setState((current) => ({ ...current, loading: true }))
+    const result = await getFbsHistoryPageAction({
+      wbAccountId,
+      section,
+      query,
+      filter,
+      sortKey: sort.key,
+      sortDirection: sort.direction,
+      page,
+      pageSize,
+      dateFrom: dateRange.from ? formatDateValue(dateRange.from) : undefined,
+      dateTo: dateRange.to ? formatDateValue(dateRange.to) : undefined,
+    })
+    if (currentRequest !== requestId.current) return
+    if (!result.success) {
+      toast.error(result.error)
+      setState((current) => ({ ...current, loading: false }))
+      return
+    }
+    setState({
+      rows: result.data.rows as T[],
+      total: result.data.total,
+      page: result.data.page,
+      pageSize: result.data.pageSize,
+      loading: false,
+    })
+  }, [dateRange.from, dateRange.to, filter, query, section, sort.direction, sort.key, wbAccountId])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(1, state.pageSize), 300)
+    return () => window.clearTimeout(timer)
+  }, [load, state.pageSize])
+
+  return {
+    ...state,
+    pageCount: Math.max(1, Math.ceil(state.total / state.pageSize)),
+    from: state.total ? (state.page - 1) * state.pageSize + 1 : 0,
+    to: Math.min(state.page * state.pageSize, state.total),
+    setPage: (page: number) => void load(page, state.pageSize),
+    setPageSize: (pageSize: number) => void load(1, pageSize),
+  }
+}
+
+function useTableView<T>(
+  rows: T[],
+  sort: TableSort,
+  getValue: (row: T, key: string) => SortValue,
+  pageSize = 25,
+) {
+  const [page, setPage] = useState(1)
+  const sortedRows = useMemo(() => [...rows].sort((left, right) => {
+    const comparison = compareSortValues(getValue(left, sort.key), getValue(right, sort.key))
+    return sort.direction === 'asc' ? comparison : -comparison
+  }), [getValue, rows, sort.direction, sort.key])
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+
+  useEffect(() => setPage(1), [rows, sort.direction, sort.key])
+  useEffect(() => setPage((current) => Math.min(current, pageCount)), [pageCount])
+
+  const safePage = Math.min(page, pageCount)
+  const from = sortedRows.length ? (safePage - 1) * pageSize + 1 : 0
+  const to = Math.min(safePage * pageSize, sortedRows.length)
+
+  return {
+    rows: sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize),
+    filteredCount: sortedRows.length,
+    page: safePage,
+    pageCount,
+    from,
+    to,
+    setPage,
+  }
+}
+
+function compareSortValues(left: SortValue, right: SortValue) {
+  if (left == null && right == null) return 0
+  if (left == null) return 1
+  if (right == null) return -1
+  if (typeof left === 'number' && typeof right === 'number') return left - right
+  if (typeof left === 'boolean' && typeof right === 'boolean') return Number(left) - Number(right)
+  return String(left).localeCompare(String(right), 'ru', { numeric: true, sensitivity: 'base' })
+}
+
+function nextSort(current: TableSort, key: string): TableSort {
+  return current.key === key
+    ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+    : { key, direction: 'asc' }
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string
+  sortKey: string
+  sort: TableSort
+  onSort: (sort: TableSort) => void
+}) {
+  return (
+    <TableHead aria-sort={sort.key === sortKey ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-foreground"
+        onClick={() => onSort(nextSort(sort, sortKey))}
+      >
+        {label}
+        <ChevronsUpDown className={`h-3.5 w-3.5 ${sort.key === sortKey ? 'opacity-100' : 'opacity-40'}`} />
+      </button>
+    </TableHead>
+  )
+}
+
+function TablePager({
+  view,
+  loadedCount,
+  totalCount,
+}: {
+  view: ReturnType<typeof useTableView<unknown>>
+  loadedCount: number
+  totalCount: number
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
+      <span>
+        Строк: {view.filteredCount}. Показано {view.from}–{view.to}.
+        {totalCount > loadedCount ? ` Загружено для работы ${loadedCount} из ${totalCount}.` : ` Всего: ${totalCount}.`}
+      </span>
+      {view.pageCount > 1 && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={view.page <= 1} onClick={() => view.setPage(view.page - 1)}>Назад</Button>
+          <span>{view.page} / {view.pageCount}</span>
+          <Button size="sm" variant="outline" disabled={view.page >= view.pageCount} onClick={() => view.setPage(view.page + 1)}>Вперёд</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ServerTablePager({ table }: { table: {
+  total: number
+  page: number
+  pageSize: number
+  pageCount: number
+  from: number
+  to: number
+  loading: boolean
+  setPage: (page: number) => void
+  setPageSize: (pageSize: number) => void
+} }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
+      <span>{table.loading ? 'Загрузка…' : `Показано ${table.from}–${table.to} из ${table.total}`}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={String(table.pageSize)} onValueChange={(value) => table.setPageSize(Number(value))}>
+          <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="25">25 строк</SelectItem>
+            <SelectItem value="50">50 строк</SelectItem>
+            <SelectItem value="100">100 строк</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" disabled={table.loading || table.page <= 1} onClick={() => table.setPage(table.page - 1)}>Назад</Button>
+        <span>{table.page} / {table.pageCount}</span>
+        <Button size="sm" variant="outline" disabled={table.loading || table.page >= table.pageCount} onClick={() => table.setPage(table.page + 1)}>Вперёд</Button>
+      </div>
+    </div>
+  )
+}
+
+function assortmentSortValue(row: FbsWorkspaceData['assortment'][number], key: string): SortValue {
+  return ({
+    warehouseName: row.warehouseName,
+    vendorCode: row.vendorCode ?? row.barcode,
+    chrtId: row.chrtId,
+    onHand: row.onHand,
+    reserved: row.reserved,
+    available: row.available,
+    wbStock: row.wbStock,
+    marking: row.requiresKiz,
+  } satisfies Record<string, SortValue>)[key]
+}
+
+function analyticsSortValue(row: FbsWorkspaceData['financeByArticle'][number], key: string): SortValue {
+  return ({
+    vendorCode: row.vendorCode,
+    nmId: row.nmId,
+    orders: row.orders,
+    cancellations: row.cancellations,
+    sales: row.sales,
+    returns: row.returns,
+    revenue: Number(row.revenue),
+    toTransfer: Number(row.toTransfer),
+    operatingProfit: Number(row.operatingProfit),
+    marginality: Number(row.marginality),
+    profitability: Number(row.profitability),
+    buyoutPercent: Number(row.buyoutPercent),
+  } satisfies Record<string, SortValue>)[key]
 }
 
 function Metric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) {
@@ -1082,6 +1739,38 @@ function Exception({ label, value }: { label: string; value: number }) {
 
 function DataTable({ children }: { children: React.ReactNode }) {
   return <div className="overflow-x-auto rounded-md border bg-card"><Table className="min-w-[900px]">{children}</Table></div>
+}
+
+type SortDirection = 'asc' | 'desc'
+type TableSort = { key: string; direction: SortDirection }
+
+function FilterBar({
+  query,
+  onQueryChange,
+  placeholder,
+  children,
+  className,
+}: {
+  query: string
+  onQueryChange: (value: string) => void
+  placeholder: string
+  children?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col gap-2 rounded-md border bg-card p-3 sm:flex-row ${className ?? ''}`}>
+      <div className="relative min-w-0 flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder={placeholder}
+          className="pl-9"
+        />
+      </div>
+      {children}
+    </div>
+  )
 }
 
 function ItemSelect({
@@ -1226,8 +1915,29 @@ function formatRub(value: number) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(value)
 }
 
+function formatPercent(value: number) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value) + '%'
+}
+
+function parseDateValue(value: string) {
+  return value ? new Date(`${value}T12:00:00`) : undefined
+}
+
+function formatDateValue(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
+function matchesSearch(query: string, ...values: Array<string | number | null | undefined>) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+  return values.some((value) => String(value ?? '').toLowerCase().includes(normalizedQuery))
 }
 
 function fileToBase64(file: File): Promise<string> {

@@ -16,13 +16,12 @@ export type FbsTransitionAction =
   | 'UNASSIGN_KIZ'
   | 'MARK_HANDED_OVER'
   | 'CREATE_WITHDRAWAL_TASK'
+  | 'CANCEL_PENDING_WITHDRAWAL'
   | 'MARK_RETURN_EXPECTED'
 
 const PRE_HANDOFF_CANCELLATIONS = new Set([
   'canceled',
-  'canceled_by_client',
   'declined_by_client',
-  'defect',
 ])
 
 const POST_HANDOFF_RETURN_STATUSES = new Set([
@@ -35,6 +34,7 @@ export function isFbsOrderCanceledBeforeHandoff(input: {
   wbStatus: FbsWbStatus
   shipmentApplied: boolean
 }) {
+  if (POST_HANDOFF_RETURN_STATUSES.has(input.wbStatus)) return false
   return (
     !input.shipmentApplied &&
     (input.supplierStatus === 'cancel' || PRE_HANDOFF_CANCELLATIONS.has(input.wbStatus))
@@ -58,11 +58,13 @@ export function deriveFbsTransition(
     wbStatus: next.wbStatus,
     shipmentApplied: wasShipped,
   })
+  const postHandoffReturn = POST_HANDOFF_RETURN_STATUSES.has(next.wbStatus)
 
   if (
     !wasReserved &&
     !wasShipped &&
     !canceledBeforeHandoff &&
+    !postHandoffReturn &&
     (next.supplierStatus === 'new' || next.supplierStatus === 'confirm')
   ) {
     actions.push('RESERVE')
@@ -73,14 +75,15 @@ export function deriveFbsTransition(
   }
   if (canceledBeforeHandoff && next.hasKiz) actions.push('UNASSIGN_KIZ')
 
-  if (!wasShipped && next.supplierStatus === 'complete') {
+  if (!wasShipped && !canceledBeforeHandoff && next.supplierStatus === 'complete') {
     if (next.requiresKiz && !next.hasKiz && options.enforceShipmentGuard !== false) {
       throw new Error('Нельзя передать маркированный заказ без назначенного КИЗа')
     }
     actions.push('SHIP')
     if (next.hasKiz) {
       actions.push('MARK_HANDED_OVER')
-      actions.push('CREATE_WITHDRAWAL_TASK')
+      if (postHandoffReturn) actions.push('CANCEL_PENDING_WITHDRAWAL')
+      else actions.push('CREATE_WITHDRAWAL_TASK')
     }
   }
 
@@ -99,6 +102,7 @@ export function deriveFbsTransition(
     POST_HANDOFF_RETURN_STATUSES.has(next.wbStatus) &&
     next.hasKiz
   ) {
+    actions.push('CANCEL_PENDING_WITHDRAWAL')
     actions.push('MARK_RETURN_EXPECTED')
   }
 

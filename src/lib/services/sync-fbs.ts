@@ -559,6 +559,39 @@ async function ensureWithdrawalTask(
   })
 }
 
+async function cancelPendingWithdrawalForReturn(
+  tx: Tx,
+  input: { orderId: string; kizUnit: { id: string; circulationState: string } },
+) {
+  if (!['WITHDRAWAL_REQUIRED', 'IN_CIRCULATION', 'UNKNOWN'].includes(input.kizUnit.circulationState)) return
+  const canceled = await tx.kizComplianceTask.updateMany({
+    where: {
+      orderId: input.orderId,
+      kizUnitId: input.kizUnit.id,
+      type: { in: ['WITHDRAWAL_REMOTE_SALE', 'WITHDRAWAL_B2B'] },
+      status: { in: ['OPEN', 'EXPORTED'] },
+    },
+    data: { status: 'CANCELED' },
+  })
+  if (!canceled.count) return
+  await tx.kizUnit.update({
+    where: { id: input.kizUnit.id },
+    data: { circulationState: 'IN_CIRCULATION' },
+  })
+  await tx.kizEvent.create({
+    data: {
+      kizUnitId: input.kizUnit.id,
+      orderId: input.orderId,
+      type: 'RETURN_EXPECTED',
+      details: {
+        source: 'wb_order_status',
+        pendingWithdrawalCanceled: true,
+        reason: 'post_handoff_return_before_confirmed_withdrawal',
+      },
+    },
+  })
+}
+
 async function applyOrderState(
   wbAccountId: string,
   order: WbFbsOrder,
@@ -809,6 +842,15 @@ async function applyOrderState(
         }
       }
 
+      if (action === 'CANCEL_PENDING_WITHDRAWAL') {
+        for (const assignedKiz of assignedKizUnits) {
+          await cancelPendingWithdrawalForReturn(tx, {
+            orderId: saved.id,
+            kizUnit: assignedKiz,
+          })
+        }
+      }
+
       if (action === 'MARK_RETURN_EXPECTED') {
         for (const assignedKiz of assignedKizUnits) {
           await tx.kizUnit.update({
@@ -851,12 +893,16 @@ async function applyOrderState(
         })
       }
       for (const assignedKiz of assignedKizUnits) {
-        await ensureWithdrawalTask(tx, {
-          wbAccountId,
-          orderId: saved.id,
-          isB2b: saved.isB2b,
-          kizUnit: assignedKiz,
-        })
+        if (returnExpected) {
+          await cancelPendingWithdrawalForReturn(tx, { orderId: saved.id, kizUnit: assignedKiz })
+        } else {
+          await ensureWithdrawalTask(tx, {
+            wbAccountId,
+            orderId: saved.id,
+            isB2b: saved.isB2b,
+            kizUnit: assignedKiz,
+          })
+        }
       }
     }
     if (wbStatus === 'sold' && !shipmentApplied) {

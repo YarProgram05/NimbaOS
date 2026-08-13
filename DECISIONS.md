@@ -25,6 +25,25 @@ Related files:
 
 ---
 
+## 2026-08-12 — Post-handoff FBS KIZ association is preserved
+
+Status:
+Active
+
+Decision:
+Статусы WB `canceled_by_client` и `defect` всегда считаются возвратом после передачи. Они не отвязывают КИЗ и не требуют нового кода. Авторизованные менеджеры и администраторы видят в FBS идентификационную часть кода `01…21…`, как в XLSX для Честного знака; криптохвосты `91/92` не выводятся. `UNKNOWN` в локальном учёте называется «Статус в ЧЗ не указан» и не подменяется выдуманным состоянием.
+
+Reason:
+Отмена при получении и брак происходят после передачи товара WB. Отвязка создавала ложные сообщения «Нет КИЗа»/«Нужен КИЗ» и риск повторной маркировки. NimbaOS не имеет прямой онлайн-проверки ЧЗ и не должен угадывать статус оборота.
+
+Consequences:
+При следующей штатной FBS-синхронизации WB metadata может восстановить связь уже отвязанного кода; экран также использует локальную историю событий/операций. До Stage 2 статус ЧЗ меняется только после подтверждения оператором принятого документа. Поля «Первичный документ» без `*` в форме ЧЗ можно не заполнять; в NimbaOS сохраняется номер или ID уже подписанного документа из раздела «Документы» ЧЗ.
+
+Related files:
+`src/lib/fbs/state-machine.ts`, `src/lib/services/sync-fbs.ts`, `src/lib/services/fbs-workspace.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/types/fbs.ts`
+
+---
+
 ## 2026-06-19 — Article versions preserve historical product identity
 
 Status:
@@ -543,3 +562,12 @@ The first FBS backfill is exactly `2026-07-20` through `2026-07-30`. The script 
 
 **Decision 55: WB FBS metadata is the operational order-to-KIZ source**
 When fulfillment attaches a code in WB, `POST /api/marketplace/v3/orders/meta` is the primary source of the exact order-to-SGTIN mapping. Sync extracts and encrypts the full code before sanitization, deduplicates it by account/hash, validates known GTIN, links it to the order and stores only redacted metadata/audit summaries. Finance `orderId + kiz` remains a delayed reconciliation source; PDF import is optional for the unused pre-packing code pool.
+
+**Decision 56: FBS financial identity follows the order ID**
+FBS buyouts, returns, revenue and transfer are classified through the account-scoped link `realization_reports.orderId = fbs_orders.externalOrderId`. A sale/return row with direct `deliveryMethod=FBS` is accepted as a fallback, but row-level delivery method is not the primary filter because WB often places it only on zero-quantity logistics rows.
+
+**Decision 57: Remote-sale KIZ withdrawal starts at handoff, not buyout**
+Creating an FBS order only reserves a marked unit. The remote-sale withdrawal task is created when the order is handed to WB (`supplierStatus=complete`), because the light-industry distance-sale rule requires submission after shipment, within three business days and no later than actual delivery. Pre-handoff cancellation releases the KIZ; a physically returned unit is quarantined until return-to-circulation or remarking is confirmed.
+
+**Decision 58: Stage 1 KIZ operations are confirmed by exported file batch**
+Withdrawal and return-to-circulation are exported separately as CRPT-compatible XLSX files. Both contain the identification part of the KIZ (without AIs 91/92); withdrawal additionally contains numeric `Цена за единицу с НДС`, calculated as the WB seller-currency `convertedPrice` divided by 100. This is the final unit price already inclusive of any applicable tax treatment; NimbaOS adds no VAT markup (the current seller uses VAT 0%). Each export takes only new `OPEN` tasks, fixes them in an immutable batch and marks them `EXPORTED`; repeated exports therefore cannot move a KIZ between files. Export does not change circulation. After CRPT accepts the document, a manager confirms the whole stored `KizOperationBatch` with one document number/date; only then are all included local KIZ states and audit events updated. Single-task confirmation is retained for exceptions. NimbaOS does not claim live CRPT status authority until Stage 2 direct integration exists.

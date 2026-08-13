@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   FBS_STATUS_ACTION_LABELS,
+  getFbsActionKindLabel,
+  getFbsActionStatusLabel,
   getFbsSupplierStatusLabel,
   getFbsWbStatusLabel,
+  getKizComplianceStatusLabel,
 } from './status-labels'
 
 test('translates all documented FBS seller statuses', () => {
@@ -30,4 +33,20 @@ test('keeps order actions in Russian and uses safe fallbacks for API drift', () 
   })
   assert.equal(getFbsSupplierStatusLabel('future_status'), 'Неизвестный статус продавца')
   assert.equal(getFbsWbStatusLabel('future_status'), 'Неизвестный статус WB')
+})
+
+test('translates KIZ queue and WB action journal statuses', () => {
+  assert.equal(getKizComplianceStatusLabel('OPEN'), 'Ожидает обработки')
+  assert.equal(getKizComplianceStatusLabel('EXPORTED'), 'Выгружено в файл')
+  assert.equal(getKizComplianceStatusLabel('CONFIRMED'), 'Подтверждено')
+  assert.equal(getKizComplianceStatusLabel('CANCELED'), 'Отменено')
+  assert.equal(getFbsActionStatusLabel('PENDING'), 'Ожидает выполнения')
+  assert.equal(getFbsActionStatusLabel('RUNNING'), 'Выполняется')
+  assert.equal(getFbsActionStatusLabel('SUCCEEDED'), 'Выполнено')
+  assert.equal(getFbsActionStatusLabel('FAILED'), 'Ошибка')
+  assert.equal(getFbsActionKindLabel('ATTACH_KIZ'), 'Передача КИЗа в WB')
+  assert.equal(getFbsActionKindLabel('PUBLISH_STOCKS'), 'Публикация остатков')
+  assert.equal(getKizComplianceStatusLabel('FUTURE'), 'Неизвестный статус операции')
+  assert.equal(getFbsActionStatusLabel('FUTURE'), 'Неизвестный статус действия')
+  assert.equal(getFbsActionKindLabel('FUTURE'), 'Неизвестное действие с WB')
 })

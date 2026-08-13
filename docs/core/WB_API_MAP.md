@@ -88,6 +88,7 @@ Live FBS response notes:
 - `syncFbsOperational` extracts `sgtin` before sanitization, normalizes and parses the code, encrypts the full value, deduplicates by account-scoped SHA-256 hash, validates GTIN when the assortment GTIN is known, and attaches the `KizUnit` to the WB order. The ordinary order/event metadata JSON still stores only `[REDACTED]`.
 - Sync results expose counts only: received, created, assigned, already assigned, released, rejected, conflicts and GTIN mismatches. Never include full codes in job results or logs.
 - The Finance report also exposes `orderId` with `kiz`, but it is delayed financial evidence and should be used as reconciliation/backfill, not the primary operational mapping.
+- Finance `deliveryMethod=FBS` is not guaranteed on the `Продажа`/`Возврат` row. Local verification on 2026-08-12 found it mainly on connected zero-quantity logistics rows. FBS analytics must use the account-scoped `orderId -> fbs_orders.externalOrderId` link and treat row-level `deliveryMethod` only as a fallback hint.
 - Current stock reconciliation refreshes seller warehouses and checks every available local catalog `chrtId`, not only assortment previously observed in orders.
 - `options.isB2b` is the current nested order field; the direct legacy field remains a compatibility fallback.
 

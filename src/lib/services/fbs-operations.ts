@@ -2,7 +2,17 @@ import { createHash, randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
-import { prepareKizForStorage, hashKizCode, normalizeKizCode } from '@/lib/fbs/kiz'
+import {
+  prepareKizForStorage,
+  hashKizCode,
+  normalizeKizCode,
+  toKizIdentificationCode,
+} from '@/lib/fbs/kiz'
+import {
+  getKizComplianceExportDefinition,
+  toCrptUnitPriceRub,
+  type KizComplianceExportKind,
+} from '@/lib/fbs/compliance-export'
 import { isOrderMetadataReady } from '@/lib/fbs/state-machine'
 import { createMovement, sanitizeFbsMetadata } from '@/lib/services/sync-fbs'
 import { WbApiClient, WbApiError } from '@/lib/wb-api/client'
@@ -420,47 +430,70 @@ export async function markKizException(input: {
 
 export async function exportKizComplianceTasks(input: {
   wbAccountId: string
-  taskIds?: string[]
+  kind: KizComplianceExportKind
   userId: string
 }) {
+  const definition = getKizComplianceExportDefinition(input.kind)
   const tasks = await prisma.kizComplianceTask.findMany({
     where: {
       wbAccountId: input.wbAccountId,
-      status: { in: ['OPEN', 'EXPORTED'] },
-      ...(input.taskIds?.length ? { id: { in: input.taskIds } } : {}),
+      status: 'OPEN',
+      type: { in: [...definition.taskTypes] },
+      ...(input.kind === 'WITHDRAWAL'
+        ? {
+            NOT: {
+              order: {
+                is: {
+                  OR: [
+                    { supplierStatus: 'cancel' },
+                    { wbStatus: { in: ['canceled', 'canceled_by_client', 'declined_by_client', 'defect'] } },
+                  ],
+                },
+              },
+            },
+          }
+        : {}),
     },
     include: {
       kizUnit: true,
-      order: { select: { externalOrderId: true, isB2b: true } },
+      order: {
+        select: {
+          externalOrderId: true,
+          isB2b: true,
+          convertedPriceRaw: true,
+        },
+      },
     },
     orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
   })
-  if (!tasks.length) throw new Error('Нет открытых операций для выгрузки')
+  if (!tasks.length) throw new Error(definition.emptyMessage)
 
-  const rows = tasks.map((task) => [
-    task.id,
-    task.type,
-    decrypt(task.kizUnit.encryptedCode),
-    task.kizUnit.gtin ?? '',
-    task.order?.externalOrderId.toString() ?? '',
-    task.order?.isB2b ?? false,
-    task.dueAt ?? '',
-  ])
+  const rows = tasks.map((task) => {
+    const code = toKizIdentificationCode(decrypt(task.kizUnit.encryptedCode))
+    return definition.includeUnitPrice
+      ? [code, toCrptUnitPriceRub(task.order?.convertedPriceRaw)]
+      : [code]
+  })
+  const headers = definition.includeUnitPrice
+    ? ['Код маркировки', 'Цена за единицу с НДС']
+    : ['Код маркировки']
   const workbook = createWorkbook()
   appendAoaSheet(
     workbook,
-    'Операции КИЗ',
-    [
-      ['ID задачи', 'Операция', 'КИЗ DataMatrix', 'GTIN', 'Заказ WB', 'B2B', 'Срок'],
-      ...rows,
-    ],
-    { widths: [38, 28, 90, 18, 20, 10, 20] },
+    definition.sheetName,
+    [headers, ...rows],
+    {
+      widths: definition.includeUnitPrice ? [90, 26] : [90],
+      columnFormats: definition.includeUnitPrice ? { 1: '0.00' } : undefined,
+    },
   )
   const checksum = createHash('sha256')
-    .update(tasks.map((task) => `${task.id}:${task.kizUnit.codeHash}`).join('|'))
+    .update(tasks.map((task) => (
+      `${task.id}:${task.kizUnit.codeHash}:${definition.includeUnitPrice ? task.order?.convertedPriceRaw : ''}`
+    )).join('|'))
     .digest('hex')
   const filename = safeXlsxFilename(
-    'fbs_kiz_operations',
+    definition.filenamePrefix,
     new Date().toISOString().slice(0, 10),
   )
   const batch = await prisma.$transaction(async (tx) => {
@@ -495,6 +528,7 @@ export async function exportKizComplianceTasks(input: {
     filename,
     batchId: batch.id,
     taskCount: tasks.length,
+    kind: input.kind,
   }
 }
 
@@ -518,55 +552,129 @@ export async function confirmKizComplianceTask(input: {
     if (task.status === 'CANCELED') throw new Error('Операция отменена')
     if (task.status === 'CONFIRMED') return { id: task.id, alreadyConfirmed: true }
 
-    await tx.kizComplianceTask.update({
-      where: { id: task.id },
-      data: {
-        status: 'CONFIRMED',
-        documentNumber,
-        documentDate,
-        confirmedAt: new Date(),
-        confirmedById: input.userId,
-      },
+    const confirmed = await confirmComplianceTask(tx, task, {
+      documentNumber,
+      documentDate,
+      userId: input.userId,
     })
-    const circulationState =
-      task.type === 'WITHDRAWAL_REMOTE_SALE' || task.type === 'WITHDRAWAL_B2B'
-        ? 'WITHDRAWN'
-        : task.type === 'COMMISSIONING' || task.type === 'RETURN_TO_CIRCULATION'
-          ? 'IN_CIRCULATION'
-          : task.kizUnit.circulationState
-    await tx.kizUnit.update({
-      where: { id: task.kizUnitId },
-      data: {
-        circulationState,
-        ...(task.type === 'RETURN_TO_CIRCULATION'
-          ? { physicalState: 'IN_STOCK', currentOrderId: null }
-          : {}),
-      },
-    })
-    if (task.type === 'RETURN_TO_CIRCULATION' && task.kizUnit.assortmentItemId) {
-      await createMovement(tx, {
-        itemId: task.kizUnit.assortmentItemId,
-        orderId: task.orderId,
-        kizUnitId: task.kizUnitId,
-        type: 'RETURN_RECEIVED',
-        onHandDelta: 1,
-        reservedDelta: 0,
-        source: 'chestny_znak_confirmation',
-        idempotencyKey: `task:${task.id}:return-receipt`,
-        userId: input.userId,
-      })
-    }
-    await tx.kizEvent.create({
-      data: {
-        kizUnitId: task.kizUnitId,
-        orderId: task.orderId,
-        userId: input.userId,
-        type: 'COMPLIANCE_CONFIRMED',
-        details: { taskType: task.type, documentNumber },
-      },
-    })
-    return { id: task.id, alreadyConfirmed: false }
+    return { id: task.id, alreadyConfirmed: !confirmed }
   })
+}
+
+export async function confirmKizComplianceBatch(input: {
+  wbAccountId: string
+  batchId: string
+  documentNumber: string
+  documentDate: string
+  userId: string
+}) {
+  const documentNumber = input.documentNumber.trim()
+  if (!documentNumber) throw new Error('Укажите номер документа Честного знака')
+  const documentDate = new Date(`${input.documentDate}T00:00:00.000Z`)
+  if (Number.isNaN(documentDate.getTime())) throw new Error('Укажите дату документа')
+
+  const batch = await prisma.kizOperationBatch.findFirstOrThrow({
+    where: { id: input.batchId, wbAccountId: input.wbAccountId },
+    select: {
+      id: true,
+      tasks: {
+        where: { status: { in: ['OPEN', 'EXPORTED'] } },
+        select: { id: true },
+      },
+    },
+  })
+  if (!batch.tasks.length) {
+    return { batchId: batch.id, confirmed: 0, alreadyProcessed: true }
+  }
+
+  let confirmed = 0
+  for (let index = 0; index < batch.tasks.length; index += 200) {
+    const taskIds = batch.tasks.slice(index, index + 200).map((task) => task.id)
+    confirmed += await prisma.$transaction(async (tx) => {
+      const tasks = await tx.kizComplianceTask.findMany({
+        where: {
+          id: { in: taskIds },
+          wbAccountId: input.wbAccountId,
+          batchId: input.batchId,
+          status: { in: ['OPEN', 'EXPORTED'] },
+        },
+        include: { kizUnit: true },
+      })
+      let chunkConfirmed = 0
+      for (const task of tasks) {
+        const taskConfirmed = await confirmComplianceTask(tx, task, {
+          documentNumber,
+          documentDate,
+          userId: input.userId,
+        })
+        if (taskConfirmed) chunkConfirmed += 1
+      }
+      return chunkConfirmed
+    }, { timeout: 120_000 })
+  }
+
+  return { batchId: batch.id, confirmed, alreadyProcessed: false }
+}
+
+type ComplianceTaskForConfirmation = Prisma.KizComplianceTaskGetPayload<{
+  include: { kizUnit: true }
+}>
+
+async function confirmComplianceTask(
+  tx: Prisma.TransactionClient,
+  task: ComplianceTaskForConfirmation,
+  input: { documentNumber: string; documentDate: Date; userId: string },
+) {
+  const claimed = await tx.kizComplianceTask.updateMany({
+    where: { id: task.id, status: { in: ['OPEN', 'EXPORTED'] } },
+    data: {
+      status: 'CONFIRMED',
+      documentNumber: input.documentNumber,
+      documentDate: input.documentDate,
+      confirmedAt: new Date(),
+      confirmedById: input.userId,
+    },
+  })
+  if (!claimed.count) return false
+
+  const circulationState =
+    task.type === 'WITHDRAWAL_REMOTE_SALE' || task.type === 'WITHDRAWAL_B2B'
+      ? 'WITHDRAWN'
+      : task.type === 'COMMISSIONING' || task.type === 'RETURN_TO_CIRCULATION'
+        ? 'IN_CIRCULATION'
+        : task.kizUnit.circulationState
+  await tx.kizUnit.update({
+    where: { id: task.kizUnitId },
+    data: {
+      circulationState,
+      ...(task.type === 'RETURN_TO_CIRCULATION'
+        ? { physicalState: 'IN_STOCK', currentOrderId: null }
+        : {}),
+    },
+  })
+  if (task.type === 'RETURN_TO_CIRCULATION' && task.kizUnit.assortmentItemId) {
+    await createMovement(tx, {
+      itemId: task.kizUnit.assortmentItemId,
+      orderId: task.orderId,
+      kizUnitId: task.kizUnitId,
+      type: 'RETURN_RECEIVED',
+      onHandDelta: 1,
+      reservedDelta: 0,
+      source: 'chestny_znak_confirmation',
+      idempotencyKey: `task:${task.id}:return-receipt`,
+      userId: input.userId,
+    })
+  }
+  await tx.kizEvent.create({
+    data: {
+      kizUnitId: task.kizUnitId,
+      orderId: task.orderId,
+      userId: input.userId,
+      type: 'COMPLIANCE_CONFIRMED',
+      details: { taskType: task.type, documentNumber: input.documentNumber },
+    },
+  })
+  return true
 }
 
 export async function setFbsWarehouseWriteEnabled(input: {

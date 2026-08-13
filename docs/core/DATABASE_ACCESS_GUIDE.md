@@ -71,5 +71,5 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 - For an inventory audit, read `fbs_inventory_movements` by `itemId` and `occurredAt`; each row stores both deltas and resulting balances.
 - For order/KIZ investigations, start from `fbs_orders`, then bounded `fbs_order_events`, `kiz_units`, `kiz_events` and `kiz_compliance_tasks`.
 - Never select or print `encryptedCode`/`kizEncrypted` in analytics. Use `maskedCode`, `kizMasked` or `codeHash`.
-- FBS finance analytics must filter `realization_reports` by account, period and `deliveryMethod` containing `FBS`.
+- FBS finance analytics must filter by account and bounded operation period, then identify sale/return rows through `realization_reports.orderId = fbs_orders.externalOrderId`. WB Finance often sets `deliveryMethod=FBS` only on a related zero-quantity logistics row, so filtering the sale row by that field produces false zeroes. A directly tagged sale/return row remains a fallback.
 - No historical backfill should bypass `scripts/backfill-fbs-2026-07-20-2026-07-30.ts` for the initial range.

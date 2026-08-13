@@ -8,6 +8,7 @@ import {
   maskKizCode,
   normalizeKizCode,
   parseKizCode,
+  toKizIdentificationCode,
 } from './kiz'
 
 test('normalizes scanner prefix and preserves GS separators', () => {
@@ -32,6 +33,11 @@ test('uses the normalized full code for a stable SHA-256 identity', () => {
   const plain = `010460123456789021ABC${GROUP_SEPARATOR}91ABCD${GROUP_SEPARATOR}92SIGN`
   assert.equal(hashKizCode(normalizeKizCode(`]d2${plain}`)), hashKizCode(plain))
   assert.equal(hashKizCode(plain).length, 64)
+})
+
+test('creates a CRPT upload code without verification key and crypto signature', () => {
+  const fullCode = `010460123456789021ABC123${GROUP_SEPARATOR}91ABCD${GROUP_SEPARATOR}92SIGNATURE`
+  assert.equal(toKizIdentificationCode(fullCode), '010460123456789021ABC123')
 })
 
 test('extracts and normalizes unique SGTIN values from FBS metadata', () => {

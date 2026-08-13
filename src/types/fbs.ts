@@ -106,9 +106,26 @@ export interface FbsWorkspaceData {
     overdueOrders: number
     openComplianceTasks: number
     quarantinedKiz: number
+    fbsOrders: number
+    fbsCancellations: number
     fbsRevenue: string
+    fbsToTransfer: string
     fbsSales: number
     fbsReturns: number
+    fbsOperatingProfit: string
+    fbsMarginality: string
+    fbsProfitability: string
+    fbsBuyoutPercent: string
+  }
+  rowCounts: {
+    warehouses: number
+    assortment: number
+    orders: number
+    kizUnits: number
+    complianceTasks: number
+    supplies: number
+    recentActions: number
+    financeByArticle: number
   }
   warehouses: Array<{
     id: string
@@ -163,7 +180,7 @@ export interface FbsWorkspaceData {
     supplierStatus: string
     wbStatus: string
     requiresKiz: boolean
-    kizMasked: string | null
+    kizCode: string | null
     metadataReady: boolean
     metadataLabel: string
     metadataIssue: string | null
@@ -171,7 +188,7 @@ export interface FbsWorkspaceData {
   }>
   kizUnits: Array<{
     id: string
-    maskedCode: string
+    code: string | null
     gtin: string | null
     serialMasked: string | null
     physicalState: string
@@ -187,9 +204,18 @@ export interface FbsWorkspaceData {
     type: string
     status: string
     dueAt: string | null
-    maskedCode: string
+    code: string | null
     externalOrderId: string | null
     documentNumber: string | null
+  }>
+  operationBatches: Array<{
+    id: string
+    filename: string
+    createdAt: string
+    taskCount: number
+    taskTypes: string[]
+    pendingCount: number
+    confirmedCount: number
   }>
   recentActions: Array<{
     id: string
@@ -201,8 +227,15 @@ export interface FbsWorkspaceData {
   financeByArticle: Array<{
     nmId: number
     vendorCode: string
+    orders: number
+    cancellations: number
     sales: number
     returns: number
     revenue: string
+    toTransfer: string
+    operatingProfit: string
+    marginality: string
+    profitability: string
+    buyoutPercent: string
   }>
 }

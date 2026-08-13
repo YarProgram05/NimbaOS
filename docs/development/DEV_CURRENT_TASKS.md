@@ -34,6 +34,70 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: BUG-025-FBS-LATE-WITHDRAWAL-AFTER-CANCEL
+  Status: Done
+  Priority: High
+  Description: Prevented historical post-handoff cancellation/defect orders from creating or remaining in an unconfirmed withdrawal queue. Pending withdrawals are canceled and kept in circulation; confirmed withdrawals retain the normal return-to-circulation path after physical receipt. Reconciled both local cabinets.
+  Next step: Do not upload the obsolete 28-row Nimba file. For Galioni, regenerate a fresh file before any CRPT upload; old files include tasks that are now canceled locally.
+  Related files: `src/lib/fbs/state-machine.ts`, `src/lib/services/sync-fbs.ts`, `src/lib/services/fbs-operations.ts`, `src/lib/fbs/state-machine.test.ts`.
+  Risks: WB cancellation means return expected, not physically received. The KIZ must not become sellable stock until scanned/inspected; confirmed CRPT withdrawals still need explicit return to circulation.
+
+- ID: TASK-FBS-SERVER-HISTORY-AND-KPI-EXTENSION
+  Status: Done
+  Priority: High
+  Description: Replaced the temporary client-only 100-row history with account-scoped server search/filter/sort and 25/50/100-row pagination for orders, KIZ, CRPT tasks, supplies and WB actions. Added a common history period and analytics totals/article columns for profitability and buyout percentage.
+  Next step: After deployment, use a known old order/KIZ to verify archive navigation and compare the four analytics summary KPIs for one period.
+  Related files: `src/lib/services/fbs-history.ts`, `src/lib/actions/fbs.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/lib/fbs/analytics.ts`.
+  Risks: Encrypted KIZ text search decrypts only inside the trusted server process after account/date/status scoping; it cannot use a plain SQL text index without weakening at-rest protection.
+
+- ID: TASK-FBS-HISTORY-SORT-ANALYTICS
+  Status: Done
+  Priority: High
+  Description: Preserved the complete FBS database history while bounding heavy page payloads to the latest 100 records, adding 25-row pagination, exact total counters and click-header sorting across all FBS tables. Replaced analytics date inputs with the shared calendar and added article orders, cancellations, direct FBS OP and margin. Removed the standalone unknown-circulation explanation and applied one audited user-authorized KIZ state correction.
+  Next step: After deployment, visually verify sorting/pagination and compare one article's direct FBS OP with its realization rows and cost reference for the same period.
+  Related files: `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/lib/services/fbs-workspace.ts`, `src/lib/fbs/analytics.ts`, `src/types/fbs.ts`.
+  Risks: Sorting applies to the latest loaded page window, while the UI separately shows the exact all-history total. Direct FBS OP excludes shared advertising because it has no reliable fulfillment-method allocation.
+
+- ID: TASK-FBS-CRPT-WITHDRAWAL-PRICE
+  Status: Done
+  Priority: High
+  Description: Added the mandatory numeric `Цена за единицу с НДС` to future CRPT withdrawal XLSX files using the linked WB order price (`convertedPriceRaw / 100`) with no VAT markup; return-to-circulation exports remain code-only. Rebuilt four historical withdrawal downloads as separate corrected copies.
+  Next step: Upload a corrected `_с_ценами.xlsx` file to a draft CRPT withdrawal document and verify that CRPT accepts both columns before signing.
+  Related files: `src/lib/fbs/compliance-export.ts`, `src/lib/fbs/compliance-export.test.ts`, `src/lib/services/fbs-operations.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `outputs/fbs_kiz_price_repair_2026-08-13/`.
+  Risks: Price comes from the WB seller-currency order field. A task with missing/zero price is intentionally rejected instead of generating an incomplete file.
+
+- ID: BUG-024-FBS-KIZ-POST-HANDOFF-LINK
+  Status: Done
+  Priority: High
+  Description: Pickup cancellation and defect no longer detach KIZ; authorized tables show CRPT identification codes, ambiguous UNKNOWN wording was clarified, and search/status filters were added throughout FBS.
+  Next step: After deployment, run a normal bounded operational sync and visually verify affected historical orders; do not run a broad historical resync without approval.
+  Related files: `src/lib/fbs/state-machine.ts`, `src/lib/services/sync-fbs.ts`, `src/lib/services/fbs-workspace.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`.
+  Risks: An old order with neither a saved KIZ event/task nor current WB SGTIN metadata cannot be reconstructed automatically.
+
+- ID: TASK-FBS-RUSSIAN-STATUS-LABELS
+  Status: Done
+  Priority: Medium
+  Description: Replaced raw KIZ queue statuses, WB action statuses and WB action codes in `/fbs` with understandable Russian labels. Clarified KIZ circulation wording while preserving internal enum values in storage and application logic.
+  Next step: Refresh `/fbs` and verify the labels in «Честный знак», the KIZ table and «Последние записи в WB».
+  Related files: `src/lib/fbs/status-labels.ts`, `src/lib/fbs/status-labels.test.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`.
+  Risks: Future unknown values intentionally display a Russian «Неизвестный статус/действие» fallback instead of leaking an English technical code into the visible label.
+
+- ID: TASK-FBS-KIZ-BULK-FILE-WORKFLOW
+  Status: Done
+  Priority: High
+  Description: Added separate CRPT-compatible XLSX exports for KIZ withdrawal and return to circulation, plus mass confirmation of all tasks from one exported batch using a single Chestny Znak document number/date. Exported codes contain only the identification part (`01 + GTIN + 21 + serial`), without AIs 91/92.
+  Next step: In `/fbs?tab=compliance`, upload each generated file to the matching Chestny Znak document and confirm the whole file in NimbaOS only after CRPT accepts it.
+  Related files: `src/lib/fbs/compliance-export.ts`, `src/lib/fbs/kiz.ts`, `src/lib/services/fbs-operations.ts`, `src/lib/services/fbs-workspace.ts`, `src/lib/actions/fbs.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`.
+  Risks: NimbaOS stores a local audited circulation state; Stage 1 does not query the live Chestny Znak status. An incorrectly confirmed batch would make the local state diverge from CRPT.
+
+- ID: BUG-023-FBS-ANALYTICS-ZERO
+  Status: Done
+  Priority: High
+  Description: Fixed `/fbs` analytics returning zero because WB Finance marks FBS mainly on zero-quantity logistics rows. Sale/return rows are now linked through financial `orderId` to operational `fbs_orders.externalOrderId`. Added orders, cancellations, buyouts, returns, net revenue and net transfer metrics plus article detail.
+  Next step: Refresh `/fbs`, choose an account and period, and verify the displayed values against the normal financial-report coverage for that period.
+  Related files: `src/lib/fbs/analytics.ts`, `src/lib/services/fbs-workspace.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/types/fbs.ts`.
+  Risks: Orders/cancellations are grouped by order creation date; financial metrics use report operation date. Missing FBS operational sync or Finance coverage can still make one side incomplete.
+
 - ID: BUG-018-NESTED-PNPM-BROKE-NPM-INSTALL
   Status: Done
   Priority: High
@@ -201,3 +265,4 @@ No active development task is currently assigned. Pick from `Next` after reading
   Next step: Review the locally created withdrawal tasks (including the 9 repaired Nimba July 28 mappings) and define who confirms their Chestny Znak documents. Separately review and approve the production migration; keep all warehouse write gates off until opening balances are reconciled and a live write is explicitly approved. PDF import is optional for pre-packing code-pool accounting.
   Related files: `prisma/schema.prisma`, `prisma/migrations/20260730120000_fbs_operations`, `src/app/(dashboard)/fbs`, `src/lib/services/sync-fbs.ts`, `src/lib/services/fbs-operations.ts`, `src/lib/actions/fbs.ts`.
   Risks: Only codes actually scanned/attached in WB can be read back; codes with invalid format, order reuse, unavailable local state or GTIN mismatch are not silently reassigned and require operator review; local opening physical balances remain an explicit reconciliation task; PDF import is not implemented; no production migration or WB write was performed; True API is deferred.
+2026-08-13 - Galioni historical CRPT files corrected: completed. Two corrected XLSX copies contain 11 and 173 active withdrawal rows; 11 canceled-order rows were removed, prices preserved, no duplicates across files.

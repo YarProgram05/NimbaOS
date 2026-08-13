@@ -112,11 +112,14 @@ Core rules:
 - NimbaOS is the source of truth for physical and reserved stock on seller warehouses; WB stock is a reconciliation value and is published only by an explicit user action.
 - A new/confirmed FBS order reserves one unit without reducing physical stock. Pre-handoff cancellation releases the reserve. Handoff reduces physical stock. Post-handoff cancellation or defect creates an expected return and never restores availability automatically.
 - FBS assortment is configured per seller warehouse and `chrtId`. Marking is inferred from WB metadata/report where possible and can be confirmed manually.
-- Each marked unit is stored as a KIZ. Full DataMatrix is AES-256-GCM encrypted; SHA-256 of the normalized code is the unique identity; UI and logs receive only a mask.
+- Each marked unit is stored as a KIZ. Full DataMatrix is AES-256-GCM encrypted; SHA-256 of the normalized code is the unique identity. Logs and viewer-facing UI receive only a mask; authorized FBS managers/admins see only the CRPT identification part `01GTIN21serial`, never AIs `91/92`.
 - Scanner input accepts `]d2`, preserves ASCII GS and parses AIs `01`, `21`, `91`, `92`.
 - Marked orders cannot be completed through NimbaOS until a KIZ is assigned, required metadata is valid and the KIZ is confirmed in circulation.
-- Seller-side commissioning, withdrawal after FBS sale and return to circulation are tracked as immutable tasks/events. Stage 1 uses XLSX export plus manual confirmation of the Chestny Znak document.
+- Seller-side commissioning, withdrawal after FBS handoff for remote delivery and return to circulation are tracked as immutable tasks/events. An order only reserves the KIZ; the withdrawal task starts at handoff, not at order creation or final buyout. Stage 1 uses separate CRPT-compatible XLSX files for withdrawal and return to circulation, tracks each file as a batch and mass-confirms all included KIZs with one Chestny Znak document number/date. Withdrawal files contain `Код маркировки` and the numeric `Цена за единицу с НДС`, sourced from the WB order price in seller currency; no VAT markup is added.
+- FBS orders/cancellations come from `fbs_orders`. Financial buyouts, returns, revenue and transfer come from `realization_reports` and are linked by account-scoped `orderId`; row-level `deliveryMethod=FBS` is only a fallback because WB may set it on a related logistics row.
 - Damaged, lost and physically returned units go to quarantine or exception handling and do not become available automatically.
+- `canceled_by_client` and `defect` are post-handoff return states: the KIZ remains associated with the order and a replacement KIZ is not requested. `UNKNOWN` means only that the source did not provide an explicit Chestny Znak circulation state; it must not be silently treated as commissioned or withdrawn.
+- Every FBS data section provides local search and relevant status filters for the loaded workspace rows.
 - WB mutations (attach KIZ, order status, supply movement/closure, stock publication) require a manager action, a per-warehouse write gate and an audit log. The gate is disabled by default and only an admin can enable it.
 
 Stage 2 direct Chestny Znak API integration is intentionally deferred until credentials, certificate/signature flow and production operating rules are confirmed.

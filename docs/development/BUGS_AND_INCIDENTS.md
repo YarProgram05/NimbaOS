@@ -1,5 +1,86 @@
 # Bugs And Incidents
 
+## BUG-025: CRPT withdrawal XLSX omitted required unit price
+
+Status:
+- Fixed and historical downloads repaired on 2026-08-13.
+
+Symptoms:
+- Chestny Znak accepted the marking-code list but required `Цена за единицу с НДС` for every withdrawal row.
+- Existing NimbaOS withdrawal exports contained only `Код маркировки`.
+
+Root cause:
+- The initial bulk-file implementation followed the minimal marking-code example and did not include the price field required by the selected CRPT remote-sale withdrawal form.
+
+Fix:
+- Added numeric per-unit price from the linked WB FBS order (`convertedPriceRaw / 100`) to withdrawal exports.
+- Added no VAT markup; the seller uses VAT 0% and the WB seller-currency price is exported as the final amount.
+- Return-to-circulation exports remain code-only. Missing/zero prices now fail the export explicitly.
+- Rebuilt four earlier downloads as separate `_с_ценами.xlsx` files while preserving originals.
+
+Verification:
+- 9, 16, 163 and 179 rows matched without duplicates or missing prices; all four saved workbooks passed re-import and visual checks.
+- `npm test`: 35/35; type-check passed; lint passed with two unrelated existing `<img>` warnings.
+
+Related files:
+`src/lib/fbs/compliance-export.ts`, `src/lib/fbs/compliance-export.test.ts`, `src/lib/services/fbs-operations.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`
+
+## BUG-024: Post-handoff cancellation or defect showed a missing KIZ
+
+Status:
+- Fixed at code level on 2026-08-12.
+
+Symptoms:
+- Orders canceled by the client at pickup or marked defective displayed `Нет КИЗа` / `Нужен КИЗ`.
+- KIZ values in FBS tables were masked and formatted differently from the CRPT XLSX.
+- `UNKNOWN` circulation state was shown as ambiguous `Не определён`.
+
+Root cause:
+- `canceled_by_client` and `defect` were included in the pre-handoff cancellation set. If `shipmentApplied` was observed late, the state machine emitted `UNASSIGN_KIZ`.
+- Workspace tables intentionally returned only `maskedCode`, even to authorized operators.
+- New/imported WB codes correctly defaulted to local `UNKNOWN`, but the interface did not explain that the source lacked a confirmed CRPT state.
+
+Fix:
+- Classified pickup cancellation and defect as post-handoff returns regardless of a late shipment flag; they never release the KIZ assignment.
+- Added order-table recovery from the latest withdrawal task or KIZ event for already processed history. The next operational sync can reattach a WB metadata code when WB still returns it.
+- Authorized operators receive only `01GTIN21serial`; cryptographic AIs 91/92 remain excluded. Viewers remain masked.
+- Renamed and explained `UNKNOWN`, clarified that CRPT primary-document fields without `*` are optional, and changed confirmation input to the number/ID of an already signed CRPT document.
+- Added search and relevant filters to all FBS tabs.
+
+Verification:
+- `npm test`: 33/33 passed, including late-shipment pickup cancellation and defect tests.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with two unrelated existing `<img>` warnings.
+- 2026-08-13 bounded read-only audit found 57 affected historical units (29 Galioni, 28 Nimba): every unit came from `wb_fbs_metadata`, had a pickup-cancellation/defect order history, and none was a genuinely unassigned manual/scanner warehouse KIZ.
+
+Related files:
+`src/lib/fbs/state-machine.ts`, `src/lib/fbs/state-machine.test.ts`, `src/lib/services/fbs-workspace.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/types/fbs.ts`
+
+## BUG-023: FBS analytics showed zero sales and transfer
+
+Status:
+- Fixed and read-only DB-verified on 2026-08-12.
+
+Symptoms:
+- Selecting dates in `/fbs` analytics and clicking `Применить` showed zero sales, returns and transfer despite existing FBS activity.
+- The screen had no FBS order, cancellation or revenue cards.
+
+Root cause:
+- The query required `realization_reports.deliveryMethod` to contain `FBS` on the same row.
+- WB Finance populates that field mainly on zero-quantity logistics rows. The connected `Продажа`/`Возврат` rows often have an empty delivery method but share the FBS order ID.
+
+Fix:
+- Match sale/return rows through `realization_reports.orderId = fbs_orders.externalOrderId`; retain a directly tagged sale/return row as a fallback.
+- Added explicit FBS orders, cancellations, buyouts, returns, net revenue and net transfer metrics and clarified the different order-date/finance-date bases.
+- Added isolated tests for order-ID matching, direct-tag fallback, return netting and cancellation classification.
+
+Verification:
+- `npm test`: 26/26 passed; `npm run type-check`: passed; `npm run lint`: passed with two unrelated existing `<img>` warnings.
+- Read-only local DB calculation for 2026-08-01 - 2026-08-11 returned non-zero metrics for both active cabinets.
+
+Related files:
+`src/lib/fbs/analytics.ts`, `src/lib/fbs/analytics.test.ts`, `src/lib/services/fbs-workspace.ts`, `src/app/(dashboard)/fbs/fbs-client.tsx`, `src/types/fbs.ts`
+
 ## BUG-022: Nimba KIZs from July 28 were not created and metadata looked blocked
 
 Status:

@@ -1,9 +1,13 @@
 import { prisma } from '@/lib/db'
 import type { FbsWorkspaceData } from '@/types/fbs'
 import { getFbsOrderMetadataState } from '@/lib/fbs/metadata'
+import { summarizeFbsAnalytics } from '@/lib/fbs/analytics'
+import { decrypt } from '@/lib/encryption'
+import { toKizIdentificationCode } from '@/lib/fbs/kiz'
 
 const TERMINAL_SUPPLIER_STATUSES = ['complete', 'cancel']
 const TERMINAL_WB_STATUSES = ['sold', 'canceled', 'canceled_by_client', 'declined_by_client', 'defect']
+const FBS_HISTORY_LOAD_LIMIT = 100
 
 export async function getFbsWorkspaceData(input: {
   wbAccountId: string
@@ -13,10 +17,16 @@ export async function getFbsWorkspaceData(input: {
   dateFrom?: string
   dateTo?: string
 }): Promise<FbsWorkspaceData> {
-  const dateTo = input.dateTo ? new Date(`${input.dateTo}T23:59:59.999Z`) : new Date()
-  const dateFrom = input.dateFrom
+  const financeDateTo = input.dateTo ? new Date(`${input.dateTo}T23:59:59.999Z`) : new Date()
+  const financeDateFrom = input.dateFrom
     ? new Date(`${input.dateFrom}T00:00:00.000Z`)
-    : new Date(dateTo.getTime() - 29 * 24 * 60 * 60 * 1000)
+    : new Date(financeDateTo.getTime() - 29 * 24 * 60 * 60 * 1000)
+  const operationalDateTo = input.dateTo
+    ? new Date(`${input.dateTo}T23:59:59.999+03:00`)
+    : new Date()
+  const operationalDateFrom = input.dateFrom
+    ? new Date(`${input.dateFrom}T00:00:00.000+03:00`)
+    : new Date(operationalDateTo.getTime() - 29 * 24 * 60 * 60 * 1000)
 
   const [
     account,
@@ -26,8 +36,12 @@ export async function getFbsWorkspaceData(input: {
     orders,
     kizUnits,
     complianceTasks,
+    operationBatches,
     recentActions,
-    financialRows,
+    analyticsOrders,
+    financialCandidates,
+    costPrices,
+    historyCounts,
     openOrders,
     overdueOrders,
     openComplianceTasks,
@@ -35,7 +49,7 @@ export async function getFbsWorkspaceData(input: {
   ] = await Promise.all([
     prisma.wbAccount.findUniqueOrThrow({
       where: { id: input.wbAccountId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, taxRate: true },
     }),
     prisma.fbsSellerWarehouse.findMany({
       where: { wbAccountId: input.wbAccountId },
@@ -49,7 +63,7 @@ export async function getFbsWorkspaceData(input: {
     }),
     prisma.fbsSupply.findMany({
       where: { wbAccountId: input.wbAccountId },
-      take: 200,
+      take: FBS_HISTORY_LOAD_LIMIT,
       orderBy: [{ done: 'asc' }, { createdAt: 'desc' }],
       include: {
         warehouse: { select: { name: true } },
@@ -73,7 +87,7 @@ export async function getFbsWorkspaceData(input: {
     }),
     prisma.fbsOrder.findMany({
       where: { wbAccountId: input.wbAccountId },
-      take: 200,
+      take: FBS_HISTORY_LOAD_LIMIT,
       orderBy: { createdAtWb: 'desc' },
       include: {
         warehouse: { select: { name: true } },
@@ -82,16 +96,46 @@ export async function getFbsWorkspaceData(input: {
         kizUnits: {
           select: {
             maskedCode: true,
+            encryptedCode: true,
             circulationState: true,
             wbValidationStatus: true,
           },
           take: 1,
         },
+        complianceTasks: {
+          where: { type: { in: ['WITHDRAWAL_REMOTE_SALE', 'WITHDRAWAL_B2B'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            kizUnit: {
+              select: {
+                maskedCode: true,
+                encryptedCode: true,
+                circulationState: true,
+                wbValidationStatus: true,
+              },
+            },
+          },
+        },
+        kizEvents: {
+          orderBy: { occurredAt: 'desc' },
+          take: 1,
+          select: {
+            kizUnit: {
+              select: {
+                maskedCode: true,
+                encryptedCode: true,
+                circulationState: true,
+                wbValidationStatus: true,
+              },
+            },
+          },
+        },
       },
     }),
     prisma.kizUnit.findMany({
       where: { wbAccountId: input.wbAccountId },
-      take: 200,
+      take: FBS_HISTORY_LOAD_LIMIT,
       orderBy: { updatedAt: 'desc' },
       include: {
         warehouse: { select: { name: true } },
@@ -101,35 +145,82 @@ export async function getFbsWorkspaceData(input: {
     }),
     prisma.kizComplianceTask.findMany({
       where: { wbAccountId: input.wbAccountId },
-      take: 200,
+      take: FBS_HISTORY_LOAD_LIMIT,
       orderBy: [{ status: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }],
       include: {
-        kizUnit: { select: { maskedCode: true } },
+        kizUnit: { select: { maskedCode: true, encryptedCode: true } },
         order: { select: { externalOrderId: true } },
+      },
+    }),
+    prisma.kizOperationBatch.findMany({
+      where: { wbAccountId: input.wbAccountId },
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        tasks: {
+          select: { type: true, status: true },
+        },
       },
     }),
     prisma.fbsActionLog.findMany({
       where: { wbAccountId: input.wbAccountId },
-      take: 30,
+      take: FBS_HISTORY_LOAD_LIMIT,
       orderBy: { createdAt: 'desc' },
+    }),
+    prisma.fbsOrder.findMany({
+      where: {
+        wbAccountId: input.wbAccountId,
+        createdAtWb: { gte: operationalDateFrom, lte: operationalDateTo },
+      },
+      select: {
+        externalOrderId: true,
+        nmId: true,
+        vendorCode: true,
+        supplierStatus: true,
+        wbStatus: true,
+      },
     }),
     prisma.realizationReport.findMany({
       where: {
         wbAccountId: input.wbAccountId,
-        deliveryMethod: { contains: 'fbs', mode: 'insensitive' },
         OR: [
-          { rrDt: { gte: dateFrom, lte: dateTo } },
-          { rrDt: null, dateFrom: { gte: dateFrom, lte: dateTo } },
+          { rrDt: { gte: financeDateFrom, lte: financeDateTo } },
+          {
+            rrDt: null,
+            dateFrom: { lte: financeDateTo },
+            dateTo: { gte: financeDateFrom },
+          },
         ],
       },
       select: {
+        orderId: true,
+        deliveryMethod: true,
         nmId: true,
         vendorCode: true,
         docTypeName: true,
         quantity: true,
+        retailPriceWithDisc: true,
+        ppvzSppPrc: true,
         ppvzForPay: true,
+        deliveryRub: true,
+        storageFee: true,
+        acceptance: true,
+        additionalPayment: true,
+        penalty: true,
+        deduction: true,
       },
     }),
+    prisma.costPrice.findMany({
+      where: { wbAccountId: input.wbAccountId },
+      select: { vendorCode: true, costPrice: true },
+    }),
+    Promise.all([
+      prisma.fbsSupply.count({ where: { wbAccountId: input.wbAccountId } }),
+      prisma.fbsOrder.count({ where: { wbAccountId: input.wbAccountId } }),
+      prisma.kizUnit.count({ where: { wbAccountId: input.wbAccountId } }),
+      prisma.kizComplianceTask.count({ where: { wbAccountId: input.wbAccountId } }),
+      prisma.fbsActionLog.count({ where: { wbAccountId: input.wbAccountId } }),
+    ]),
     prisma.fbsOrder.count({
       where: {
         wbAccountId: input.wbAccountId,
@@ -152,6 +243,35 @@ export async function getFbsWorkspaceData(input: {
       where: { wbAccountId: input.wbAccountId, physicalState: 'QUARANTINE' },
     }),
   ])
+
+  const candidateOrderIds = Array.from(
+    new Set(
+      financialCandidates
+        .map((row) => row.orderId)
+        .filter((orderId): orderId is bigint => orderId !== null),
+    ),
+  )
+  const operationalFbsMatches = candidateOrderIds.length
+    ? await prisma.fbsOrder.findMany({
+        where: {
+          wbAccountId: input.wbAccountId,
+          externalOrderId: { in: candidateOrderIds },
+        },
+        select: { externalOrderId: true },
+      })
+    : []
+  const knownFbsOrderIds = new Set(
+    operationalFbsMatches.map((order) => order.externalOrderId.toString()),
+  )
+  const analytics = summarizeFbsAnalytics({
+    orders: analyticsOrders,
+    financeRows: financialCandidates,
+    knownFbsOrderIds,
+    costPriceByVendorCode: new Map(
+      costPrices.map((row) => [row.vendorCode.trim().toLocaleLowerCase('ru-RU'), Number(row.costPrice)]),
+    ),
+    taxRate: Number(account.taxRate),
+  })
 
   const assortment = warehouses.flatMap((warehouse) =>
     warehouse.assortmentItems.map((item) => ({
@@ -181,39 +301,8 @@ export async function getFbsWorkspaceData(input: {
     { onHand: 0, reserved: 0, available: 0, wbStock: 0, stockMismatch: 0 },
   )
 
-  let fbsRevenue = 0
-  let fbsSales = 0
-  let fbsReturns = 0
-  const financeByArticle = new Map<
-    string,
-    { nmId: number; vendorCode: string; sales: number; returns: number; revenue: number }
-  >()
-  for (const row of financialRows) {
-    const quantity = Math.abs(row.quantity)
-    const key = `${row.nmId}:${row.vendorCode}`
-    const article = financeByArticle.get(key) ?? {
-      nmId: row.nmId,
-      vendorCode: row.vendorCode,
-      sales: 0,
-      returns: 0,
-      revenue: 0,
-    }
-    if (row.docTypeName.toLowerCase().includes('возврат')) {
-      fbsReturns += quantity
-      fbsRevenue -= Number(row.ppvzForPay)
-      article.returns += quantity
-      article.revenue -= Number(row.ppvzForPay)
-    } else if (row.docTypeName.toLowerCase().includes('продаж')) {
-      fbsSales += quantity
-      fbsRevenue += Number(row.ppvzForPay)
-      article.sales += quantity
-      article.revenue += Number(row.ppvzForPay)
-    }
-    financeByArticle.set(key, article)
-  }
-
   return {
-    account,
+    account: { id: account.id, name: account.name },
     generatedAt: new Date().toISOString(),
     permissions: {
       canOperate: input.canOperate,
@@ -226,9 +315,26 @@ export async function getFbsWorkspaceData(input: {
       overdueOrders,
       openComplianceTasks,
       quarantinedKiz,
-      fbsRevenue: fbsRevenue.toFixed(2),
-      fbsSales,
-      fbsReturns,
+      fbsOrders: analytics.orders,
+      fbsCancellations: analytics.cancellations,
+      fbsRevenue: analytics.revenue.toFixed(2),
+      fbsToTransfer: analytics.toTransfer.toFixed(2),
+      fbsSales: analytics.sales,
+      fbsReturns: analytics.returns,
+      fbsOperatingProfit: analytics.operatingProfit.toFixed(2),
+      fbsMarginality: analytics.marginality.toFixed(2),
+      fbsProfitability: analytics.profitability.toFixed(2),
+      fbsBuyoutPercent: analytics.buyoutPercent.toFixed(2),
+    },
+    rowCounts: {
+      warehouses: warehouses.length,
+      assortment: assortment.length,
+      supplies: historyCounts[0],
+      orders: historyCounts[1],
+      kizUnits: historyCounts[2],
+      complianceTasks: historyCounts[3],
+      recentActions: historyCounts[4],
+      financeByArticle: analytics.financeByArticle.length,
     },
     warehouses: warehouses.map((warehouse) => {
       const items = warehouse.assortmentItems
@@ -265,11 +371,16 @@ export async function getFbsWorkspaceData(input: {
     assortment,
     orders: orders.map((order) => {
       const requiresKiz = Boolean(order.assortmentItem?.requiresKiz)
+      const canUseHistoricalKiz =
+        order.shipmentApplied || ['sold', 'canceled_by_client', 'defect'].includes(order.wbStatus)
+      const effectiveKiz = order.kizUnits[0]
+        ?? (canUseHistoricalKiz ? order.complianceTasks[0]?.kizUnit : null)
+        ?? (canUseHistoricalKiz ? order.kizEvents[0]?.kizUnit : null)
       const metadata = getFbsOrderMetadataState({
         metadata: order.metadataStatus,
         requiresKiz,
-        hasKiz: order.kizUnits.length > 0,
-        wbKizValidationStatus: order.kizUnits[0]?.wbValidationStatus ?? null,
+        hasKiz: Boolean(effectiveKiz),
+        wbKizValidationStatus: effectiveKiz?.wbValidationStatus ?? null,
       })
       return {
         id: order.id,
@@ -282,7 +393,7 @@ export async function getFbsWorkspaceData(input: {
         supplierStatus: order.supplierStatus,
         wbStatus: order.wbStatus,
         requiresKiz,
-        kizMasked: order.kizUnits[0]?.maskedCode ?? null,
+        kizCode: getKizDisplayCode(effectiveKiz, input.canViewFullKiz),
         metadataReady: metadata.ready,
         metadataLabel: metadata.label,
         metadataIssue: metadata.issue,
@@ -291,7 +402,7 @@ export async function getFbsWorkspaceData(input: {
     }),
     kizUnits: kizUnits.map((unit) => ({
       id: unit.id,
-      maskedCode: unit.maskedCode,
+      code: getKizDisplayCode(unit, input.canViewFullKiz),
       gtin: unit.gtin,
       serialMasked: unit.serialMasked,
       physicalState: unit.physicalState,
@@ -307,9 +418,18 @@ export async function getFbsWorkspaceData(input: {
       type: task.type,
       status: task.status,
       dueAt: task.dueAt?.toISOString() ?? null,
-      maskedCode: task.kizUnit.maskedCode,
+      code: getKizDisplayCode(task.kizUnit, input.canViewFullKiz),
       externalOrderId: task.order?.externalOrderId.toString() ?? null,
       documentNumber: task.documentNumber,
+    })),
+    operationBatches: operationBatches.map((batch) => ({
+      id: batch.id,
+      filename: batch.filename,
+      createdAt: batch.createdAt.toISOString(),
+      taskCount: batch.taskCount,
+      taskTypes: Array.from(new Set(batch.tasks.map((task) => task.type))),
+      pendingCount: batch.tasks.filter((task) => ['OPEN', 'EXPORTED'].includes(task.status)).length,
+      confirmedCount: batch.tasks.filter((task) => task.status === 'CONFIRMED').length,
     })),
     recentActions: recentActions.map((action) => ({
       id: action.id,
@@ -318,8 +438,28 @@ export async function getFbsWorkspaceData(input: {
       error: action.error,
       createdAt: action.createdAt.toISOString(),
     })),
-    financeByArticle: Array.from(financeByArticle.values())
-      .sort((left, right) => right.revenue - left.revenue)
-      .map((row) => ({ ...row, revenue: row.revenue.toFixed(2) })),
+    financeByArticle: analytics.financeByArticle.map((row) => ({
+      ...row,
+      revenue: row.revenue.toFixed(2),
+      toTransfer: row.toTransfer.toFixed(2),
+      operatingProfit: row.operatingProfit.toFixed(2),
+      marginality: row.marginality.toFixed(2),
+      profitability: row.profitability.toFixed(2),
+      buyoutPercent: row.buyoutPercent.toFixed(2),
+    })),
+  }
+}
+
+function getKizDisplayCode(
+  unit: { maskedCode: string; encryptedCode: string } | null | undefined,
+  canViewFullKiz: boolean,
+): string | null {
+  if (!unit) return null
+  if (!canViewFullKiz) return unit.maskedCode
+
+  try {
+    return toKizIdentificationCode(decrypt(unit.encryptedCode))
+  } catch {
+    return unit.maskedCode
   }
 }

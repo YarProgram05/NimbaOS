@@ -128,6 +128,11 @@ export function maskKizCode(parsed: KizParsedCode): string {
   return `${gtinPart} 21${maskSerial(parsed.serial) ?? '…'}`
 }
 
+export function toKizIdentificationCode(input: string): string {
+  const parsed = parseKizCode(input)
+  return `01${parsed.gtin}21${parsed.serial}`
+}
+
 export function prepareKizForStorage(input: string) {
   const parsed = parseKizCode(input)
   return {

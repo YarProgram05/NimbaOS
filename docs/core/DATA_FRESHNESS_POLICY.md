@@ -64,6 +64,7 @@ Operational rules:
 - FBS stock reconciliation: `fbs_assortment_items.wbStock/wbStockSyncedAt`; target interval 15 minutes. Each run refreshes seller warehouses and checks all locally known product-size `chrtId` values so positive FBS positions can be discovered independently of orders. Local `onHand/reserved` changes are immediate and are not replaced by sync.
 - FBS marking: WB excise/marking report and order metadata; target interval 60 minutes.
 - FBS finance: enriched `realization_reports` with `deliveryMethod/orderId/KIZ`; normal finance coverage rules apply.
+- A complete FBS analytic period needs both operational `fbs_orders` coverage (orders, cancellations and order identity) and Finance coverage (buyouts, returns, revenue and transfer). `deliveryMethod=FBS` alone is not a completeness signal because WB may place it only on logistics rows.
 
 ## API Rule
 

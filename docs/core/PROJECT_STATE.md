@@ -16,7 +16,21 @@ Update 2026-05-25: `Заказано руб.` sync was repaired. `reports.period
 
 Update 2026-07-30: FBS workplace is implemented at code level: seller warehouses/assortment, local inventory/reservations, orders/status/meta, supplies/stickers, KIZ lifecycle, manual Chestny Znak queue, FBS finance enrichment/analytics, interval sync and guarded WB writes. Operational sync securely imports the exact WB `orderId -> sgtin[]` mapping before redacting metadata. Initial live runs created/assigned 20 current codes; BUG-022 then repaired 9 Nimba mappings from 2026-07-28 and replaced two stale workers with one current worker. WB metadata readiness is separate from Chestny Znak circulation. No production migration, schedule enablement, bounded historical backfill or WB write was executed.
 
-Текущее состояние NimbaOS. Last updated: 2026-07-30.
+Update 2026-08-12: BUG-023 fixed FBS analytics false zeroes by linking Finance sale/return rows to operational FBS orders through account-scoped `orderId`. `/fbs` now shows orders, cancellations, buyouts, returns, net revenue and net transfer. The handoff-time KIZ withdrawal trigger was retained and documented against current light-industry distance-sale rules.
+
+Update 2026-08-12: FBS Stage 1 Chestny Znak processing now supports separate withdrawal/return XLSX files and mass confirmation of a complete exported batch. Local KIZ circulation changes only after operator confirmation of the accepted CRPT document; direct live CRPT verification remains Stage 2.
+
+Update 2026-08-12: BUG-024 fixed post-handoff KIZ detachment. Pickup cancellation and defect keep the order-to-KIZ association, including late shipment-status reconciliation; historical events/tasks are used for current UI recovery. Authorized FBS tables show the CRPT identification code without AIs 91/92, `UNKNOWN` is explained as «Статус в ЧЗ не указан», and all FBS tabs now have local search/status filters. No production or WB mutation was performed.
+
+Update 2026-08-13: FBS page growth is bounded without deleting history: heavy lists load an operationally prioritised window of up to 100 rows, paginate locally and show exact database totals; all FBS tables sort from column headers. Analytics uses the shared range calendar and adds article orders/cancellations plus direct FBS OP/margin, explicitly excluding unallocated shared advertising. One exact user-authorized sold-order KIZ was changed locally from `IN_CIRCULATION` to `WITHDRAWN` with an audit event; no WB/CRPT write or sync occurred.
+
+Update 2026-08-13: the temporary local 100-row FBS archive limit was superseded by server-side full-history search/filter/sort and 25/50/100-row pages for orders, KIZ, CRPT tasks, supplies and WB actions, with a shared optional history date range. Analytics now includes total and article profitability/buyout percentage alongside direct OP/margin. Encrypted KIZ values remain protected at rest and are not bulk-returned to the browser.
+
+Update 2026-08-13: BUG-025 prevents late historical pickup-cancellation/defect records from generating an unconfirmed withdrawal followed immediately by return to circulation. Pending withdrawals are canceled and remain locally in circulation while physical state stays return-expected; confirmed withdrawals retain the explicit return-to-circulation path. Reconciled 28 Nimba and 40 Galioni tasks with audit events; final open canceled-order withdrawal count is zero in both cabinets. No WB/CRPT call was made.
+
+Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdrawal XLSX files using the linked WB order `convertedPriceRaw / 100`, without VAT markup for the current 0% VAT seller. Four historical downloads were rebuilt as corrected copies. A read-only audit tied all 57 apparent `IN_STOCK + UNKNOWN` units to historical post-handoff pickup-cancellation/defect orders; no live sync or data mutation was performed.
+
+Текущее состояние NimbaOS. Last updated: 2026-08-13.
 
 ## Current Phase
 

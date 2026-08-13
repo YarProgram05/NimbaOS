@@ -37,6 +37,78 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
 
 ## Done Recently
 
+- ID: MKT-FBS-LATE-WITHDRAWAL-RECONCILIATION-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Removed the pointless unconfirmed withdrawal-then-return cycle for orders already known as pickup cancellation/defect. Reconciled 28 Nimba and 40 Galioni tasks while preserving return-expected physical status and all audit history.
+  Next step: Discard the new 28-row Nimba withdrawal file. Generate a new Galioni file from the corrected queue before CRPT submission.
+  Related reports/metrics: withdrawal queue, order WB status, KIZ circulation state, physical return state.
+  Related cabinets: WB Nimba, WB Galioni.
+  Risks: Do not treat `RETURN_EXPECTED` as physically received stock. Confirmed withdrawals still require a real return-to-circulation document after receipt.
+
+- ID: MKT-FBS-FULL-HISTORY-AND-KPIS-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Full retained FBS history is now searchable/filterable/sortable through server pages of 25/50/100 rows. Added a shared history period plus total/article profitability and buyout percentage in analytics.
+  Next step: Verify an old known order/KIZ after deployment and use the analytics explanation when comparing direct FBS OP with the complete Finance report.
+  Related reports/metrics: FBS archive, direct FBS OP, margin, profitability, buyout percentage.
+  Related cabinets: all FBS-enabled cabinets.
+  Risks: Shared advertising remains excluded from direct FBS OP; unfinished orders are intentionally excluded from buyout percentage.
+
+- ID: MKT-FBS-BOUNDED-HISTORY-AND-OP-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Preserved full FBS history in the database while bounding and paginating page data, added exact counters and table-header sorting, and extended article analytics with orders, cancellations, direct FBS OP and margin.
+  Next step: Compare one deployed article/period to the Finance report and remember that shared advertising is excluded from direct FBS OP.
+  Related reports/metrics: FBS orders/cancellations, realization expenses, cost price, tax rate, FBS revenue/transfer/direct OP/margin.
+  Related cabinets: all FBS-enabled cabinets.
+  Risks: The latest 100 history rows are sortable on the page; exact older records remain stored but require a future server-side history/archive view. FBS OP is not the full business OP because shared ads are not allocated.
+
+- ID: MKT-FBS-CRPT-PRICE-AND-UNKNOWN-STOCK-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Added CRPT withdrawal per-unit prices from WB orders without a VAT markup, repaired four historical download files, and reconciled every apparent `IN_STOCK + Статус в ЧЗ не указан` KIZ to a historical pickup-cancellation/defect order.
+  Next step: Use the matching corrected file in a CRPT draft; after deployment run only a normal bounded FBS operational sync to reclassify historical order-linked KIZs, then verify counts before any CRPT confirmation.
+  Related reports/metrics: KIZ compliance tasks, WB FBS order converted price, local KIZ lifecycle events.
+  Related cabinets: WB Nimba, WB Galioni.
+  Risks: NimbaOS still has no live CRPT status read; do not mass-confirm circulation from inference alone.
+
+- ID: MKT-FBS-KIZ-RETURN-SEMANTICS-2026-08-12
+  Status: Done
+  Priority: High
+  Description: Corrected pickup-cancellation/defect handling so the original KIZ stays associated, clarified unknown CRPT state and document references, exposed CRPT-format identification codes to authorized users, and added filters across FBS.
+  Next step: Use a normal operational sync after deployment to recover any affected order whose SGTIN is still returned by WB, then verify the order and KIZ tabs.
+  Related reports/metrics: FBS order status, KIZ assignment, physical return, circulation task, CRPT document confirmation.
+  Related cabinets: all FBS-enabled cabinets.
+  Risks: Historical codes absent from both local event/task history and current WB metadata cannot be inferred safely.
+
+- ID: MKT-FBS-KIZ-LEGACY-EXPORT-RECONCILIATION-2026-08-12
+  Status: Done
+  Priority: High
+  Description: Converted the 163-row legacy Nimba KIZ export to the current CRPT one-column format and reconciled its count with 201 orders / 34 cancellations for 2026-07-28 - 2026-08-12.
+  Next step: Upload the converted withdrawal file to the corresponding Chestny Znak document, then confirm the stored batch in NimbaOS only after CRPT accepts it.
+  Related reports/metrics: FBS orders, cancellations, handoff state, KIZ assignment, withdrawal compliance task status.
+  Related cabinets: `WB Nimba (WB_1)`.
+  Risks: Three exported orders were canceled after handoff and remain in the withdrawal lifecycle; a physical return later requires return to circulation before resale.
+
+- ID: MKT-FBS-KIZ-BULK-FILES-2026-08-12
+  Status: Done
+  Priority: High
+  Description: Added separate XLSX queues for withdrawal and return to circulation and a one-click whole-file confirmation step, removing the normal need to confirm each KIZ separately.
+  Next step: Use the corresponding CRPT document for each file and confirm the NimbaOS batch only after the document is accepted.
+  Related reports/metrics: KIZ circulation state, compliance task status, exported operation batches, document number/date.
+  Related cabinets: all FBS-enabled cabinets.
+  Risks: Status is local and requires truthful operator confirmation until direct Chestny Znak API integration is implemented.
+
+- ID: MKT-FBS-ANALYTICS-FIX-2026-08-12
+  Status: Done
+  Priority: High
+  Description: Corrected FBS analytics and added orders, cancellations, buyouts, returns, net revenue and net transfer. Verified both active cabinets for 2026-08-01 - 2026-08-11 from the local DB.
+  Next step: Use `/fbs` with the required period; if financial values are unexpectedly absent, check both FBS operational order coverage and `REPORTS_PERIOD` coverage before syncing.
+  Related reports/metrics: `fbs_orders`, bounded `realization_reports`, FBS order ID matching, orders, cancellations, gross buyouts, returns, net revenue, net transfer.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: Order/cancellation metrics use order creation date while financial metrics use operation date; KIZ withdrawal cannot legally wait for final buyout in the current distance-sale light-industry process.
+
 - ID: MKT-BOTH-CABINETS-AUG-SEP-SUPPLY-XLSX-2026-07-25
   Status: Done
   Priority: High
@@ -205,3 +277,4 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
   Related reports/metrics: local onHand/reserved/available, WB mismatch, open/overdue FBS orders, FBS sales/returns/revenue, compliance task backlog.
   Related cabinets: all active WB accounts after explicit rollout selection.
   Risks: only codes actually attached in WB appear in metadata; invalid/reused/mismatched codes require operator review; endpoint response drift, initial balance reconciliation, missing KIZ circulation status and overdue manual Chestny Znak operations.
+2026-08-13 - Galioni corrected withdrawal files: completed. Use the corrected 11-row and 173-row XLSX files; do not upload the original 16-row and 179-row copies.
