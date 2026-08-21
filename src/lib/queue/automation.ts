@@ -47,6 +47,14 @@ export async function getAutomationQueue(): Promise<Queue<AutomationJobData>> {
   return automationQueue
 }
 
+export async function closeAutomationQueue(): Promise<void> {
+  if (!automationQueue) return
+
+  const queue = automationQueue
+  automationQueue = null
+  await queue.close()
+}
+
 export async function createAutomationWorker(
   processor: Processor<AutomationJobData>,
 ): Promise<Worker<AutomationJobData>> {

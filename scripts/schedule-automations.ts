@@ -10,6 +10,11 @@ main()
     process.exit(1)
   })
   .finally(async () => {
-    const { prisma } = await import('@/lib/db')
-    await prisma.$disconnect()
+    const { closeAutomationQueue } = await import('@/lib/queue/automation')
+    try {
+      await closeAutomationQueue()
+    } finally {
+      const { prisma } = await import('@/lib/db')
+      await prisma.$disconnect()
+    }
   })

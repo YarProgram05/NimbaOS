@@ -22,6 +22,10 @@ import { createRunForBullJob } from '@/lib/queue/sync-jobs'
 import { WbRateLimitError } from '@/lib/wb-api/client'
 import { markSyncCoverage } from '@/lib/sync/coverage'
 import { minutesSinceMoscowScheduledTime } from '@/lib/time/moscow'
+import {
+  isScheduledJobTooLate,
+  resolveScheduledStartGraceMinutes,
+} from '@/lib/queue/scheduled-job-policy'
 
 class SyncSubtaskError extends Error {
   constructor(message: string) {
@@ -59,7 +63,6 @@ const KIND_TO_PRISMA: Record<string, PrismaKind> = {
   [SYNC_JOB_KINDS.FBS_MARKING_REPORT]: 'FBS_MARKING_REPORT',
 }
 
-const SCHEDULED_START_GRACE_MINUTES = 10
 function parseDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`)
 }
@@ -102,7 +105,7 @@ async function shouldSkipScheduledJob(data: SyncJobData): Promise<string | null>
   if (schedule.intervalMinutes) return null
 
   const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
-  if (lateMinutes > SCHEDULED_START_GRACE_MINUTES) {
+  if (isScheduledJobTooLate(lateMinutes, resolveScheduledStartGraceMinutes())) {
     return `scheduled job is ${lateMinutes} minutes late`
   }
 

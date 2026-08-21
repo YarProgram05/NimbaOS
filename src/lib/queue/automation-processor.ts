@@ -6,11 +6,13 @@ import { createAutomationRunForBullJob, toAutomationPayloadJson } from '@/lib/au
 import { toPrismaAutomationKind } from '@/lib/automations/mapping'
 import { minutesSinceMoscowScheduledTime } from '@/lib/time/moscow'
 import {
+  isScheduledJobTooLate,
+  resolveScheduledStartGraceMinutes,
+} from '@/lib/queue/scheduled-job-policy'
+import {
   morningWbReportPayload,
   runMorningWbReportWorkflow,
 } from '@/lib/services/morning-wb-report-workflow'
-
-const SCHEDULED_START_GRACE_MINUTES = 10
 
 function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
   return minutesSinceMoscowScheduledTime(timeOfDay, now)
@@ -27,7 +29,7 @@ async function shouldSkipScheduledJob(data: AutomationJobData): Promise<string |
   if (!schedule?.enabled) return 'scheduled workflow is disabled'
 
   const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
-  if (lateMinutes > SCHEDULED_START_GRACE_MINUTES) {
+  if (isScheduledJobTooLate(lateMinutes, resolveScheduledStartGraceMinutes())) {
     return `scheduled workflow is ${lateMinutes} minutes late`
   }
 
