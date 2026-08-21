@@ -1,5 +1,105 @@
 # Bugs And Incidents
 
+## BUG-029: Second account advertising sync is skipped after queue wait
+
+Status:
+- Resolved and live-verified on the mini-PC on 2026-08-21.
+
+Symptoms:
+- The scheduled morning report filled `WB Nimba` but failed `WB Galioni` with missing local advertising coverage for `2026-08-01 - 2026-08-20`.
+- Galioni's `ADVERTISING_STATS` coverage remained at `2026-08-12` even though the other nightly jobs ran for both accounts.
+
+Root cause:
+- Both accounts schedule `ADVERTISING_STATS` for 05:00 MSK and the sync worker intentionally has concurrency 1.
+- Nimba ran first for 14 minutes 52 seconds. Galioni then reached `processSyncJob` 14 minutes late.
+- `SCHEDULED_START_GRACE_MINUTES = 10` treats queue wait as stale-schedule lateness, so the Galioni BullMQ job completed as `skippedScheduledJob` before a `SyncJobRun` row was created.
+- The 10:00 automation correctly rejected Galioni because its advertising coverage had not advanced.
+
+Resolution:
+- Replaced the duplicated 10-minute guards in sync and automation processors with one shared scheduled-job policy. The default grace is now 1080 minutes (18 hours), configurable through `SCHEDULED_START_GRACE_MINUTES` and capped at 1439 minutes so a stale daily occurrence cannot overlap the next day's occurrence.
+- Added regression tests for the default boundary, the observed 14-minute queue wait, custom values, invalid values and the below-one-day cap. Type-check, focused lint and compose validation passed.
+- Deployed commit `bb139f9`; both production workers report `SCHEDULED_START_GRACE_MINUTES=1080` and started normally.
+- With owner approval, ran only Galioni advertising stats for `2026-08-07 - 2026-08-21`. Run `28d4ba91-cea7-4de1-97e7-1c3ba2d23b80` succeeded on the first attempt with zero campaign errors and advanced Galioni coverage through `2026-08-21`.
+- Re-ran the morning report for target date `2026-08-20`. Run `a9dfd0a9-dfb7-4464-ace9-a477eeb83e5e` succeeded for both accounts with zero failures and wrote 20 rows to each of `WB Nimba` and `WB Galioni`.
+
+Prevention:
+- Keep sync worker concurrency at 1 to respect WB limits; legitimate same-time account jobs can now wait safely in the queue.
+- Keep the grace below one daily cycle and verify both account coverage rows before treating a partial report as a Google Sheets failure.
+
+Related files:
+- `src/lib/queue/scheduled-job-policy.ts`, `src/lib/queue/sync-processor.ts`, `src/lib/queue/automation-processor.ts`, `docker-compose.prod.yml`
+
+## BUG-028: Production automation schedule has no worker or Google credential
+
+Status:
+- Resolved on the mini-PC on 2026-08-21.
+
+Symptoms:
+- `Утренний отчет WB` appears scheduled for 10:00 MSK, but it would not execute on the mini-PC.
+
+Root cause:
+- The production compose stack runs only the sync worker; the separate BullMQ `automation` queue has no worker process.
+- `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` is not injected into the running production app image, so the Google Sheets client cannot authenticate.
+
+Required fix:
+- Added and deployed the permanent `automation-worker` service, injected the Google service-account credential through `.env.production` without exposing it, and re-applied the automation schedule.
+- The worker starts successfully and the queue had no waiting or active jobs at startup; one future delayed scheduled job remains registered.
+- Initial deployment intentionally avoided a report while coverage was incomplete. After `BUG-029` recovery, live run `a9dfd0a9-dfb7-4464-ace9-a477eeb83e5e` verified both mapped sheets successfully.
+
+Prevention:
+- Start `automation-worker` with the production stack and re-apply automation schedules after recreating the Redis data volume.
+- Keep the real Google credential only in untracked environment files.
+
+Related files:
+- `docker-compose.prod.yml`, `scripts/automation-worker.ts`, `scripts/schedule-automations.ts`, `src/lib/google/sheets.ts`
+
+## BUG-027: Restored production schedules existed only in PostgreSQL
+
+Status:
+- Resolved on the mini-PC on 2026-08-21.
+
+Symptoms:
+- Neither cabinet started the enabled `Карточки` synchronization at 02:00 MSK.
+- The sync worker was healthy but had no job activity.
+
+Root cause:
+- PostgreSQL contained the enabled `SyncScheduleSetting` rows, but Redis had no BullMQ job schedulers or delayed jobs. Database schedule settings describe the intended schedule; they do not recreate executable Redis scheduler metadata by themselves.
+
+Resolution:
+- Re-applied all production sync schedules from the database through `scripts/schedule-sync.ts` using the existing app image.
+- Registered 16 enabled schedulers for two active accounts.
+- Manually ran both missed product-card jobs; both succeeded on the first attempt with zero errors.
+
+Prevention:
+- After restoring/recreating the Redis data volume, run the production schedule application command and verify both `bull:sync:repeat` and `bull:sync:delayed` are populated.
+
+Related files:
+- `src/lib/sync/schedules.ts`, `scripts/schedule-sync.ts`, `docker-compose.prod.yml`, `docs/core/COMMANDS.md`
+
+## BUG-026: Cloudflare Tunnel becomes externally unreachable behind MGTS double NAT
+
+Status:
+- Blocked by network/provider ingress decision.
+
+Symptoms:
+- The Windows `cloudflared` service registers four connections and its local readiness endpoint reports four ready replicas, but `app.nimbaos.ru` quickly changes from HTTP 200/502 to 530/1033.
+- Windows can retain four apparently `Established` TCP connections to Cloudflare port 7844 after Cloudflare no longer routes public requests through them.
+
+Affected area:
+- Mini-PC production ingress only. Docker PostgreSQL, Redis, Next.js app and worker remain healthy; local `/api/health` returns 200.
+
+Investigation:
+- Reproduced with HTTP2 and QUIC, the installed Windows connector and a newer Docker connector, normal DME edges and forced US `ewr/ord` edges.
+- Temporarily lowering/disabling the ZTE firewall and Anti-DoS did not help.
+- After moving the mini-PC to Keenetic, the route was `192.168.2.1 -> 192.168.1.1 -> 100.90.0.1`, proving both double NAT and MGTS CGNAT; the ZTE is not a transparent bridge.
+
+Resolution:
+- Not resolved. The original automatic global-region Cloudflared service was restored.
+- Request a public/static IPv4 from MGTS and retest; if tunnel stability remains poor, use direct HTTPS with a reverse proxy or a VPS reverse tunnel.
+
+Related files:
+- `docker-compose.prod.yml`, `Dockerfile`, `docs/development/DEV_HANDOFF.md`
+
 ## BUG-025: CRPT withdrawal XLSX omitted required unit price
 
 Status:

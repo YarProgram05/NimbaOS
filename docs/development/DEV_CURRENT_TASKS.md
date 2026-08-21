@@ -2,7 +2,7 @@
 
 ## Active
 
-No active development task is currently assigned. Pick from `Next` after reading `DEV_HANDOFF.md`.
+No active development task is currently assigned.
 
 ## Next
 
@@ -26,13 +26,53 @@ No active development task is currently assigned. Pick from `Next` after reading
 
 - ID: TASK-PROD-DEPLOY
   Status: Blocked
-  Priority: Medium
-  Description: Реальный production deploy.
-  Next step: Получить явное подтверждение и production environment details.
-  Related files: production Docker/VPS artifacts.
-  Risks: Secrets, migrations, data safety.
+  Priority: High
+  Description: Current `main` commit `bb139f9` is deployed and healthy on the mini-PC, but `app.nimbaos.ru` is not reliably reachable. Cloudflare Tunnel connections become half-open and public responses degrade from 200/502 to 530/1033.
+  Next step: Ask MGTS for a public/static IPv4, reboot the GPON router after activation, verify that its WAN address is outside `100.64.0.0/10`, then retest Cloudflare Tunnel. If it still fails, use direct HTTPS through Caddy/Cloudflare or a small VPS reverse proxy.
+  Related files: `docker-compose.prod.yml`, `Dockerfile`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: The current route is double NAT (`Keenetic -> ZTE -> MGTS CGNAT`); ZTE is not in bridge mode despite the intended topology. Do not open database/Redis ports or expose secrets while changing ingress.
 
 ## Done Recently
+
+- ID: TASK-FIX-SCHEDULED-SYNC-QUEUE-GRACE
+  Status: Done
+  Priority: High
+  Description: Replaced the 10-minute queue-delay guard with a shared 18-hour policy capped below one day, deployed it to both production workers, restored Galioni advertising coverage through 2026-08-21, and live-verified the 2026-08-20 morning report for both accounts with zero failures.
+  Next step: Confirm the next normal scheduled advertising sync and morning report in the UI; no corrective run is currently pending.
+  Related files: `src/lib/queue/scheduled-job-policy.ts`, `src/lib/queue/sync-processor.ts`, `src/lib/queue/automation-processor.ts`, `docker-compose.prod.yml`.
+  Risks: Keep the grace below 1440 minutes and worker concurrency at 1 unless WB rate-limit behavior is revalidated.
+
+- ID: TASK-MINI-PC-AUTOMATION-RUNTIME
+  Status: Done
+  Priority: High
+  Description: Added the production `automation-worker`, securely injected the Google service-account credential, re-applied the one enabled automation schedule, and verified that the worker starts with no waiting or active jobs. The one-shot scheduler container was removed after registration.
+  Next step: Confirm the next normal scheduled run through `/automations`; the owner-authorized 2026-08-20 recovery run already succeeded for both mapped sheets.
+  Related files: `docker-compose.prod.yml`, `scripts/automation-worker.ts`, `scripts/schedule-automations.ts`, `src/lib/queue/automation.ts`.
+  Risks: The workflow writes to Google Sheets and requires complete local report/advertising coverage; live output is now verified for both accounts.
+
+- ID: TASK-MINI-PC-SYNC-SCHEDULE-RESTORE
+  Status: Done
+  Priority: High
+  Description: Restored all production BullMQ sync schedules after finding that PostgreSQL contained the enabled schedule settings but Redis had no registered schedulers. Registered 16 enabled schedulers for two cabinets and successfully ran the missed `PRODUCTS_REFRESH` jobs for both cabinets with zero errors.
+  Next step: Confirm a normal scheduled run in `/sync`; after any Redis data-volume recreation, re-apply schedules before relying on nightly sync.
+  Related files: `src/lib/sync/schedules.ts`, `scripts/schedule-sync.ts`, `docker-compose.prod.yml`, `docs/core/COMMANDS.md`.
+  Risks: PostgreSQL schedule rows alone do not execute jobs; BullMQ scheduler metadata must also exist in the persistent Redis volume.
+
+- ID: TASK-MINI-PC-REMOTE-ACCESS
+  Status: Done
+  Priority: High
+  Description: Installed and verified Tailscale on the trusted development laptop and mini-PC. Key-based OpenSSH access works remotely as `n8929@100.107.244.75`; AnyDesk remains a graphical fallback. The laptop task `NimbaOS Temporary Tunnel` provides working private browser access at `http://127.0.0.1:13000`.
+  Next step: Prefer Ethernet to Keenetic, or make only `Keenetic-7780` automatic on the mini-PC. Optionally configure Tailscale Serve for private employee access while public ingress is repaired.
+  Related files: `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_LOG.md`, `docs/core/COMMANDS.md`.
+  Risks: Tailnet membership grants private-network reachability; invite only trusted users and keep database/Redis ports unexposed. Docker Desktop still requires a logged-in Windows user after reboot.
+
+- ID: TASK-MINI-PC-APP-UPDATE-20260821
+  Status: Done
+  Priority: High
+  Description: Backed up production, updated the mini-PC checkout to `15e9100`, built and deployed new app/worker images, and verified health and retained data. Production already had all 13 migrations, including FBS operations.
+  Next step: Perform authenticated UI smoke checks for `/fbs` and other newly added sections without running broad syncs or WB write actions.
+  Related files: `docker-compose.prod.yml`, `Dockerfile`, `prisma/migrations/20260730120000_fbs_operations/migration.sql`.
+  Risks: Public domain ingress remains blocked independently; FBS schedules and WB write gates remain disabled.
 
 - ID: BUG-025-FBS-LATE-WITHDRAWAL-AFTER-CANCEL
   Status: Done

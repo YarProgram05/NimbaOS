@@ -1,6 +1,6 @@
 # Commands
 
-Команды проекта с точки зрения безопасности. Last updated: 2026-05-25.
+Команды проекта с точки зрения безопасности. Last updated: 2026-08-21.
 
 ## Safe Inspection
 
@@ -37,6 +37,8 @@
 - `npm run automation:schedule` — применить automation schedules such as `Утренний отчет WB`.
 - `/sync` — UI screen для `SyncJobRun`, schedules и safe manual current-period jobs.
 - `/automations` — UI screen для workflow settings, account-to-sheet mapping and automation run history.
+- Manual actions in `/sync` and `/automations` enqueue immediately; they do not wait for the configured schedule. The corresponding worker must be running, and a duplicate active automation of the same kind reuses the existing run instead of starting a second copy.
+- `SCHEDULED_START_GRACE_MINUTES=1080` allows daily jobs to wait behind long-running account jobs. The parser caps this value at 1439 minutes; keep sync concurrency at 1 unless WB rate limits are revalidated.
 
 Не запускать sync-команды для полной истории без подтверждения пользователя.
 
@@ -49,6 +51,15 @@
 
 - `docker compose --env-file .env.production -f docker-compose.prod.yml config` — проверка compose config.
 - `docker compose --env-file .env.production -f docker-compose.prod.yml build app worker` — production image build.
+- On the Windows mini-PC, Docker Desktop builds started from a non-interactive SSH logon may fail because Windows Credential Manager has no interactive logon session. Run the normal build from the logged-in AnyDesk/console session; this is a Docker Desktop credential-helper limitation, not an application or `.env.production` failure.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml --profile migrate run --rm migrate` — применить production Prisma migrations; только после резервной копии и явного подтверждения.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate app worker automation-worker` — переключить app и оба worker-контейнера на уже собранные образы, не пересоздавая PostgreSQL/Redis.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml run --rm --no-deps app npx tsx scripts/schedule-sync.ts` — заново зарегистрировать production BullMQ sync schedules из PostgreSQL в Redis; обязательно после восстановления или пересоздания Redis data volume, только с явным подтверждением.
+- `docker compose --env-file .env.production -f docker-compose.prod.yml --profile scheduler run --rm automation-scheduler` — заново зарегистрировать production automation schedules; требуется после восстановления или пересоздания Redis data volume.
+- `Invoke-WebRequest http://127.0.0.1:3000/api/health -UseBasicParsing` — локальная health-проверка на mini-PC.
+- `ssh -i "$env:USERPROFILE\.ssh\nimba_minipc_codex" n8929@100.107.244.75` — remote shell через Tailscale с доверенного development-ноутбука.
+- `Start-ScheduledTask -TaskName 'NimbaOS Temporary Tunnel'` — запустить временный private browser tunnel на laptop; адрес `http://127.0.0.1:13000`.
+- `Stop-ScheduledTask -TaskName 'NimbaOS Temporary Tunnel'` — временно остановить browser tunnel.
 - Production `migrate`, `up`, `scheduler` команды требуют явного rollout-подтверждения.
 
 ## Forbidden Without Explicit Approval

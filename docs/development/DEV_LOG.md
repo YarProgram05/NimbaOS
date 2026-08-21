@@ -1,5 +1,77 @@
 # Development Log
 
+## 2026-08-21 - BUG-029 scheduled queue grace and Galioni recovery
+
+Replaced the hard 10-minute scheduled-start checks in both BullMQ processors with `src/lib/queue/scheduled-job-policy.ts`. The production default is 1080 minutes and the parser caps any configured value at 1439 minutes, preserving stale-job protection without rejecting a second account that legitimately waits behind a long WB job. Added three regression tests; focused tests, type-check, lint and compose validation passed.
+
+Committed and pushed `bb139f9`, updated the mini-PC checkout, and deployed the policy into `nimba-worker` and `nimba-app`. Docker Desktop could not access its Windows credential helper from the non-interactive SSH logon, so the already-built local images were safely patched from the checked-out commit and recreated without touching PostgreSQL or Redis. Both workers started with `SCHEDULED_START_GRACE_MINUTES=1080`; app health remained HTTP 200.
+
+With explicit owner approval, enqueued only Galioni `advertising.stats` for 2026-08-07 - 2026-08-21. Run `28d4ba91-cea7-4de1-97e7-1c3ba2d23b80` succeeded on attempt 1 with zero campaign errors and moved coverage from 2026-08-12 to 2026-08-21. Then re-ran `Утренний отчет WB` for target 2026-08-20. Run `a9dfd0a9-dfb7-4464-ace9-a477eeb83e5e` succeeded for Nimba and Galioni, writing 20 rows per sheet with zero account failures. Final checks found all five core containers running, app health 200, 14 future sync schedulers and one future automation scheduler.
+
+## 2026-08-21 - Diagnosed partial scheduled morning report
+
+Read-only production inspection found that the scheduled report targeted `2026-08-20`. Nimba completed successfully and wrote 20 daily rows. Galioni failed immediately after sheet preparation because its `ADVERTISING_STATS` coverage stopped at `2026-08-12`, while the report required `2026-08-01 - 2026-08-20`.
+
+The missing coverage was caused by the sync queue's 10-minute scheduled-start guard. Both account jobs entered the concurrency-1 worker at 05:00 MSK; Nimba completed after 14m52s, and Redis shows Galioni returning `skippedScheduledJob: true` with `scheduled job is 14 minutes late`. Since the skip happens before run creation, `/sync` had no Galioni failure row and the surrounding nightly run set looked healthy. No WB sync, queue mutation, automation rerun or Google Sheet write was performed during diagnosis.
+
+## 2026-08-21 - Deployed production automation worker
+
+Added `automation-worker` to the production compose stack and reused the current `nimba-app` image to run `scripts/automation-worker.ts`. Added a one-shot `automation-scheduler` service, securely supplied `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` through the untracked production environment, and re-applied one enabled automation schedule. The permanent container started successfully; Redis showed zero waiting/active automation jobs and one future delayed job.
+
+The one-shot schedule command registered the job but remained alive because the shared BullMQ queue connection was not closed. Removed that temporary container and added `closeAutomationQueue()` so future schedule-only runs terminate cleanly. Focused ESLint passed. No automation report was manually triggered and no Google Sheet was changed because the owner explicitly declined a guaranteed-failing run while the required period is uncovered.
+
+## 2026-08-21 - Production automation runtime audit
+
+Verified that Redis holds one `automation` repeat scheduler and one delayed job targeting 10:00 MSK. The production compose stack has no running automation worker, so the separate BullMQ `automation` queue has no consumer. A presence-only check also confirmed that `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` is missing from the running app container; no credential value was read or printed. Therefore `Утренний отчет WB` is not production-operational yet even though its schedule is visible.
+
+No automation was started and no Google Sheet was changed.
+
+## 2026-08-21 - Restored production sync schedules and ran missed card refresh
+
+The mini-PC worker, PostgreSQL and Redis were healthy, but the `sync` Redis namespace contained only queue metadata and the stalled-worker key: there were no BullMQ schedulers or delayed jobs. PostgreSQL still held both enabled `PRODUCTS_REFRESH` settings at `02:00 Europe/Moscow`, last applied on 2026-06-25. This explains why neither cabinet started at 02:00 after the production move: the database settings were restored, while the executable queue schedules were not.
+
+Re-applied all settings using the existing `nimba-app` image, avoiding an unnecessary Docker build from the SSH session. The command processed 22 schedule settings for two active accounts and produced 16 enabled BullMQ schedulers plus 16 delayed next-run jobs. Manually enqueued the missed card jobs: Nimba updated 87 cards and 131 price rows in 3.5 seconds; Galioni updated 63 cards and 63 price rows in 2.3 seconds. Both runs finished `SUCCEEDED` on the first attempt with zero errors.
+
+No migrations, historical resync, WB write operation, price mutation or secret access was performed.
+
+## 2026-08-21 - Mini-PC production update and remote administration
+
+### Summary
+Updated the mini-PC checkout to `main` commit `15e9100`, built the production `app` and `worker` images, verified the production Prisma migration state, and recreated only the application and sync-worker containers. PostgreSQL and Redis stayed online.
+
+### Safety and backup
+Created and validated `C:\NimbaOS\backups\nimba_production-20260821-005218.backup` before rollout. SHA256: `967410A71AE53435CC1E727A29898807B942DAD36043D614EBA3EA6D9AF1AB50`. The production `.env.production` file was neither read nor changed.
+
+### Migration result
+`prisma migrate deploy` found 13 repository migrations and no pending migration. Production already contained the completed `20260730120000_fbs_operations` migration from the restored source database. `_prisma_migrations` contains 13 finished records plus one older explicitly rolled-back attempt for `20260513000000_user_preferences`; this is expected and not an incomplete migration.
+
+### Verification
+The recreated `nimba-app-1` and `nimba-worker-1` containers match the newly built images. App, PostgreSQL and Redis are healthy; the worker logs `[sync-worker] started`; local `/api/health` returns HTTP 200. Basic data sanity remained `users=2` and `wb_accounts=2`.
+
+### Remote access
+Tailscale provides encrypted remote access to the mini-PC at `100.107.244.75`; key-based OpenSSH access as `n8929` is verified from the trusted development laptop. AnyDesk remains the graphical fallback. Public `app.nimbaos.ru` ingress is still blocked separately by the unstable Cloudflare/CGNAT path.
+
+### Post-rollout Windows and private-access diagnosis
+The mini-PC last rebooted on 2026-08-16 because of Windows Update. Docker Desktop runs in the interactive `n8929` session and did not start until that user session was opened; locking an already logged-in session does not stop Docker, but reboot/sign-out leaves the application unavailable until login and Docker startup. Docker Desktop already has a per-user startup entry, while `com.docker.service` being manual/stopped is normal and does not itself host the Linux engine.
+
+All three saved Wi-Fi profiles (`Keenetic-7780`, `MTS_GPON5_FCEA`, `MGTS_GPON_5671`) were configured for automatic connection. Windows currently uses `MTS_GPON5_FCEA`; Keenetic remains first in the saved-profile order, so the likely cause is that Keenetic was unavailable or failed association during reconnect and Windows used the next automatic profile.
+
+Created the trusted-laptop scheduled task `NimbaOS Temporary Tunnel`. It maintains `127.0.0.1:13000 -> mini-PC 127.0.0.1:3000` through Tailscale/OpenSSH, restarts after connection failure, and starts at laptop logon. `/api/health` returned 200, `/` redirected locally to `/login`, and `/login` returned 200.
+
+## 2026-08-14 - Production worker env startup fix
+
+### Summary
+Fixed the production Docker worker/scheduler commands so containers use environment variables injected by `docker-compose.prod.yml` instead of npm scripts that require a local `.env` file.
+
+### Files changed
+`docker-compose.prod.yml`.
+
+### Commands run
+Not run in this workspace; the mini-PC production worker log showed `node: .env: not found`.
+
+### Result
+Production `worker` now runs `npx tsx scripts/sync-worker.ts` and `scheduler` now runs `npx tsx scripts/schedule-sync.ts` directly.
+
 ## 2026-08-13 - BUG-025 late withdrawal after FBS cancellation
 
 - Audited the latest and prior withdrawal batches for both local cabinets without exposing raw KIZ values.
@@ -532,3 +604,21 @@ Next compilation succeeded, but running `next build` concurrently with `next dev
 ### Scope
 No WB write method, schedule, bounded historical backfill or production migration was executed. The stock/marking/order smoke tests read WB and updated only the local development database.
 2026-08-13 - Corrected the two stale Galioni withdrawal workbooks produced before canceled-order reconciliation. Removed exactly 5 canceled rows from the 16-row 2026-07-30 batch and 6 from the 179-row 2026-08-12 batch. Artifact-tool import/export, readback, price comparison, duplicate scan, status comparison and rendered previews passed. Final total: 184 unique `WITHDRAWAL_REQUIRED` KIZs; originals preserved.
+
+## 2026-08-14 - Mini-PC production ingress diagnosis
+
+### Summary
+Verified the Windows 11 mini-PC over SSH after moving it to Keenetic. Docker PostgreSQL, Redis, Next.js app and sync worker are up; the app health endpoint returns HTTP 200 and production data was not modified. The mini-PC address is now `192.168.2.147`.
+
+### Network findings
+`tracert` shows `192.168.2.1` (Keenetic), then `192.168.1.1` (ZTE), then `100.90.0.1` (MGTS CGNAT). This is double NAT; the ZTE is not currently a transparent bridge. Cloudflared can register four outbound TCP/HTTP2 connections to port 7844, but public checks degrade from 200/502 to 530/1033 while local sockets and `/ready` may still report healthy.
+
+### Tests
+Reproduced with Windows cloudflared 2026.5.2, a newer Docker connector, QUIC, HTTP2, IPv4, normal DME edges and forced US `ewr/ord` edges. Router firewall and Anti-DoS tests did not change the failure. A five-minute public probe after restart produced one initial success followed by 502 and sustained 530 responses.
+
+### Result
+The original global-region Cloudflared Windows service configuration was restored with automatic startup. No temporary connector process remains. Local application service is healthy, but public ingress is not production-ready. Next step is a public/static IPv4 from MGTS followed by a retest, or a VPS/direct-HTTPS fallback.
+
+## 2026-08-14 - Mini-PC unattended remote access
+
+Converted the downloaded portable AnyDesk client into an installed Windows service at `C:\Program Files (x86)\AnyDesk`. Verified that `AnyDesk Service` is running as `LocalSystem` with automatic startup. The active Windows power plan already has AC sleep and hibernation timeouts set to zero (Never). The operator still needs to set and test the AnyDesk Unattended Access password locally. Existing SSH access at `192.168.2.147` is LAN-only and will require Tailscale/VPN before it can be used directly from another network.

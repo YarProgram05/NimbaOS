@@ -1,5 +1,15 @@
 # Project State
 
+Update 2026-08-21: BUG-029 is resolved and live-verified on production commit `bb139f9`. Scheduled sync and automation processors share an 18-hour queue-wait grace capped below one daily cycle, so the second account is no longer rejected after waiting behind a long concurrency-1 WB job. An approved bounded Galioni advertising sync advanced coverage from 2026-08-12 through 2026-08-21 with zero errors. The morning report for 2026-08-20 was then rerun successfully for both accounts: 20 rows per Google Sheet and zero failures. All containers are running, local health is HTTP 200, and Redis contains 14 future sync schedulers plus one future morning-report scheduler.
+
+Update 2026-08-21: the product/workflow automation runtime is deployed on the mini-PC. `nimba-automation-worker-1` runs continuously in the production compose project, the Google service-account credential is supplied through untracked `.env.production`, and the enabled morning-report schedule is registered in Redis. Initial startup avoided an uncovered report; after `BUG-029` recovery, live Google Sheet output was verified for both mapped accounts.
+
+Update 2026-08-21: production sync scheduling is operational on the mini-PC. PostgreSQL had preserved the two enabled 02:00 Moscow product-card schedules, but Redis had no BullMQ scheduler metadata, so no nightly jobs were emitted. All schedule settings were re-applied: 16 enabled schedulers are now registered for two cabinets. The missed card refreshes were run manually and both succeeded with zero errors (Nimba: 87 cards/131 price rows; Galioni: 63 cards/63 price rows).
+
+Update 2026-08-21: production on the Windows 11 mini-PC now runs `main` commit `15e9100`. A validated custom-format backup was created before rollout, the new `nimba-app` and `nimba-worker` images were built and deployed, and local `/api/health` returns 200. Prisma found no pending migrations because the restored production database already contains all 13 repository migrations, including FBS operations. PostgreSQL/Redis remained online and basic user/account counts were retained. Tailscale plus key-based OpenSSH now provides working remote administration at `n8929@100.107.244.75`; AnyDesk remains a fallback. The trusted laptop has a restarting logon task that exposes the app privately at `http://127.0.0.1:13000`. The earlier application outage followed a Windows Update reboot: Docker Desktop requires an interactive Windows login, while a normal session lock does not stop it. Public `app.nimbaos.ru` availability is still blocked by the separate Cloudflare Tunnel/CGNAT issue.
+
+Update 2026-08-14: the Windows 11 mini-PC production runtime is operational locally. PostgreSQL, Redis, the Next.js app and sync worker are running under Docker, the restored database is intact, and local `/api/health` returns 200. Public ingress is blocked by BUG-026: the current route is double NAT through Keenetic and ZTE before MGTS CGNAT, and Cloudflare Tunnel becomes externally unreachable despite locally established port-7844 connections. AnyDesk is installed as an automatic LocalSystem service and AC sleep/hibernation are disabled; its unattended password still needs local setup and an external-network test. LAN SSH is not reachable from another network until a secure VPN/overlay is added. Public/static IPv4 activation or a VPS/direct-HTTPS fallback is required before production rollout can be considered complete.
+
 Update 2026-06-04: WB financial report sync was migrated and live-verified from deprecated `GET /api/v5/supplier/reportDetailByPeriod` to `POST /api/finance/v1/sales-reports/detailed`. The successful Galioni run inserted 244 new rows for 2026-06-02 - 2026-06-03 and advanced coverage through 2026-06-03. The implementation uses POST JSON, `rrdId` pagination, selected fields, camelCase/string-money normalization, a 1 request/minute Finance throttle, and records exact `sourceApi` metadata in future job results.
 
 Update 2026-06-04: fixed financial report cost-price matching after Finance API lowercased `vendorCode`. Reference matching is now normalized and case-insensitive; `парео зеленое/вискоз` and four other affected sold articles now receive their configured cost price.
@@ -30,11 +40,11 @@ Update 2026-08-13: BUG-025 prevents late historical pickup-cancellation/defect r
 
 Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdrawal XLSX files using the linked WB order `convertedPriceRaw / 100`, without VAT markup for the current 0% VAT seller. Four historical downloads were rebuilt as corrected copies. A read-only audit tied all 57 apparent `IN_STOCK + UNKNOWN` units to historical post-handoff pickup-cancellation/defect orders; no live sync or data mutation was performed.
 
-Текущее состояние NimbaOS. Last updated: 2026-08-13.
+Текущее состояние NimbaOS. Last updated: 2026-08-21.
 
 ## Current Phase
 
-Фазы 0-9 реализованы на уровне кода. После Phase 9 добавлены dashboard analytics, stock inventory, reviews/questions, рекомендации, Excel exports, seller-size drilldown и hardening рекламы/отчетов. Phase 7/8 все еще требуют широкой live WB verification после rate-limit окон. Production rollout требует отдельного подтверждения.
+Фазы 0-9 реализованы на уровне кода. После Phase 9 добавлены dashboard analytics, stock inventory, reviews/questions, рекомендации, Excel exports, seller-size drilldown и hardening рекламы/отчетов. Phase 7/8 все еще требуют широкой live WB verification после rate-limit окон. Текущий `main` развернут на mini-PC и доступен локально/Tailscale, но публичный домен заблокирован нестабильным ingress через Cloudflare Tunnel за double NAT/CGNAT.
 
 ## Implemented
 
@@ -79,7 +89,7 @@ Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdra
 ## Important Risks
 
 - Financial report sync uses live-verified `POST /api/finance/v1/sales-reports/detailed`; broad historical refreshes still require confirmation.
-- The FBS migration is applied to the local development database only. It is not applied to production; interval schedules and the `2026-07-20` - `2026-07-30` backfill were not run. All FBS schedule defaults and warehouse write gates remain disabled.
+- The FBS migration is applied to both local development and production databases. Production received it through the restored source database before the 2026-08-21 rollout. Interval schedules and the `2026-07-20` - `2026-07-30` backfill were not run. All FBS schedule defaults and warehouse write gates remain disabled.
 - Historical WB data must not be overwritten without explicit confirmation.
 - WB-changing actions exist in code for prices, feedback answers and advertising; they require clear user intent.
 - Large raw tables can become slow if queried without `wbAccountId` and period filters.
