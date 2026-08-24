@@ -61,7 +61,7 @@ exit `$LASTEXITCODE
 "@ | Set-Content -LiteralPath $launcherPath -Encoding UTF8
 
 $taskName = 'NimbaOS GitHub Deploy Runner'
-$userId = "$env:USERDOMAIN\$env:USERNAME"
+$userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action = New-ScheduledTaskAction `
   -Execute 'powershell.exe' `
   -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$launcherPath`"" `
