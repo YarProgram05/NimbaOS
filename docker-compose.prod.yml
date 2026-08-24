@@ -27,9 +27,7 @@ services:
       retries: 10
 
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     restart: 'no'
     profiles: ['migrate']
     environment:
@@ -41,7 +39,7 @@ services:
     command: ['npx', 'prisma', 'migrate', 'deploy']
 
   app:
-    image: nimba-app
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -69,9 +67,7 @@ services:
       start_period: 30s
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
@@ -88,7 +84,7 @@ services:
     command: ['npx', 'tsx', 'scripts/sync-worker.ts']
 
   automation-worker:
-    image: nimba-app
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
@@ -106,9 +102,7 @@ services:
     command: ['npx', 'tsx', 'scripts/automation-worker.ts']
 
   scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     restart: 'no'
     profiles: ['scheduler']
     environment:
@@ -125,7 +119,7 @@ services:
     command: ['npx', 'tsx', 'scripts/schedule-sync.ts']
 
   automation-scheduler:
-    image: nimba-app
+    image: nimba-app:${NIMBA_IMAGE_TAG:-latest}
     restart: 'no'
     profiles: ['scheduler']
     environment:
