@@ -54,6 +54,10 @@ $migrationStarted = $false
 $applicationSwitchStarted = $false
 $dockerCommand = $null
 $dockerCliPrefix = @()
+$postgresContainer = $null
+$containerBackup = $null
+$containerBackupScript = $null
+$backupScriptHostPath = $null
 
 try {
   $mutexAcquired = $mutex.WaitOne(0)
@@ -163,20 +167,30 @@ try {
 
   $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
   $containerBackup = "/tmp/nimba-predeploy-$timestamp.dump"
+  $containerBackupScript = "/tmp/nimba-predeploy-$timestamp.sh"
   $backupFile = Join-Path $BackupPath "nimba-production-$timestamp-$shortCommit.dump"
+  $backupScriptHostPath = Join-Path ([System.IO.Path]::GetTempPath()) "nimba-predeploy-$timestamp.sh"
+  $backupScript = @(
+    '#!/bin/sh',
+    'set -eu',
+    'destination="$1"',
+    'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f "$destination"',
+    'pg_restore -l "$destination" >/dev/null'
+  ) -join "`n"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+  [System.IO.File]::WriteAllText($backupScriptHostPath, "$backupScript`n", $utf8NoBom)
+
   Invoke-Native $dockerCommand ($dockerCliPrefix + @(
-    'exec', $postgresContainer,
-    'sh', '-lc',
-    'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f ' + $containerBackup
+    'cp', $backupScriptHostPath, "${postgresContainer}:$containerBackupScript"
   ))
   Invoke-Native $dockerCommand ($dockerCliPrefix + @(
-    'exec', $postgresContainer, 'pg_restore', '-l', $containerBackup
+    'exec', $postgresContainer, 'sh', $containerBackupScript, $containerBackup
   ))
   Invoke-Native $dockerCommand ($dockerCliPrefix + @(
     'cp', "${postgresContainer}:$containerBackup", $backupFile
   ))
   Invoke-Native $dockerCommand ($dockerCliPrefix + @(
-    'exec', $postgresContainer, 'rm', '-f', $containerBackup
+    'exec', $postgresContainer, 'rm', '-f', $containerBackup, $containerBackupScript
   ))
 
   $backupInfo = Get-Item -LiteralPath $backupFile
@@ -303,6 +317,19 @@ catch {
   throw $deploymentError
 }
 finally {
+  if ($postgresContainer -and $dockerCommand) {
+    try {
+      & $dockerCommand @($dockerCliPrefix + @(
+        'exec', $postgresContainer, 'rm', '-f', $containerBackup, $containerBackupScript
+      )) *> $null
+    }
+    catch {
+      # Temporary files are harmless and will be replaced by the next deployment.
+    }
+  }
+  if ($backupScriptHostPath -and (Test-Path -LiteralPath $backupScriptHostPath)) {
+    Remove-Item -LiteralPath $backupScriptHostPath -Force -ErrorAction SilentlyContinue
+  }
   if ($locationPushed) {
     Pop-Location
   }
