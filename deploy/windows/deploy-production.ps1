@@ -51,6 +51,7 @@ $previousAppImageId = $null
 $rollbackImageTag = $null
 $checkoutChanged = $false
 $migrationStarted = $false
+$applicationSwitchStarted = $false
 
 try {
   $mutexAcquired = $mutex.WaitOne(0)
@@ -78,6 +79,11 @@ try {
     Set-Content -LiteralPath $dockerConfigFile -Value '{}' -Encoding Ascii
   }
   $env:DOCKER_CONFIG = $dockerConfigPath
+  $env:DOCKER_AUTH_CONFIG = '{}'
+
+  $buildxConfigPath = 'C:\ProgramData\NimbaOS\buildx'
+  New-Item -ItemType Directory -Path $buildxConfigPath -Force | Out-Null
+  $env:BUILDX_CONFIG = $buildxConfigPath
 
   Push-Location $RepositoryPath
   $locationPushed = $true
@@ -168,6 +174,7 @@ try {
   ))
 
   Write-Step 'Updating the application and both workers'
+  $applicationSwitchStarted = $true
   Invoke-Native 'docker' ($baseComposeArgs + @(
     'up', '-d', '--no-build', '--remove-orphans',
     'app', 'worker', 'automation-worker'
@@ -239,14 +246,19 @@ catch {
   Write-Host "Deployment failed: $($deploymentError.Exception.Message)" -ForegroundColor Red
 
   if ($checkoutChanged -and $previousCommit) {
-    Write-Host "Attempting application rollback to $previousCommit."
+    Write-Host "Restoring production checkout to $previousCommit."
     try {
       Invoke-Native 'git' @('checkout', '--detach', $previousCommit)
+    }
+    catch {
+      Write-Host "Could not restore the previous checkout: $($_.Exception.Message)" -ForegroundColor Red
+    }
+  }
 
-      if ($previousAppImageId -and $rollbackImageTag) {
-        $env:NIMBA_IMAGE_TAG = $rollbackImageTag
-      }
-
+  if ($applicationSwitchStarted -and $previousAppImageId -and $rollbackImageTag) {
+    Write-Host 'Attempting application rollback to the previous image.'
+    try {
+      $env:NIMBA_IMAGE_TAG = $rollbackImageTag
       $rollbackEnvFile = Join-Path $RepositoryPath '.env.production'
       $rollbackComposeFile = Join-Path $RepositoryPath 'docker-compose.prod.yml'
       $rollbackComposeArgs = @(
@@ -261,7 +273,7 @@ catch {
       Write-Host 'Previous application image was restarted.'
     }
     catch {
-      Write-Host "Automatic application rollback also failed: $($_.Exception.Message)" -ForegroundColor Red
+      Write-Host "Automatic application rollback failed: $($_.Exception.Message)" -ForegroundColor Red
     }
   }
 
