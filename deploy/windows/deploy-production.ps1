@@ -52,6 +52,8 @@ $rollbackImageTag = $null
 $checkoutChanged = $false
 $migrationStarted = $false
 $applicationSwitchStarted = $false
+$dockerCommand = $null
+$dockerCliPrefix = @()
 
 try {
   $mutexAcquired = $mutex.WaitOne(0)
@@ -79,11 +81,21 @@ try {
     Set-Content -LiteralPath $dockerConfigFile -Value '{}' -Encoding Ascii
   }
   $env:DOCKER_CONFIG = $dockerConfigPath
-  $env:DOCKER_AUTH_CONFIG = '{}'
 
   $buildxConfigPath = 'C:\ProgramData\NimbaOS\buildx'
   New-Item -ItemType Directory -Path $buildxConfigPath -Force | Out-Null
   $env:BUILDX_CONFIG = $buildxConfigPath
+
+  $dockerCommand = (Get-Command 'docker.exe' -ErrorAction Stop).Source
+  $dockerBinPath = Split-Path -Parent $dockerCommand
+  $env:PATH = (($env:PATH -split ';') | Where-Object {
+    $_ -and -not [string]::Equals(
+      $_.TrimEnd('\'),
+      $dockerBinPath.TrimEnd('\'),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  }) -join ';'
+  $dockerCliPrefix = @('--config', $dockerConfigPath)
 
   Push-Location $RepositoryPath
   $locationPushed = $true
@@ -95,24 +107,26 @@ try {
     throw 'Production checkout has tracked local changes. Deployment stopped without modifying them.'
   }
 
-  Invoke-Native 'docker' @('version')
+  Invoke-Native $dockerCommand ($dockerCliPrefix + @('version'))
   $previousCommit = Invoke-NativeCapture 'git' @('rev-parse', 'HEAD')
 
-  $baseComposeArgs = @(
+  $baseComposeArgs = $dockerCliPrefix + @(
     'compose',
     '--env-file', $envFile,
     '-f', $composeFile
   )
 
-  $previousAppContainer = Invoke-NativeCapture 'docker' ($baseComposeArgs + @('ps', '-q', 'app'))
+  $previousAppContainer = Invoke-NativeCapture $dockerCommand ($baseComposeArgs + @('ps', '-q', 'app'))
   if ($previousAppContainer) {
-    $previousAppImageId = Invoke-NativeCapture 'docker' @(
+    $previousAppImageId = Invoke-NativeCapture $dockerCommand ($dockerCliPrefix + @(
       'inspect',
       '--format', '{{.Image}}',
       $previousAppContainer
-    )
+    ))
     $rollbackImageTag = "rollback-$((Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss'))"
-    Invoke-Native 'docker' @('image', 'tag', $previousAppImageId, "nimba-app:$rollbackImageTag")
+    Invoke-Native $dockerCommand ($dockerCliPrefix + @(
+      'image', 'tag', $previousAppImageId, "nimba-app:$rollbackImageTag"
+    ))
   }
 
   Write-Step 'Fetching and validating the requested main commit'
@@ -128,21 +142,21 @@ try {
 
   $shortCommit = $CommitSha.Substring(0, 12).ToLowerInvariant()
   $env:NIMBA_IMAGE_TAG = $shortCommit
-  $baseComposeArgs = @(
+  $baseComposeArgs = $dockerCliPrefix + @(
     'compose',
     '--env-file', $envFile,
     '-f', $composeFile
   )
 
   Write-Step "Validating Compose configuration for $shortCommit"
-  Invoke-Native 'docker' ($baseComposeArgs + @('config', '--quiet'))
+  Invoke-Native $dockerCommand ($baseComposeArgs + @('config', '--quiet'))
 
   Write-Step 'Building the versioned application image while the old app remains online'
-  Invoke-Native 'docker' ($baseComposeArgs + @('build', 'app'))
+  Invoke-Native $dockerCommand ($baseComposeArgs + @('build', 'app'))
 
   Write-Step 'Creating and validating a PostgreSQL backup'
   New-Item -ItemType Directory -Path $BackupPath -Force | Out-Null
-  $postgresContainer = Invoke-NativeCapture 'docker' ($baseComposeArgs + @('ps', '-q', 'postgres'))
+  $postgresContainer = Invoke-NativeCapture $dockerCommand ($baseComposeArgs + @('ps', '-q', 'postgres'))
   if (-not $postgresContainer) {
     throw 'PostgreSQL container is not running.'
   }
@@ -150,14 +164,20 @@ try {
   $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
   $containerBackup = "/tmp/nimba-predeploy-$timestamp.dump"
   $backupFile = Join-Path $BackupPath "nimba-production-$timestamp-$shortCommit.dump"
-  Invoke-Native 'docker' @(
+  Invoke-Native $dockerCommand ($dockerCliPrefix + @(
     'exec', $postgresContainer,
     'sh', '-lc',
     'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f ' + $containerBackup
-  )
-  Invoke-Native 'docker' @('exec', $postgresContainer, 'pg_restore', '-l', $containerBackup)
-  Invoke-Native 'docker' @('cp', "${postgresContainer}:$containerBackup", $backupFile)
-  Invoke-Native 'docker' @('exec', $postgresContainer, 'rm', '-f', $containerBackup)
+  ))
+  Invoke-Native $dockerCommand ($dockerCliPrefix + @(
+    'exec', $postgresContainer, 'pg_restore', '-l', $containerBackup
+  ))
+  Invoke-Native $dockerCommand ($dockerCliPrefix + @(
+    'cp', "${postgresContainer}:$containerBackup", $backupFile
+  ))
+  Invoke-Native $dockerCommand ($dockerCliPrefix + @(
+    'exec', $postgresContainer, 'rm', '-f', $containerBackup
+  ))
 
   $backupInfo = Get-Item -LiteralPath $backupFile
   if ($backupInfo.Length -lt 1024) {
@@ -168,24 +188,24 @@ try {
 
   Write-Step 'Applying committed Prisma migrations'
   $migrationStarted = $true
-  Invoke-Native 'docker' ($baseComposeArgs + @(
+  Invoke-Native $dockerCommand ($baseComposeArgs + @(
     '--profile', 'migrate',
     'run', '--rm', 'migrate'
   ))
 
   Write-Step 'Updating the application and both workers'
   $applicationSwitchStarted = $true
-  Invoke-Native 'docker' ($baseComposeArgs + @(
+  Invoke-Native $dockerCommand ($baseComposeArgs + @(
     'up', '-d', '--no-build', '--remove-orphans',
     'app', 'worker', 'automation-worker'
   ))
 
   Write-Step 'Re-applying database-backed schedules'
-  Invoke-Native 'docker' ($baseComposeArgs + @(
+  Invoke-Native $dockerCommand ($baseComposeArgs + @(
     '--profile', 'scheduler',
     'run', '--rm', 'scheduler'
   ))
-  Invoke-Native 'docker' ($baseComposeArgs + @(
+  Invoke-Native $dockerCommand ($baseComposeArgs + @(
     '--profile', 'scheduler',
     'run', '--rm', 'automation-scheduler'
   ))
@@ -214,15 +234,15 @@ try {
   }
 
   foreach ($service in @('app', 'worker', 'automation-worker', 'postgres', 'redis')) {
-    $containerId = Invoke-NativeCapture 'docker' ($baseComposeArgs + @('ps', '-q', $service))
+    $containerId = Invoke-NativeCapture $dockerCommand ($baseComposeArgs + @('ps', '-q', $service))
     if (-not $containerId) {
       throw "Service has no container: $service"
     }
-    $isRunning = Invoke-NativeCapture 'docker' @(
+    $isRunning = Invoke-NativeCapture $dockerCommand ($dockerCliPrefix + @(
       'inspect',
       '--format', '{{.State.Running}}',
       $containerId
-    )
+    ))
     if ($isRunning -ne 'true') {
       throw "Service is not running: $service"
     }
@@ -261,12 +281,12 @@ catch {
       $env:NIMBA_IMAGE_TAG = $rollbackImageTag
       $rollbackEnvFile = Join-Path $RepositoryPath '.env.production'
       $rollbackComposeFile = Join-Path $RepositoryPath 'docker-compose.prod.yml'
-      $rollbackComposeArgs = @(
+      $rollbackComposeArgs = $dockerCliPrefix + @(
         'compose',
         '--env-file', $rollbackEnvFile,
         '-f', $rollbackComposeFile
       )
-      Invoke-Native 'docker' ($rollbackComposeArgs + @(
+      Invoke-Native $dockerCommand ($rollbackComposeArgs + @(
         'up', '-d', '--no-build',
         'app', 'worker', 'automation-worker'
       ))
