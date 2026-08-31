@@ -29,6 +29,11 @@ yarn-error.log*
 .logs/
 /scripts/.tmp-*
 
+# local Codex and browser artifacts
+/.codex-transfer/
+/.playwright-cli/
+/tmp/
+
 # local env files
 .env
 .env*.local
