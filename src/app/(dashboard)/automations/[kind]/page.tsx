@@ -8,6 +8,8 @@ import { AUTOMATION_WORKFLOW_KINDS } from '@/types/automations'
 import { AutomationDetailsClient } from '../automation-details-client'
 import { FbsMovementSheetDetailsClient } from '../fbs-movement-sheet-details-client'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AutomationDetailsPage({ params }: { params: { kind: string } }) {
   if (!isAutomationWorkflowKind(params.kind)) notFound()
   const session = await getServerSession(authOptions)

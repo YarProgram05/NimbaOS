@@ -1,5 +1,24 @@
 # Bugs And Incidents
 
+## BUG-032: CI prerendered the database-backed automations page
+
+Status:
+- Fixed locally on 2026-09-01; follow-up CI confirmation pending.
+
+Symptoms:
+- GitHub Actions CI run `33449872826` passed TypeScript, 51 tests and lint, then failed `next build` while generating `/automations`.
+- Prisma returned `ECONNREFUSED` for `automationRun.count()` and workflow-setting upserts because the CI runner intentionally has no PostgreSQL service.
+
+Root cause:
+- The new database-backed `/automations` route was eligible for static prerendering, so Next.js executed its Prisma reads during build instead of only at request time.
+
+Resolution:
+- Added `export const dynamic = 'force-dynamic'` to `/automations` and `/automations/[kind]`.
+- The complete local CI command sequence now passes and the route table marks both pages dynamic.
+
+Prevention:
+- Any new App Router page that performs unconditional request-time database reads must be explicitly dynamic unless its static-build behavior is separately designed and tested.
+
 ## BUG-031: Local `next dev` loses CSS after concurrent production build
 
 Status:

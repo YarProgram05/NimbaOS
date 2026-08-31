@@ -759,3 +759,8 @@ Converted the downloaded portable AnyDesk client into an installed Windows servi
 - Fresh read-only WB stock sync returned 264 Nimba and 278 Galioni units. Live Sheet readback matched both totals exactly; 53 stock rows were loaded and the retry produced 0 inserts/updates.
 - Verification: 51 tests passed, TypeScript passed, lint/build passed with only the two pre-existing `<img>` warnings.
 - Freshness tolerance was aligned with the operator's hourly FBS sync cadence: 75 minutes instead of 30, so normal scheduling jitter is accepted and a missed hourly cycle still fails the Sheet workflow.
+
+## 2026-09-01 — CI prerender fix for automations
+
+- CI run `33449872826` passed tests, type-check and lint but failed `next build` while prerendering `/automations`: the GitHub runner has no PostgreSQL service, so the page-level Prisma calls returned `ECONNREFUSED`.
+- Marked both `/automations` and `/automations/[kind]` as `force-dynamic`; database-backed automation pages are now rendered only per request and are not executed during static generation.
