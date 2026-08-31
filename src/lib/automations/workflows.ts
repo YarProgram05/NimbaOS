@@ -88,7 +88,7 @@ function defaultFbsConfig(timeOfDay = FBS_DEFAULT_TIME_OF_DAY): FbsMovementSheet
     accountKeys: {},
     productAliases: {
       'nimba:158472051:263727213': 'парео черн шиф',
-      'nimba:232092449:366203604': 'парео синяя полоска',
+      'nimba:232092449:366203604': 'туника синие волны',
       'nimba:297175085:452136209': 'туника леопард/пятна',
       'nimba:375529934:547426076': 'длинная жираф ЧЕРНО/белый',
       'galioni:365509886:535488707': 'парео синий шиф',

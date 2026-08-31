@@ -38,7 +38,7 @@
 - ID: MKT-FBS-SHEET-DAILY-WORKFLOW
   Status: Done locally; disabled
   Priority: High
-  Description: Implemented and verified the DB-first daily FBS lifecycle workflow. Initial live load through 2026-08-31 wrote 250 missing events and corrected 5 existing rows; retry verification found 255 unchanged events and no writes. The duplicate listing `парео леопард/пятна` maps to canonical physical product `туника леопард/пятна` by stable tuple.
+  Description: Implemented and verified the DB-first daily FBS lifecycle workflow. Initial live load through 2026-08-31 wrote 250 missing events and corrected 5 existing rows; retry verification found 255 unchanged events and no writes. Owner-confirmed duplicate listings map by stable tuple: `парео леопард/пятна → туника леопард/пятна` and `парео синяя полоска → туника синие волны`.
   Next step: Deploy code/migration normally and explicitly enable the production schedule after worker smoke-testing.
   Related reports/metrics: 251 orders, 3 pre-handoff cancellations, 1 accepted return, 0 failed accounts, 0 retry inserts/updates.
   Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.

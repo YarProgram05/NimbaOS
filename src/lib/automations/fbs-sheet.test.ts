@@ -131,6 +131,20 @@ test('duplicate WB listing is mapped to the canonical physical product', () => {
   assert.equal(events[0].productName, 'туника леопард/пятна')
 })
 
+test('duplicate blue-stripe listing is mapped to the canonical blue-waves tunic', () => {
+  const productNames = new Map([
+    [fbsProductTupleKey('nimba', 232092449, 366203604), 'туника синие волны'],
+  ])
+  const events = buildFbsDesiredEvents({
+    account,
+    productNames,
+    allowedProductNames: ['туника синие волны'],
+    orders: [order({ nmId: 232092449, chrtId: 366203604, vendorCode: 'парео синяя полоска' })],
+    acceptedReturns: [],
+  })
+  assert.equal(events[0].productName, 'туника синие волны')
+})
+
 test('load timestamp is written as Moscow wall time for a Moscow-timezone sheet', () => {
   const serial = sheetSerialDateTime(new Date('2026-08-31T22:32:15.000Z'))
   const expected = sheetSerialDate('2026-09-01') + ((1 * 60 * 60) + (32 * 60) + 15) / 86_400

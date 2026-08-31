@@ -1,5 +1,11 @@
 # Development Log
 
+## 2026-09-01 - Blue-stripe duplicate listing merged into blue-waves tunic
+
+The owner confirmed that Nimba listing `парео синяя полоска` is the same physical product as canonical `туника синие волны`, sold under multiple WB categories. Updated stable alias `nimba:232092449:366203604` in the code default and local workflow config, added regression coverage, cleared the accidental separate `Справочники!A51` value and relabeled only `Остатки WB!A13`; the stock technical key and identifiers were preserved.
+
+Live readback shows one canonical Summary row with WB stock 10 for Nimba and 15 for Galioni. The old display name is absent from active reference, operations, stock, summary and daily-report tabs. The 2026-08-31 dry-run returned 0 inserts, 0 updates, 255 unchanged events, 53 unchanged stock rows, 542 WB units and zero failed accounts. Verification passed 52 tests, type-check and lint with only the two pre-existing `<img>` warnings; Chrome QA confirmed the merged row is readable and formatting is intact.
+
 ## 2026-09-01 - Daily FBS movement Google Sheet workflow
 
 Implemented `FBS_MOVEMENT_SHEET` as the second registered automation. Its settings page reuses the flexible schedule editor and adds spreadsheet/tab/start-date, cabinet label and stable account-key controls. The queue processor runs the previous Moscow day; manual runs accept an explicit target date. The local Prisma migration adds the new workflow enum value.

@@ -43,7 +43,7 @@
 - ID: TASK-FBS-MOVEMENT-SHEET-WORKFLOW
   Status: Done locally
   Priority: High
-  Description: Implemented the second automation end to end: workflow kind and migration, catalog/detail UI, queue processor, DB-first event projection, retry-safe Google Sheet upsert, pre-handoff cancellations, explicit accepted returns, daily reconciliation and readback. Added canonical tuple alias `nimba:297175085:452136209 → туника леопард/пятна`.
+  Description: Implemented the second automation end to end: workflow kind and migration, catalog/detail UI, queue processor, DB-first event projection, retry-safe Google Sheet upsert, pre-handoff cancellations, explicit accepted returns, daily reconciliation and readback. Owner-confirmed duplicate listings map by stable tuple: `nimba:297175085:452136209 → туника леопард/пятна` and `nimba:232092449:366203604 → туника синие волны`.
   Next step: Deploy code and migration through the normal production procedure and smoke-test the production worker. The local workflow is enabled/applied at 23:30 MSK; production scheduling was not changed.
   Related files: `src/lib/services/fbs-movement-sheet-workflow.ts`, `src/lib/automations/fbs-sheet.ts`, `src/app/(dashboard)/automations/[kind]/`, `prisma/migrations/20260901120000_fbs_movement_sheet_automation/`.
   Risks: Do not enable before the production migration and worker deployment. Unknown product tuples fail visibly instead of guessing; accepted returns require an explicit inventory movement.

@@ -1,5 +1,11 @@
 # Marketplace Analysis Log
 
+## 2026-09-01 - Blue-stripe duplicate listing correction
+
+The owner confirmed that `парео синяя полоска` and `туника синие волны` are one physical product listed under different WB categories. Stable tuple `nimba:232092449:366203604` now resolves to canonical `туника синие волны`, alongside the existing Galioni tuple `219179076:348718974`. The accidental separate reference value was cleared, while the Nimba WB-stock row kept its original technical key, identifiers and quantity 10.
+
+Live Summary readback now shows `туника синие волны` with WB stock 10 Nimba and 15 Galioni. The old display name is absent from all active calculation and data tabs. A fresh dry-run remained idempotent: 255 unchanged events, 53 unchanged stock rows, 542 WB units and zero failed accounts. This merge reduced local-replenishment warnings from 11 to 10 because the ledger now evaluates the duplicate cards as one physical product.
+
 ## 2026-09-01 - FBS daily workflow implementation and initial load
 
 Implemented the DB-first FBS movement workflow and performed the owner-authorized initial load into `ФБС перемещение — автоматизированная версия` through 2026-08-31. The source projection contained 251 orders, three pre-handoff cancellations and one explicit accepted return for two cabinets. Google Sheets upsert inserted 250 events and updated five existing stable-key rows; built-in readback verified the operations and control rows. A second dry-run returned 0 inserts, 0 updates and 255 unchanged events, confirming retry idempotency.
