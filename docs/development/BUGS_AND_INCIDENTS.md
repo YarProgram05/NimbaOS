@@ -3,7 +3,7 @@
 ## BUG-032: CI prerendered the database-backed automations page
 
 Status:
-- Fixed locally on 2026-09-01; follow-up CI confirmation pending.
+- Fixed and confirmed by GitHub Actions CI run `33450459678` on 2026-09-01.
 
 Symptoms:
 - GitHub Actions CI run `33449872826` passed TypeScript, 51 tests and lint, then failed `next build` while generating `/automations`.
@@ -15,6 +15,7 @@ Root cause:
 Resolution:
 - Added `export const dynamic = 'force-dynamic'` to `/automations` and `/automations/[kind]`.
 - The complete local CI command sequence now passes and the route table marks both pages dynamic.
+- Follow-up CI run `33450459678` completed successfully in 2m 49s.
 
 Prevention:
 - Any new App Router page that performs unconditional request-time database reads must be explicitly dynamic unless its static-build behavior is separately designed and tested.

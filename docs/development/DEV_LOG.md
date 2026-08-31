@@ -764,3 +764,4 @@ Converted the downloaded portable AnyDesk client into an installed Windows servi
 
 - CI run `33449872826` passed tests, type-check and lint but failed `next build` while prerendering `/automations`: the GitHub runner has no PostgreSQL service, so the page-level Prisma calls returned `ECONNREFUSED`.
 - Marked both `/automations` and `/automations/[kind]` as `force-dynamic`; database-backed automation pages are now rendered only per request and are not executed during static generation.
+- Fix commit `aa645e7` was pushed to `main`; follow-up GitHub Actions CI run `33450459678` completed successfully in 2m 49s.

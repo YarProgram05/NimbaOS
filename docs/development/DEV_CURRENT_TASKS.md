@@ -33,10 +33,10 @@
 ## Done Recently
 
 - ID: BUG-032-AUTOMATIONS-CI-PRERENDER
-  Status: Fixed locally, CI confirmation pending
+  Status: Done
   Priority: High
   Description: CI build attempted to prerender the database-backed `/automations` page without PostgreSQL and failed with Prisma `ECONNREFUSED`. Both automation routes are now explicitly dynamic.
-  Next step: Commit/push the fix and confirm the new GitHub Actions CI run succeeds.
+  Next step: None. Fix commit `aa645e7` passed GitHub Actions CI run `33450459678`.
   Related files: `src/app/(dashboard)/automations/page.tsx`, `src/app/(dashboard)/automations/[kind]/page.tsx`, `docs/development/BUGS_AND_INCIDENTS.md`.
   Risks: None known; request-time behavior is unchanged.
 
