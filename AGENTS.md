@@ -33,6 +33,7 @@ NimbaOS — внутреннее веб-приложение для оцифро
 - карта проекта: `docs/core/PROJECT_MAP.md`;
 - архитектура: `docs/core/ARCHITECTURE.md`;
 - команды: `docs/core/COMMANDS.md`;
+- mini-PC, production, SSH/Tailscale, Docker runtime, deploy, backup/restore и production-диагностика: `docs/core/MINI_PC_RUNBOOK.md`;
 - БД и связи: `docs/core/DATA_MODEL.md`;
 - быстрый доступ к данным: `docs/core/DATABASE_ACCESS_GUIDE.md`;
 - WB API: `docs/core/WB_API_MAP.md`;
@@ -96,4 +97,4 @@ Marketplace минимум:
 - БД/индексы/агрегаты: `docs/core/DATABASE_ACCESS_GUIDE.md`;
 - риски и вопросы: `docs/core/SAFETY_RULES.md`, `docs/core/OPEN_QUESTIONS.md`.
 
-Last updated: 2026-05-24 — documentation split into core/development/marketplace zones.
+Last updated: 2026-08-27 - added canonical mini-PC production runbook routing.

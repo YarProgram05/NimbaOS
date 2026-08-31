@@ -1,6 +1,6 @@
 # Documentation Index
 
-Главный навигатор по документации NimbaOS. Last updated: 2026-05-24.
+Главный навигатор по документации NimbaOS. Last updated: 2026-08-27.
 
 ## Zones
 
@@ -94,6 +94,23 @@ Do not store here:
 
 Related docs:
 `docs/development/DEV_HANDOFF.md`, `docs/marketplace/MARKETPLACE_HANDOFF.md`.
+
+## docs/core/MINI_PC_RUNBOOK.md
+
+Purpose:
+Каноническая карта Windows mini-PC, production runtime, remote access, release, backup/restore и safety boundaries.
+
+Read when:
+Задача касается mini-PC, production, SSH/Tailscale, Docker runtime, deploy, backup/restore, dev DB refresh или production diagnostics.
+
+Update when:
+Меняются стабильные host/path/topology facts, production service layout, access method, release/restore boundaries или Windows runtime caveats.
+
+Do not store here:
+Secrets, current commit/run/backup identifiers, dated row counts, chronological incident logs или volatile task status.
+
+Related docs:
+`docs/core/COMMANDS.md`, `docs/core/SAFETY_RULES.md`, `docs/core/PROJECT_STATE.md`, `docs/development/DEV_HANDOFF.md`.
 
 ## docs/core/ARCHITECTURE.md
 
