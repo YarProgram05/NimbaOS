@@ -1,5 +1,101 @@
 # Development Log
 
+## 2026-08-31 - Restored local styles after `.next` collision
+
+During authenticated in-app-browser QA, localhost rendered the application as unstyled HTML. The page referenced `/_next/static/css/app/layout.css?...`, but that URL returned HTTP 404 and the browser had no loaded application stylesheet. Process inspection proved port 3000 belonged to this checkout's local `next dev` chain.
+
+The preceding `npm run build` had reused and replaced the same `.next` directory while dev remained active. Stopped only the verified local dev process tree and restarted `next dev` hidden from the repository directory. `/api/health` returned HTTP 200; after reloading the existing authenticated tab, the CSS URL returned HTTP 200 with 106,095 bytes, `document.styleSheets` reported 164 application rules, and the normal NimbaOS layout returned. No database, worker, queue, sync, schedule or production process was changed.
+
+## 2026-08-31 - Complete paginated sync and automation histories
+
+Confirmed that synchronization tasks are persisted in `sync_job_runs` and workflow executions in `automation_runs`. The previous read services used `take: 50`, so older records remained in PostgreSQL but were invisible to both pages.
+
+Changed both read services and Server Actions to return a page object with rows, exact total, current page and normalized page size. The UI now supports 25, 50 or 100 rows, previous/next navigation, debounced server-side filters and sortable stored columns. `/sync` filters type, status, account, source, Moscow creation-date range and error text; `/automations` filters status, source, creation-date range and error text. Polling and manual refresh reload the current filtered page. Added shared pager/sort-header components; no Prisma schema or migration was required.
+
+The first UI pass exposed separate creation-date inputs plus technical text filters for task payload period/report date. After owner review, removed those redundant controls and reused the existing canonical `DateRangePicker` on both pages. Each history now has one two-month calendar with the standard quick presets, and it filters the task creation/run timestamp. Payload `Период` and automation `Дата отчета` remain read-only table columns because they describe what the task processed, not when it ran. Authenticated in-app-browser checks confirmed the simplified controls on both pages, the quick-preset calendar, and successful filtering with `Прошлый месяц`.
+
+Read-only local database smoke checks returned 789 sync runs and 49 automation runs, loaded 25-row first pages, and successfully exercised source/date filters plus relation sorting. `npm run type-check`, `npm run lint`, all 36 tests and `npm run build` passed. Lint/build retain only the two pre-existing unrelated `<img>` warnings.
+
+## 2026-08-31 - Refreshed local dev database from production
+
+With explicit owner approval, created a consistent custom-format snapshot from the running mini-PC PostgreSQL database using a read-only `pg_dump`. Verified archive readability, size and SHA-256 before and after transfer. Production stayed online and returned HTTP 200 after cleanup; no production code, data, Redis state, container, worker, schedule, migration or WB sync was changed.
+
+Restored the snapshot first into the isolated local database `wb_cabinet_refresh_20260831`. Validation found 13 completed repository migrations, the one expected historical rolled-back migration, zero active unfinished migrations, zero invalid indexes and zero unvalidated constraints. After validation, renamed the old local database to a temporary rollback name, switched the restored database to `wb_cabinet`, repeated the checks, and removed the obsolete local database only after they passed.
+
+Final local counts are 2 users, 3 WB accounts, 171 products, 14,247 orders and 78,225 realization-report rows. Order and financial-report coverage reaches 2026-08-30; the latest successful sync timestamp stored in the snapshot is 2026-08-31 03:15:01.935. All temporary dump copies were removed from the production container, mini-PC, laptop and local PostgreSQL container. Local PostgreSQL and Redis are healthy; local sync and automation workers remain stopped.
+
+Later the same day, the owner reported additional FBS changes and requested another refresh. Read-only comparison confirmed that production had advanced to 613 FBS orders versus 444 locally, 604 KIZ units versus 421, and 541 compliance tasks versus 417. Repeated the complete isolated restore/validate/switch flow with a new snapshot. The final local FBS controls are 613 orders, 958 order events, 8 inventory movements, 604 KIZ units, 4,197 KIZ events, 541 compliance tasks, 7 operation batches and 0 FBS action logs; the latest FBS/KIZ timestamps are from 2026-08-31. Migration and catalog-integrity checks remained clean, production health remained HTTP 200, and all second-pass temporary artifacts plus the superseded local database were removed after verification.
+
+## 2026-08-27 - Added canonical mini-PC production runbook
+
+Created `docs/core/MINI_PC_RUNBOOK.md` as the stable operating guide for the Windows production host. It records the local-vs-production environment map, Tailscale/OpenSSH identity preflight, expected compose services, persistent-state boundaries, read-only health sequence, controlled GitHub release flow, backup/restore and local dev refresh safeguards, Windows interactive-session dependency, current private/public ingress status, and explicit approval gates. No secrets, volatile commit/run/backup identifiers or permanent row-count assumptions were added.
+
+Updated `AGENTS.md` and `docs/DOCS_INDEX.md` so new agents must read the runbook before mini-PC, production, SSH/Tailscale, Docker runtime, deploy, backup/restore or production-diagnostics work. This documentation-only task did not connect to the mini-PC, run production commands, deploy, commit or push.
+
+## 2026-08-27 - Refreshed local dev database from production
+
+With explicit owner approval, created a consistent custom-format PostgreSQL snapshot from the running mini-PC database using only read-only production operations. Verified archive readability, size and checksum before and after transfer, then removed every temporary snapshot copy from the production host and container. Production remained online; `/api/health` returned HTTP 200 after cleanup, and no production code, data, Redis state, container, worker, schedule, migration or sync was changed.
+
+On the laptop, proved the target was the local `nimba_digitization` development compose project and that no NimbaOS Node/worker process or database connection was active. Restored the snapshot into a separate temporary local database, validated it, switched it into the standard local `wb_cabinet` name, repeated validation, and only then removed the obsolete local database and all local snapshot files. The 13 completed migrations match the repository; one historical rolled-back record is expected, with zero active unfinished migrations, invalid indexes or unvalidated constraints. Final bounded counts are 2 users, 3 WB accounts, 171 products, 14,161 orders and 77,276 realization-report rows.
+
+Started only the local Next.js development server. `/api/health` and `/login` return HTTP 200, the login stylesheet returns HTTP 200, and `/`, `/cards`, `/reports`, `/stocks`, `/analytics` and `/advertising` correctly redirect unauthenticated requests to `/login`. PostgreSQL and Redis are healthy; sync and automation workers remain stopped, and production Redis was not copied.
+
+## 2026-08-24 - Controlled GitHub deployment to the mini-PC
+
+Implemented a repository-owned release path for the Windows mini-PC. Pushes and pull requests now run dependency installation, Prisma Client generation, type-checking, tests, lint and a production build in GitHub Actions. Production deployment remains manual and confirmation-gated through `Deploy production`; it re-runs verification before touching the host.
+
+Installed an online self-hosted GitHub runner as a highest-privilege logon task under the actual `n8929` Windows identity. The deploy script uses one versioned `nimba-app:<commit>` image for the app, sync worker, automation worker, migrations and schedulers. It keeps the previous app online during the build, serializes deployments with a mutex, rejects a dirty or mismatched production checkout, creates a validated custom-format PostgreSQL backup, applies only committed Prisma migrations, recreates application services without recreating PostgreSQL/Redis, restores both scheduler sets and verifies containers plus `/api/health`. Application rollback uses the prior image tag; database restoration is never automatic.
+
+The first complete release succeeded in GitHub Actions run `32679512118` at commit `abb5853ddbb0636a98ac86e8f853081d64665b05`. App, sync worker and automation worker are running the same versioned image; app/PostgreSQL/Redis are healthy and both worker start markers are present. Local and Tailscale health returned HTTP 200. Backup `C:\NimbaOS\backups\nimba-production-20260824-012722-abb5853ddbb0.dump` was validated at 9,891,769 bytes with SHA256 `ADB8664F1A24EA97394EE02823FF3FC9CC778B9D22CBAFD1924A644130F836C2`. Production database volumes and synchronized data were not replaced.
+
+## 2026-08-24 - Confirmed Russian IPv4 Cloudflare response throttling
+
+Superseded the interim Worker diagnosis after byte-level comparison from the mini-PC and the affected work laptop. The exact 124,727-byte Next.js chunk completed locally in 0.007 seconds and through direct Tailscale in about 0.75 seconds. Through public `app.nimbaos.ru` from the Russian IPv4 client, Cloudflare returned HTTP 200 headers but repeatedly stopped after about 24,576 bytes, including on a cache HIT; four explicit small range requests completed quickly. Small HTML, health and NextAuth requests therefore succeed while the browser cannot finish React hydration.
+
+Removed `app.nimbaos.ru` from the obsolete `nimbaos-proxy` Worker custom domains and restored the Tunnel CNAME. Verified that `/api/auth/csrf` again carries private/no-store caching and NextAuth cookies, and that an intentionally invalid credentials request returns HTTP 401 quickly. Restored the automatic Windows Cloudflared service to QUIC over IPv6 after an HTTP2/IPv4 comparison showed no client-side improvement. The connector is healthy, but Cloudflare Tunnel, Workers and proxied DNS all retain the throttled Cloudflare-to-user response path.
+
+Verified the current reliable route: `https://win-sk69nvld6f0.tailc11887.ts.net` delivers both the login page and full JavaScript bundle quickly on trusted Tailscale devices. The preferred no-VPS public fix is a public/static IPv4 from the ISP, direct HTTPS on the mini-PC and DNS-only records. No application data, database schema, migration, schedule, credential or WB data was changed.
+
+## 2026-08-24 - Interim Worker mitigation for public login hydration
+
+Diagnosed the endless public sign-in as a frontend delivery failure rather than a credential or database problem. The custom hostname sometimes failed to finish parallel Next.js JavaScript requests, leaving the login form unhydrated; Chrome could also close the custom-domain connection after negotiating HTTP/3/QUIC even while HTTP/1.1 health checks passed.
+
+Updated and deployed `nimbaos-proxy` so public HTML/RSC payloads and the webpack runtime load immutable Next.js assets through the reliable `nimbaos-proxy.yaros-05.workers.dev` hostname. Added immutable edge caching and removed stale body-specific headers from rewritten responses. Disabled HTTP/3/QUIC for `nimbaos.ru`, retaining HTTP/2.
+
+Verified three consecutive public health responses at HTTP 200. A fresh Chromium session loaded the styled login page to `readyState=complete`, initialized webpack, bound React to the submit button, loaded five Worker-hosted scripts and no custom-host static scripts. A blank submit produced normal client validation instead of navigation or an endless loading state. No credential, application data, database schema, migration, synchronization schedule or WB data was changed.
+
+## 2026-08-23 - Restored public NimbaOS ingress through Worker and Funnel
+
+Retested the intended physical topology using a normal ZTE LAN1 port connected to Keenetic port 0. Keenetic received the expected `192.168.1.19` lease, promoted Ethernet to the primary uplink and retained WISP as reserve. Tailscale remote access remained stable and all 12 connectivity checks passed. The local production stack remained healthy: PostgreSQL, Redis and the app reported healthy, both BullMQ workers were running, and local `/api/health` returned HTTP 200.
+
+The updated native Cloudflare Tunnel still registered and then lost its edge streams even over the corrected wired uplink, so it was removed from the production DNS path. Enabled persistent Tailscale Funnel from `https://win-sk69nvld6f0.tailc11887.ts.net` to `http://127.0.0.1:3000`. Published Cloudflare Worker `nimbaos-proxy`, attached `app.nimbaos.ru` as its custom domain, and deleted only the obsolete DNS Tunnel record for that hostname. The Worker source and deployment metadata are tracked in `infra/cloudflare/nimbaos-proxy/` without credentials.
+
+Verified the final path end to end: public `/api/health` returned HTTP 200 in 20/20 checks over more than two minutes, `/` redirected to the login route, and `/login` returned HTTP 200 with the expected NimbaOS form. AnyDesk, Tailscale and the legacy Cloudflared service remain automatic. The legacy connector is retained temporarily for diagnostics but no longer serves production DNS. No application data, database schema, migration, synchronization schedule or secret was changed.
+
+A subsequent browser test exposed a separate delivery problem: HTML and health responses completed, but larger `/_next/static/` bodies stalled on the Worker custom hostname, so Chrome rendered the login form without CSS and waited indefinitely. Direct Tailscale Funnel and the Worker's `workers.dev` hostname both delivered the same CSS quickly and at the correct size. Updated and deployed `nimbaos-proxy` so requests for immutable Next.js static assets on `app.nimbaos.ru` receive a temporary redirect to the same Worker's technical hostname. Verification downloaded the complete 78,262-byte production CSS in 1.32 seconds, kept public `/api/health` at HTTP 200, and rendered the fully styled login page in a clean Chrome tab. No application, database, schedule or secret was changed.
+
+## 2026-08-23 - ZTE LAN to Keenetic WAN controlled test and recovery
+
+Connected a second cable from ZTE LAN to Keenetic Internet/WAN and temporarily promoted the Keenetic Ethernet uplink. The resulting WAN lease was `10.49.27.58/21` through gateway `10.49.24.1`, not an address from the expected ZTE LAN subnet `192.168.1.x`. The route returned a filtered/private answer for Cloudflare infrastructure (`172.16.24.100`), and Netcraze RMM, Tailscale and Cloudflared became unreachable. This was a provider/ZTE uplink-path failure, not an application or Docker failure.
+
+Disconnected the new ZTE-facing cable. The existing WISP route recovered, Netcraze and Tailscale came back, and the mini-PC was again reachable at `192.168.2.82`. PostgreSQL, Redis, the application and workers remained healthy; `http://127.0.0.1:3000/api/health` returned HTTP 200. Restarted Cloudflared `2026.8.2`; it registered four IPv4/HTTP2 edge connections and loaded the expected route to `http://127.0.0.1:3000`, but sustained public checks still alternated among HTTP 200, 530 and timeouts.
+
+AnyDesk remained offline after route recovery even though its automatic Windows service was running. Its service trace showed repeated attempts to reach `boot.net.anydesk.com` at the poisoned address `172.16.24.100`. The current DNS path already returned public AnyDesk relay addresses, so the Windows DNS cache was cleared and the AnyDesk service/processes were fully restarted. AnyDesk then established TLS 1.3 to public relay `208.115.231.202:443`, remained connected after a sustained check and accepted an incoming managed-client connection.
+
+Returned the Keenetic Ethernet uplink profile to `Reserve 1`, leaving WISP as the primary path. The second cable must not be promoted again until the ZTE-facing port supplies an expected `192.168.1.x` lease and passes sustained DNS, Tailscale, RMM and public-health checks. No application data, schema, migration, schedule or secret was changed.
+
+## 2026-08-23 - Cloudflare ingress retest over Keenetic Ethernet
+
+Connected to the Windows mini-PC over Tailscale and verified that the production host now uses the 1 Gbps Realtek Ethernet interface at `192.168.2.82`; Wi-Fi is disconnected. The active path still traverses `192.168.2.1` (Keenetic), `192.168.1.1` (ZTE) and `100.90.0.1` (MGTS CGNAT). Therefore the cable removed Wi-Fi variability without changing the upstream NAT topology.
+
+Restored the full compose runtime after confirming zero queued/running sync or automation jobs. PostgreSQL and Redis remained healthy; app, sync worker and automation worker restarted normally; local `/api/health` returned HTTP 200 and no new worker errors were found. The Cloudflared service initially remained stopped after an early DNS timeout while networking was not ready. Changed it to delayed automatic startup and configured service recovery restarts after 5, 15 and 30 seconds.
+
+Retested both transports with request-level logging. HTTP2 registered four connections and served one public HTTP 200, then Cloudflare control streams closed and public checks returned 502 or transport resets while the local app stayed healthy. QUIC also registered four connections, but every connection failed with `timeout: no recent network activity` within about five seconds. Restored the service to the previous IPv4/HTTP2 configuration with normal info logging. Public ingress remains blocked by `BUG-026`; no production data, schema, migration, schedule or secret was changed.
+
+Continued in the Keenetic UI: registered the mini-PC at permanent LAN address `192.168.2.82` and set the active WISP profile `local` to always-on. The physical mini-PC cable reaches a Keenetic LAN port, but Keenetic's own internet uplink remains WISP Wi-Fi to ZTE; the intended ZTE LAN -> Keenetic Internet/WAN cable is not present. Updated the official Windows connector from `cloudflared 2026.5.2` to `2026.8.2`, verified its published SHA256, retained the old executable as a rollback copy, and restarted the existing service. Sustained public checks still alternated among 200, 502/530 and timeouts while local health stayed 200. The router reports developer firmware `5.2 Alpha 5`; no firmware update, channel change or reboot was attempted. Next controlled network test is a second Ethernet cable from ZTE LAN to Keenetic Internet/WAN, followed by promoting Ethernet and disabling/demoting WISP.
+
+The owner subsequently updated Keenetic to developer firmware `5.2 Alpha 6`. Netcraze RMM confirmed the router online after reboot with the mini-PC connected at 1 Gbps. A 24-request external monitor over four minutes returned five HTTP 502 responses followed by nineteen HTTP 530 responses. During the same interval, the Windows Cloudflared service remained running on `2026.8.2`, local `/api/health` returned 200, and the connector log again recorded `client disconnected` control-stream failures followed by edge re-registration. The firmware update alone was therefore insufficient; no further router setting was changed.
+
 ## 2026-08-21 - BUG-029 scheduled queue grace and Galioni recovery
 
 Replaced the hard 10-minute scheduled-start checks in both BullMQ processors with `src/lib/queue/scheduled-job-policy.ts`. The production default is 1080 minutes and the parser caps any configured value at 1439 minutes, preserving stale-job protection without rejecting a second account that legitimately waits behind a long WB job. Added three regression tests; focused tests, type-check, lint and compose validation passed.
@@ -604,6 +700,17 @@ Next compilation succeeded, but running `next build` concurrently with `next dev
 ### Scope
 No WB write method, schedule, bounded historical backfill or production migration was executed. The stock/marking/order smoke tests read WB and updated only the local development database.
 2026-08-13 - Corrected the two stale Galioni withdrawal workbooks produced before canceled-order reconciliation. Removed exactly 5 canceled rows from the 16-row 2026-07-30 batch and 6 from the 179-row 2026-08-12 batch. Artifact-tool import/export, readback, price comparison, duplicate scan, status comparison and rendered previews passed. Final total: 184 unique `WITHDRAWAL_REQUIRED` KIZs; originals preserved.
+
+## 2026-08-21 - WB AGNIA initial historical synchronization
+
+### Summary
+After explicit owner confirmation, queued the production read-only initial fill for `WB AGNIA`: cards, reports plus paid storage, advertising campaigns and statistics, current WB stocks, reviews and questions. Period-aware jobs use the inclusive range `2026-01-01` through `2026-08-20`; cards, campaign metadata and stocks are current-snapshot APIs.
+
+### Initial verification
+The production app, PostgreSQL, Redis and sync worker were running. Cards succeeded with 20 created products, 29 price rows and zero errors. Campaign metadata succeeded with 6 campaigns and zero errors. Historical advertising statistics started next; the remaining jobs are retained in the queue and execute sequentially with worker concurrency 1.
+
+### Safety
+No WB write operation, migration, secret read or destructive database command was performed. Do not enqueue the same historical range again until these runs finish and coverage is verified.
 
 ## 2026-08-14 - Mini-PC production ingress diagnosis
 

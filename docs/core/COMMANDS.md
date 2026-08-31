@@ -1,6 +1,6 @@
 # Commands
 
-Команды проекта с точки зрения безопасности. Last updated: 2026-08-21.
+Команды проекта с точки зрения безопасности. Last updated: 2026-08-24.
 
 ## Safe Inspection
 
@@ -15,6 +15,7 @@
 
 - `npm run dev` — Next.js dev server.
 - `npm run build` — production build; может быть долгим, не нужен для documentation-only.
+- Не запускать `npm run build` одновременно с `npm run dev` в одном checkout: оба используют `.next`, и работающий dev server может начать отдавать 404 для CSS/JS. Остановить dev перед build либо перезапустить его сразу после build.
 - `npm run start` — запуск собранного приложения.
 - `npm run lint` — Next lint.
 - `npm run docker:dev` — поднять локальные PostgreSQL и Redis.
@@ -48,6 +49,21 @@
 - `npx tsx scripts/debug-advertising.ts` — live WB advert API reads; запускать только по явному запросу.
 
 ## Production
+
+### Recommended GitHub release
+
+1. Develop and test locally, then commit and push the intended change to `main`.
+2. GitHub automatically runs `.github/workflows/ci.yml`; do not deploy a failed commit.
+3. In GitHub open `Actions` -> `Deploy production` -> `Run workflow`, enable `I confirm this production deployment`, and start the workflow.
+4. The workflow verifies the commit again, then the mini-PC runner builds a versioned image, validates a PostgreSQL backup, deploys migrations/app/workers/schedules, and checks health.
+5. Verify the green workflow result and `https://win-sk69nvld6f0.tailc11887.ts.net/api/health` from a trusted Tailscale device.
+
+- Production is deliberately not updated by an ordinary push alone. The manual confirmation is the protection against releasing unfinished code to the live database.
+- The runner task is `NimbaOS GitHub Actions Runner`. Docker Desktop and the logged-in `n8929` Windows session must be active.
+- Successful deployment state is recorded in `C:\ProgramData\NimbaOS\deployments\last-successful.json`; validated backups are written under `C:\NimbaOS\backups`.
+- Application rollback never automatically restores PostgreSQL. A database restore is a separate destructive recovery procedure requiring explicit authorization.
+
+### Manual fallback
 
 - `docker compose --env-file .env.production -f docker-compose.prod.yml config` — проверка compose config.
 - `docker compose --env-file .env.production -f docker-compose.prod.yml build app worker` — production image build.

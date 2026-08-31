@@ -1,5 +1,52 @@
 # Bugs And Incidents
 
+## BUG-031: Local `next dev` loses CSS after concurrent production build
+
+Status:
+- Resolved locally on 2026-08-31; prevention documented.
+
+Symptoms:
+- Authenticated localhost pages rendered as unstyled HTML while React content and navigation remained present.
+- `/_next/static/css/app/layout.css?...` returned HTTP 404 and `document.styleSheets` contained no loaded application stylesheet.
+
+Root cause:
+- `npm run build` was run while `next dev` was already serving the same checkout. Both processes share `.next`; the production build replaced generated dev artifacts while the old dev process still referenced its previous CSS URL.
+
+Resolution:
+- Verified that port 3000 belonged to this repository's local `next dev`, stopped only that local process tree and restarted it from the project directory.
+- Reloaded the authenticated in-app-browser page. The regenerated stylesheet returned HTTP 200 with 106,095 bytes and exposed 164 CSS rules; the normal sidebar, cards, tables, fonts and colors returned.
+
+Prevention:
+- Do not run `npm run build` concurrently with `npm run dev` in the same checkout. Stop dev before build, or restart dev immediately after build before browser QA.
+
+## BUG-030: Public login page did not hydrate and could hang on sign-in
+
+Status:
+- Root cause confirmed on 2026-08-24; public Cloudflare path remains unsuitable for Russian IPv4 clients.
+
+Symptoms:
+- `app.nimbaos.ru/login` could render without styles or keep loading after the user pressed `Войти`.
+- When JavaScript failed to hydrate, the login form behaved like a native browser form instead of the Next.js client form.
+
+Root cause:
+- Russian IPv4 paths to Cloudflare are throttled/terminated after roughly the first 16-24 KB of a response. The production login HTML and small auth responses complete, but larger Next.js JavaScript chunks stop mid-transfer, so React never hydrates and the form falls back to native browser submission.
+- The failure is independent of credentials, NextAuth, the database and the Cloudflare Tunnel transport. A cached 124,727-byte JavaScript asset repeatedly stopped at 24,576 bytes from the affected client, while four explicit byte ranges completed immediately.
+- The mini-PC can fetch the same public asset over IPv6, and the trusted laptop can fetch it directly through Tailscale, proving that the application and origin file are healthy.
+
+Resolution:
+- Removed `app.nimbaos.ru` from the obsolete `nimbaos-proxy` Worker custom domains and restored its proxied Tunnel DNS record. This also removed the Worker's unsafe caching of `/api/auth/csrf`; public auth responses again carry `private, no-cache, no-store`, `Set-Cookie` and `cf-cache-status: DYNAMIC`.
+- Restored the automatic Windows `Cloudflared` service to `QUIC` over IPv6 after controlled IPv4/HTTP2 comparison. The connector is healthy, but changing connector transport cannot bypass throttling between Cloudflare and the end user.
+- Use the direct Tailscale Serve URL or the trusted laptop's local SSH tunnel for current private operation. The durable no-VPS public solution is a public/static IPv4 from the ISP plus direct HTTPS with Cloudflare proxying disabled; otherwise use a non-Cloudflare relay/VPS.
+
+Verification:
+- Local origin asset: HTTP 200, 124,727/124,727 bytes in 0.007 seconds.
+- Direct Tailscale asset: HTTP 200, 124,727/124,727 bytes in 0.75 seconds.
+- Public asset from the affected Russian IPv4 client: HTTP 200 headers followed by a timeout at 24,576/124,727 bytes, including on a Cloudflare cache HIT.
+- Public `/api/auth/csrf` is correct and an intentionally invalid credentials request returns HTTP 401 in about 0.3 seconds. The visible login failure occurs earlier because the browser does not receive the client bundle.
+
+Related files:
+- `infra/cloudflare/nimbaos-proxy/src/index.js`, `docs/development/DEV_HANDOFF.md`
+
 ## BUG-029: Second account advertising sync is skipped after queue wait
 
 Status:
@@ -79,7 +126,7 @@ Related files:
 ## BUG-026: Cloudflare Tunnel becomes externally unreachable behind MGTS double NAT
 
 Status:
-- Blocked by network/provider ingress decision.
+- Open. The connector is currently stable over QUIC/IPv6, but Cloudflare remains unsuitable as the public response path for affected Russian IPv4 clients; see `BUG-030`.
 
 Symptoms:
 - The Windows `cloudflared` service registers four connections and its local readiness endpoint reports four ready replicas, but `app.nimbaos.ru` quickly changes from HTTP 200/502 to 530/1033.
@@ -92,13 +139,20 @@ Investigation:
 - Reproduced with HTTP2 and QUIC, the installed Windows connector and a newer Docker connector, normal DME edges and forced US `ewr/ord` edges.
 - Temporarily lowering/disabling the ZTE firewall and Anti-DoS did not help.
 - After moving the mini-PC to Keenetic, the route was `192.168.2.1 -> 192.168.1.1 -> 100.90.0.1`, proving both double NAT and MGTS CGNAT; the ZTE is not a transparent bridge.
+- Repeated on 2026-08-23 with Wi-Fi disconnected and the mini-PC attached to Keenetic by 1 Gbps Ethernet. HTTP2 served one request before its control streams closed; QUIC timed out after about five seconds. Local app health remained 200, confirming that Wi-Fi and the Docker origin are not the cause.
+- Keenetic inspection showed that this Ethernet cable terminates on the Keenetic LAN, while Keenetic's active internet uplink remains the WISP Wi-Fi profile `local` toward ZTE. Setting that active profile to always-on, assigning permanent client IP `192.168.2.82`, and updating Windows `cloudflared` from `2026.5.2` to `2026.8.2` did not stop the edge-connection flapping.
+- The owner updated Keenetic from developer `5.2 Alpha 5` to `5.2 Alpha 6`. After reboot, RMM showed the router online, but a sustained external check returned five HTTP 502 responses and then nineteen HTTP 530 responses; local application health stayed 200 and Cloudflared again logged disconnected control streams.
+- The controlled ZTE LAN -> Keenetic Internet/WAN test was completed. Keenetic received `10.49.27.58/21` through `10.49.24.1` instead of the expected ZTE LAN address `192.168.1.x`; Cloudflare DNS was filtered to `172.16.24.100`, and Netcraze, Tailscale and Cloudflared became unreachable. Disconnecting the cable restored the WISP route and remote access. A subsequent Cloudflared restart registered four connections, but public health still alternated among HTTP 200, 530 and timeouts.
+- AnyDesk also remained offline after route recovery because its running service retained the poisoned `172.16.24.100` DNS result. Clearing the Windows DNS cache and restarting the AnyDesk service restored a stable public TLS relay connection and incoming remote access.
+- A later controlled test used a normal ZTE LAN1 port. Keenetic received `192.168.1.19`, promoted Ethernet to primary, retained WISP as reserve and passed 12/12 remote-access checks. Native Cloudflared still lost its edge streams, proving that the corrected cable and lease alone do not resolve this provider-specific connector failure.
 
 Resolution:
-- Not resolved. The original automatic global-region Cloudflared service was restored.
-- Request a public/static IPv4 from MGTS and retest; if tunnel stability remains poor, use direct HTTPS with a reverse proxy or a VPS reverse tunnel.
+- An interim path through `Cloudflare Worker nimbaos-proxy -> Tailscale Funnel` passed small health checks and some browser checks, but larger static responses remained unreliable. It did not constitute a final resolution.
+- On 2026-08-24 the Worker custom domain was removed and the native Tunnel DNS record was restored. Cloudflared now runs automatically over QUIC/IPv6. This is useful for diagnosis but does not make `app.nimbaos.ru` production-ready because `BUG-030` occurs on the Cloudflare-to-user segment.
+- Keep the normal ZTE LAN1 Ethernet uplink primary and WISP as reserve. Current reliable access is direct Tailscale or the trusted laptop SSH tunnel. For public access without a VPS, request a public/static IPv4 from MGTS, terminate HTTPS directly on the mini-PC and use DNS-only records.
 
 Related files:
-- `docker-compose.prod.yml`, `Dockerfile`, `docs/development/DEV_HANDOFF.md`
+- `infra/cloudflare/nimbaos-proxy/src/index.js`, `infra/cloudflare/nimbaos-proxy/wrangler.jsonc`, `docker-compose.prod.yml`, `Dockerfile`, `docs/development/DEV_HANDOFF.md`
 
 ## BUG-025: CRPT withdrawal XLSX omitted required unit price
 

@@ -1,5 +1,13 @@
 # Project State
 
+Update 2026-08-27: `docs/core/MINI_PC_RUNBOOK.md` is now the canonical stable map for production mini-PC operations. It routes agents through local-vs-production identity checks, Tailscale/OpenSSH preflight, Docker/runtime and persistent-state boundaries, read-only diagnostics, controlled releases, backup/restore safeguards, Windows session caveats and approval gates. Volatile release, incident and task details remain in the existing state/handoff/current-task documents.
+
+Update 2026-08-27: the laptop's local development PostgreSQL database was safely refreshed from a validated read-only production snapshot. Restore validation was completed in an isolated local database before switching it into `wb_cabinet`; all 13 committed migrations match, the expected historical rolled-back record remains, and final local counts are 2 users, 3 WB accounts, 171 products, 14,161 orders and 77,276 realization-report rows. Production stayed online and unchanged, Redis was not copied, temporary snapshot files were removed, and local sync/automation workers remain stopped. The local Next.js dev server is healthy at `http://127.0.0.1:3000`.
+
+Update 2026-08-24: controlled GitHub-to-mini-PC deployment is operational. CI verifies every pushed/PR commit; production remains owner-confirmed through the manual `Deploy production` workflow on the self-hosted Windows runner. GitHub Actions run `32679512118` successfully deployed commit `abb5853ddbb0636a98ac86e8f853081d64665b05` as versioned image `nimba-app:abb5853ddbb0`, after a validated PostgreSQL backup and migration check. App, PostgreSQL and Redis are healthy, both workers are running, and local plus Tailscale health return HTTP 200. Code rollout preserved the Docker database volumes and synchronized production data. Reliable private access remains `https://win-sk69nvld6f0.tailc11887.ts.net`; the separate public Cloudflare path remains unresolved.
+
+Update 2026-08-24: production services on the mini-PC and direct Tailscale access are healthy, but public `app.nimbaos.ru` is not suitable for Russian IPv4 clients while responses pass through Cloudflare. A 124,727-byte Next.js chunk repeatedly stopped at about 24,576 bytes from the affected laptop, while it completed locally and through Tailscale; small range requests and NextAuth API calls complete normally. The obsolete Worker custom domain was removed, Tunnel DNS was restored, and Cloudflared runs automatically over QUIC/IPv6. Current reliable access is the trusted Tailscale URL or laptop SSH tunnel. The preferred no-VPS public solution is a public/static ISP IPv4, direct HTTPS on the mini-PC and DNS-only records.
+
 Update 2026-08-21: BUG-029 is resolved and live-verified on production commit `bb139f9`. Scheduled sync and automation processors share an 18-hour queue-wait grace capped below one daily cycle, so the second account is no longer rejected after waiting behind a long concurrency-1 WB job. An approved bounded Galioni advertising sync advanced coverage from 2026-08-12 through 2026-08-21 with zero errors. The morning report for 2026-08-20 was then rerun successfully for both accounts: 20 rows per Google Sheet and zero failures. All containers are running, local health is HTTP 200, and Redis contains 14 future sync schedulers plus one future morning-report scheduler.
 
 Update 2026-08-21: the product/workflow automation runtime is deployed on the mini-PC. `nimba-automation-worker-1` runs continuously in the production compose project, the Google service-account credential is supplied through untracked `.env.production`, and the enabled morning-report schedule is registered in Redis. Initial startup avoided an uncovered report; after `BUG-029` recovery, live Google Sheet output was verified for both mapped accounts.
@@ -40,7 +48,7 @@ Update 2026-08-13: BUG-025 prevents late historical pickup-cancellation/defect r
 
 Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdrawal XLSX files using the linked WB order `convertedPriceRaw / 100`, without VAT markup for the current 0% VAT seller. Four historical downloads were rebuilt as corrected copies. A read-only audit tied all 57 apparent `IN_STOCK + UNKNOWN` units to historical post-handoff pickup-cancellation/defect orders; no live sync or data mutation was performed.
 
-Текущее состояние NimbaOS. Last updated: 2026-08-21.
+Текущее состояние NimbaOS. Last updated: 2026-08-27.
 
 ## Current Phase
 

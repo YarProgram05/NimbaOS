@@ -2,7 +2,13 @@
 
 ## Active
 
-No active development task is currently assigned.
+- ID: TASK-AGNIA-INITIAL-HISTORICAL-SYNC
+  Status: Running
+  Priority: High
+  Description: Initial production fill for `WB AGNIA`: cards and advertising campaigns completed; advertising stats, reports/storage, current WB stocks, reviews and questions were queued for `2026-01-01` through `2026-08-20` where the sync kind supports a period.
+  Next step: Monitor the production sync queue until all seven runs finish, then verify coverage and row counts. Do not enqueue the same historical range again while these runs are active.
+  Related files: `src/lib/queue/sync-processor.ts`, `src/lib/services/sync-*`, `/sync`.
+  Risks: Advertising and report history is rate-limited by WB; the single production worker intentionally processes jobs sequentially.
 
 ## Next
 
@@ -14,25 +20,73 @@ No active development task is currently assigned.
   Related files: `src/lib/services/sync-*`, `src/lib/queue/sync-processor.ts`, `/sync`.
   Risks: WB 429, long retries, incomplete ad stats.
 
-- ID: TASK-PRODUCTION-RUNBOOK
-  Status: Pending
-  Priority: Medium
-  Description: Подготовить/проверить production rollout runbook.
-  Next step: Уточнить VPS target, backup policy, migration window.
-  Related files: `docker-compose.prod.yml`, `Dockerfile`, `deploy/nginx/nimbaos.conf`.
-  Risks: Production migrations require explicit confirmation.
-
 ## Blocked
 
-- ID: TASK-PROD-DEPLOY
-  Status: Blocked
+- ID: TASK-PUBLIC-INGRESS-NON-CLOUDFLARE
+  Status: Blocked by ISP/public-ingress choice
   Priority: High
-  Description: Current `main` commit `bb139f9` is deployed and healthy on the mini-PC, but `app.nimbaos.ru` is not reliably reachable. Cloudflare Tunnel connections become half-open and public responses degrade from 200/502 to 530/1033.
-  Next step: Ask MGTS for a public/static IPv4, reboot the GPON router after activation, verify that its WAN address is outside `100.64.0.0/10`, then retest Cloudflare Tunnel. If it still fails, use direct HTTPS through Caddy/Cloudflare or a small VPS reverse proxy.
-  Related files: `docker-compose.prod.yml`, `Dockerfile`, `docs/development/BUGS_AND_INCIDENTS.md`.
-  Risks: The current route is double NAT (`Keenetic -> ZTE -> MGTS CGNAT`); ZTE is not in bridge mode despite the intended topology. Do not open database/Redis ports or expose secrets while changing ingress.
+  Description: `app.nimbaos.ru` is not reliable for Russian IPv4 users while responses pass through Cloudflare. Small HTML/API responses complete, but larger Next.js JavaScript files are truncated after roughly 16-24 KB, so the login form does not hydrate.
+  Next step: Obtain a public/static IPv4 from the ISP, configure direct HTTPS on the mini-PC and switch `app.nimbaos.ru` to DNS-only. Until then use `https://win-sk69nvld6f0.tailc11887.ts.net` on trusted Tailscale devices or the laptop SSH tunnel at `http://127.0.0.1:13000`.
+  Related files: `docker-compose.prod.yml`, `deploy/nginx/nimbaos.conf`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: Cloudflare Tunnel, Workers and proxied DNS all keep Cloudflare in the response path and therefore do not solve this client-side throttling. Never expose PostgreSQL, Redis or SSH publicly.
 
 ## Done Recently
+
+- ID: BUG-031-LOCAL-NEXT-DEV-CSS-404
+  Status: Done
+  Priority: Medium
+  Description: Restored localhost styling after a concurrent production build replaced `.next` artifacts used by the running dev server. Restarted only the verified local `next dev`; the stylesheet again returns HTTP 200 and normal layout is visible in the authenticated in-app browser.
+  Next step: Do not run `npm run build` concurrently with `npm run dev` in the same checkout; restart dev after any required build before visual QA.
+  Related files: `docs/development/BUGS_AND_INCIDENTS.md`, `docs/core/COMMANDS.md`, `docs/development/TROUBLESHOOTING.md`.
+  Risks: This is a local generated-artifact collision, not a source CSS regression. Database, workers, queues and production were not touched.
+
+- ID: TASK-RUN-HISTORY-PAGINATION
+  Status: Done
+  Priority: High
+  Description: Replaced the 50-row `/sync` and `/automations` history limit with server-side pagination across the complete `sync_job_runs` and `automation_runs` tables. Added exact totals, 25/50/100 page sizes, previous/next navigation, server-side sorting and compact filters. Both histories use the existing shared two-month calendar with quick presets as their single run-date filter; redundant period text and duplicate date inputs were removed after UI review.
+  Next step: After deployment, verify both histories with multiple pages and confirm that active-run polling preserves the selected page, calendar range and filters.
+  Related files: `src/lib/sync/job-runs.ts`, `src/lib/automations/runs.ts`, `src/app/(dashboard)/sync/sync-client.tsx`, `src/app/(dashboard)/automations/automations-client.tsx`, `src/components/run-history-table.tsx`.
+  Risks: Sorting is intentionally offered for stored/indexable fields; derived display-only duration, period and result summaries remain filter/display fields rather than database sort keys.
+
+- ID: TASK-MINI-PC-RUNBOOK
+  Status: Done
+  Priority: Medium
+  Description: Added `docs/core/MINI_PC_RUNBOOK.md` as the canonical topology and safety guide for production mini-PC work. It distinguishes local dev from production, requires host/path/compose/database identity checks, documents private access and Windows session constraints, and separates read-only inspection from owner-approved mutation.
+  Next step: Route every future mini-PC, SSH/Tailscale, Docker runtime, deploy, backup/restore or production-diagnostics task through the runbook and keep volatile release facts in state/handoff docs.
+  Related files: `AGENTS.md`, `docs/DOCS_INDEX.md`, `docs/core/MINI_PC_RUNBOOK.md`.
+  Risks: Endpoint IPs and current runtime state can change; agents must verify them rather than treating the document as authorization to mutate production.
+
+- ID: TASK-REFRESH-LOCAL-DEV-DATABASE
+  Status: Done
+  Priority: High
+  Description: Refreshed the laptop-only `wb_cabinet` twice on 2026-08-31 from validated current production snapshots; the second pass captured same-day FBS changes that arrived after the first snapshot. Each restore was verified in an isolated local database before switching. All 13 repository migrations match, the expected historical rollback is retained, and final core counts are 2 users, 3 WB accounts, 171 products, 14,247 orders and 78,225 realization-report rows. Final FBS counts include 613 orders, 958 order events, 604 KIZ units, 4,197 KIZ events and 541 compliance tasks. Production remained read-only and healthy, Redis was not copied, and no local worker, scheduler, sync or WB write action was started.
+  Next step: Continue local development through `http://127.0.0.1:3000`; start sync or automation workers only for a separately approved test that explicitly requires them.
+  Related files: `docker-compose.dev.yml`, `prisma/migrations/`, `docs/core/DATABASE_ACCESS_GUIDE.md`.
+  Risks: The snapshot includes encrypted production fields but not production encryption secrets. Use the existing local development environment and do not treat unreadable encrypted values as a reason to copy production secrets.
+
+- ID: TASK-MINI-PC-CONTROLLED-DEPLOY
+  Status: Done
+  Priority: High
+  Description: Added automatic GitHub CI and a manually confirmed production deployment to the Windows mini-PC through a repository self-hosted runner. The deployment builds one versioned image while the old app stays online, creates and validates a PostgreSQL backup, runs `prisma migrate deploy`, recreates the app and both workers, restores BullMQ schedules, verifies health, and records the last successful commit for application rollback.
+  Next step: For future releases, push to `main`, wait for CI, then manually run `Deploy production` in GitHub Actions with the confirmation checkbox. Keep Docker Desktop running in the logged-in `n8929` Windows session.
+  Related files: `.github/workflows/ci.yml`, `.github/workflows/deploy-production.yml`, `deploy/windows/deploy-production.ps1`, `deploy/windows/install-github-runner.ps1`, `docker-compose.prod.yml`.
+  Risks: The Windows self-hosted runner depends on an interactive user session and Docker Desktop. Database rollback remains a separate, explicitly authorized recovery operation; ordinary code rollback never restores a database dump automatically.
+
+- ID: TASK-PROD-DEPLOY
+  Status: Done
+  Priority: High
+  Description: Production services are deployed on the mini-PC: PostgreSQL, Redis, Next.js, sync worker and automation worker are operational. Private access through Tailscale is fast and complete. Public `app.nimbaos.ru` is routed directly to the native Cloudflare Tunnel again, but it is not production-ready for Russian IPv4 clients because large response bodies are truncated before Next.js can hydrate.
+  Next step: Keep validating the production runtime through Tailscale. Complete `TASK-PUBLIC-INGRESS-NON-CLOUDFLARE` before giving employees the public domain.
+  Related files: `infra/cloudflare/nimbaos-proxy/src/index.js`, `infra/cloudflare/nimbaos-proxy/wrangler.jsonc`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: A healthy Cloudflare connector and successful small health checks do not prove that browsers can download the full application bundle. The obsolete Worker custom domain has been removed and must not be reattached as a workaround.
+
+- ID: TASK-RETEST-CLOUDFLARE-OVER-ETHERNET
+  Status: Done
+  Priority: High
+  Description: Reconnected the mini-PC to Keenetic over Ethernet, assigned permanent LAN IP `192.168.2.82`, restored all production containers, retested HTTP2 and QUIC ingress, and confirmed that the upstream WISP/double-NAT/CGNAT failure persists independently of the mini-PC Wi-Fi. Added delayed startup and 5/15/30-second recovery restarts to the Cloudflared Windows service, set the active Keenetic WISP uplink to always-on, and updated `cloudflared` to `2026.8.2`.
+  Next step: Keep using Tailscale/private access until the provider path is changed; do not advertise the public hostname as reliable.
+  Related files: `docs/development/BUGS_AND_INCIDENTS.md`, `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_LOG.md`.
+  Risks: Cloudflare can briefly return 200 immediately after a connector restart, then degrade again; a single successful check is not evidence of recovery.
 
 - ID: TASK-FIX-SCHEDULED-SYNC-QUEUE-GRACE
   Status: Done

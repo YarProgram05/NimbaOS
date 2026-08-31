@@ -25,6 +25,44 @@ Related files:
 
 ---
 
+## 2026-08-24 — Production releases require an explicit GitHub Actions confirmation
+
+Status:
+Active
+
+Decision:
+Pushes and pull requests automatically run CI, but an ordinary push never updates the live mini-PC. Production is released only through the manually started `Deploy production` workflow with its confirmation checkbox. The Windows mini-PC remains the application host and uses a repository self-hosted runner.
+
+Reason:
+The live database and background synchronization must not be exposed to unfinished or accidental commits. A confirmation-gated workflow still makes the normal release one click while providing repeatable verification, backup, migration, health-check and rollback behavior.
+
+Consequences:
+Every release uses one commit-tagged Docker image for the app and both workers, creates and validates a PostgreSQL backup before migrations, restores schedules and records the last successful commit. Application rollback is automatic on deployment failure when possible; database restoration is never automatic. Docker Desktop requires the `n8929` Windows user to remain logged in, so the current runner is not independent of the Windows desktop session.
+
+Related files:
+`.github/workflows/ci.yml`, `.github/workflows/deploy-production.yml`, `deploy/windows/deploy-production.ps1`, `deploy/windows/install-github-runner.ps1`, `docker-compose.prod.yml`
+
+---
+
+## 2026-08-24 — Russian employee ingress must avoid the Cloudflare response path
+
+Status:
+Active
+
+Decision:
+Do not treat Cloudflare Tunnel, Workers or proxied DNS as a production employee-access path for NimbaOS on affected Russian IPv4 networks. Keep the mini-PC as the application host. Prefer a public/static ISP IPv4 with direct HTTPS on the mini-PC and Cloudflare DNS-only records. Until that is available, use Tailscale for trusted devices or the existing SSH tunnel.
+
+Reason:
+Byte-level verification showed that a 124,727-byte Next.js asset is complete locally and through Tailscale but repeatedly stops after roughly 24,576 bytes through Cloudflare from the affected Russian IPv4 client. Small HTML/API responses still succeed, which makes health checks misleading and leaves the login form unhydrated.
+
+Consequences:
+The obsolete Worker custom domain remains detached. A healthy Cloudflared connector may remain available for diagnostics, but it does not qualify the public hostname as ready. Direct public deployment must expose only HTTPS ports 80/443 through a hardened reverse proxy; PostgreSQL, Redis and SSH remain private.
+
+Related files:
+`docs/development/BUGS_AND_INCIDENTS.md`, `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_CURRENT_TASKS.md`, `docs/core/PROJECT_STATE.md`
+
+---
+
 ## 2026-08-12 — Post-handoff FBS KIZ association is preserved
 
 Status:
