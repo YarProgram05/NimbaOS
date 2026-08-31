@@ -2,8 +2,6 @@
 
 ## Active
 
-No active marketplace task is currently assigned. Pick from `Next` after reading `MARKETPLACE_HANDOFF.md`.
-
 ## Next
 
 - ID: MKT-DAILY-BASELINE
@@ -36,6 +34,69 @@ No active marketplace task is currently assigned. Pick from `Next` after reading
   Risks: Production automation and data freshness.
 
 ## Done Recently
+
+- ID: MKT-OZON-UNIT-3-FILL-2026-08-24
+  Status: Done
+  Priority: High
+  Description: Filled the live `OZON Unit 3.0` Google Sheet with 56 current Nimba SKUs and 51 current Galioni SKUs from the supplied product, price, 90-day order, accrual and cost files. Cabinet-specific categories, FBO, volume-preserving package dimensions, costs, current prices/discounts/co-investment, 48% FBO commission, modal clusters, per-SKU buyout, advertising, tax/VAT and zero-cost assumptions are populated while formulas and workbook-wide settings remain intact.
+  Next step: Review the calculated unit economics; refresh the same manual inputs when prices, commission, costs or the 90-day order window materially change.
+  Related reports/metrics: Ozon SKU and seller article, category, package volume, cost, seller/base/buyer price, co-investment, buyout, clusters, commission, advertising per delivered unit and tax.
+  Related cabinets: Ozon Nimba, Ozon Galioni.
+  Risks: 42 Nimba legacy aliases use same-goods matching to the shared cost workbook; three cancellation-only SKUs use cabinet-average buyout; displayed dimensions are derived from Ozon volume because the exports do not contain physical package sides. The workbook-compatible tax form label is `УСН (с дохода)` with explicit 8%/7% rates.
+
+- ID: MKT-COST-PRICE-TEMPLATE-PLUS-35-2026-08-21
+  Status: Done
+  Priority: High
+  Description: Filled all 155 rows of the supplied cost-price template from the mini-PC production reference, adding 35 rubles per unit and preserving the workbook format.
+  Next step: Upload or use `outputs/cost_price_fill_2026-08-21/costPriceTemplate_себестоимость_плюс_35.xlsx`; review the intentionally inherited 41-ruble values where the server reference itself is 6 rubles.
+  Related reports/metrics: production `cost_prices`, current/historical article identity, unit cost plus 35 rubles.
+  Related cabinets: WB Nimba and WB Galioni reference data; alternate marketplace article aliases mapped to their WB equivalents.
+  Risks: 69 alternate article labels use explicit model/material/color/size-family equivalence rather than exact seller-article equality. No database or marketplace-side data was changed.
+
+- ID: MKT-NIMBA-MARGIN-RECOVERY-PDF-2026-08-14
+  Status: Done
+  Priority: High
+  Description: Exported the margin-recovery report to a visually matched six-page A4 landscape PDF and removed browser print headers/footers.
+  Next step: Open `output/pdf/WB_Nimba_план_восстановления_маржи_01-12_августа_2026.pdf`.
+  Related reports/metrics: Same content and metrics as the validated margin-recovery HTML report.
+  Related cabinets: WB Nimba.
+  Risks: None for delivery; no WB-side changes were made.
+
+- ID: MKT-NIMBA-MARGIN-RECOVERY-PLAN-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Diagnosed WB Nimba's -3.93% operating margin for 1-12 August and prepared an article-level response plan. The 70,216.60-ruble commission, not advertising, is the main immediate driver; at July's effective commission the same August economics would produce about +46,966.23 rubles of operating profit.
+  Next step: After owner approval, test a 7-10% price/discount adjustment only on the 17 negative SKUs whose static break-even threshold is within 15%, limit the 14 SKUs above 25%, and recalculate after three full days.
+  Related reports/metrics: `output/reports/nimba_margin_recovery_august_2026/nimba_margin_recovery_august_2026.html`, operating profit, margin, commission, KVV, platform discount, average realized price, break-even price threshold.
+  Related cabinets: WB Nimba.
+  Risks: Static price thresholds assume unchanged volume, returns, KVV/SPP and ruble costs; exact WB seller price must be set in the cabinet and tested. No WB-side changes were made.
+
+- ID: MKT-COMMISSION-REPORT-PORTABLE-DELIVERY-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Recovered the complete July/August WB Nimba commission diagnostic after the embedded artifact failed to open and packaged it as a self-contained browser-readable HTML report with corrected ruble labels and responsive compact summaries.
+  Next step: Open `output/reports/commission_shift_august_2026/commission_shift_august_2026.html`; publish separately only if coworker sharing is needed.
+  Related reports/metrics: commission, effective commission rate, KVV, platform discount, article contribution.
+  Related cabinets: WB Nimba; WB Galioni control comparison retained.
+  Risks: The strict packaged browser verifier reported the Windows vertical-scrollbar width as horizontal overflow, so final packaging used structural verification after a successful diagnostic render.
+
+- ID: MKT-GALIONI-NEGATIVE-COMMISSION-AUDIT-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Проверена отрицательная комиссия WB Galioni за 1-30 апреля. Чистая комиссия -1 420,92 руб. является начислением в пользу продавца: средний КВВ 34,50% был немного ниже платформенной скидки 34,99%. Месяц в целом завершился с операционной прибылью 3 708,03 руб. и маржой 1,21%.
+  Next step: При необходимости сверить назначение начисления с недельной детализацией финансового отчёта WB.
+  Related reports/metrics: commission, `commissionPercent`, `ppvzSppPrc`, operating profit, marginality.
+  Related cabinets: WB Galioni.
+  Risks: Отрицательная комиссия улучшает взаиморасчёт, но сама по себе не означает прибыльность периода; нужны все расходы.
+
+- ID: MKT-COMMISSION-SHIFT-AUDIT-2026-08-13
+  Status: Done
+  Priority: High
+  Description: Проверена комиссия WB Nimba за 1-12 июля и 1-12 августа. Рост с 10 255,28 до 70 216,60 руб. (6,85x) корректен; основная причина — рост эффективной нагрузки с 0,97% до 11,19% из-за повышения КВВ и снижения платформенной скидки, а не рост продаж или дубли данных.
+  Next step: В кабинете WB сопоставить дату изменения с историей категорийных тарифов и опциями «Конструктора тарифов»; до проверки считать августовскую нагрузку фактической.
+  Related reports/metrics: commission, `commissionPercent`, `ppvzSppPrc`, sales before SPP, commission per unit.
+  Related cabinets: WB Nimba; WB Galioni used as a control comparison.
+  Risks: Локальный финансовый отчёт не содержит точного договорного основания изменения тарифа. Любые изменения цен, рекламы или карточек требуют отдельного подтверждения.
 
 - ID: MKT-FBS-LATE-WITHDRAWAL-RECONCILIATION-2026-08-13
   Status: Done

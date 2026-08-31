@@ -1,5 +1,101 @@
 # Marketplace Analysis Log
 
+## 2026-08-24 - Ozon Unit 3.0 filled for Nimba and Galioni
+
+### Request
+Fill every manual field in the live `OZON Unit 3.0` Google Sheet for Nimba and Galioni from the supplied Ozon exports and shared cost workbook while leaving formula fields and workbook-wide settings unchanged.
+
+### Data Used
+Per cabinet: current product and price exports dated 2026-08-24, accrual detail for 2026-05-26 through 2026-08-23, and order CSV covering the same completed 90-day window. Cost source: `costPriceTemplate_себестоимость.xlsx`. No local NimbaOS database, Ozon API or Ozon-side mutation was used.
+
+### Mapping And Calculations
+Loaded 56 Nimba and 51 Galioni current product rows; all are FBO. Ozon product types were kept cabinet-specific: Nimba has 43 `Парео`, 7 `Накидка пляжная` and 6 `Халат`; Galioni has 19 `Накидка пляжная` and 32 `Туника`. All 51 Galioni articles and 14 Nimba articles matched the cost file exactly; 42 Nimba legacy aliases were mapped to the same model/material/color/size family. Base price is the price before discount, seller discount is derived from current promotion/strategy price, Ozon co-investment is derived from buyer versus seller price, and the current FBO commission is 48% for every row.
+
+Per-SKU buyout is delivered quantity divided by delivered plus canceled quantity during the 90-day window. Cabinet totals were 53.52% for Nimba and 55.15% for Galioni. One Nimba and two Galioni SKUs had cancellations but no delivered units; cabinet-level buyout was used for those rows because zero causes the template's return-logistics formula to divide by zero. Shipment and delivery clusters are the quantity-weighted per-SKU modes, with cabinet mode only when a SKU has no cluster observations. Nimba had no promotion accruals in the source period. Galioni promotion charges were allocated per delivered unit to SKU `4626053277` at 172.48 rubles and SKU `4626177701` at 354.29 rubles.
+
+Ozon exports provide volume but not three physical package sides. To preserve the value used by the workbook's logistics formula, dimensions were derived as height x 35 x 25 cm from each exported volume. Owner assumptions were applied as instructed: internal per-unit and additional expenses zero, paid acceptance `Нет`, VAT and VAT recovery zero, Nimba tax 8%, Galioni tax 7%, and workbook-wide defaults unchanged. The tax dropdown uses the workbook-compatible `УСН (с дохода)` label for both rates.
+
+### Validation
+API readback matched all written manual values. Product-name counts are exactly 56 and 51 with no stale rows through row 200. Each tab retains 24 row-9 formula anchors. After the three buyout fallbacks, the populated ranges contain no spreadsheet formula errors. Both tabs were opened in Google Sheets and visually checked; dropdown chips, links, dimensions, volumes, costs and preserved formatting render correctly.
+
+### Follow-up
+Recalculate when the 90-day window, price/commission export or shared costs materially change. If exact physical package dimensions become available, replace the derived sides while keeping the same package volume unless Ozon itself reports a changed volume. No Ozon price, product card, advertising, stock or setting was changed.
+
+## 2026-08-24 - Ozon Unit 3.0 source and export mapping
+
+### Request
+Inspect the live Google Sheet `OZON Unit 3.0`, understand which cells are manual, and identify the minimum Ozon Seller files and exact export paths needed to fill both Nimba and Galioni.
+
+### Sources And Safety
+Read the workbook structure through connected Google Drive/Sheets and inspected the current logged-in Ozon Seller interface in read-only fashion. No spreadsheet cell, Ozon setting, marketplace data, local database row or source file was changed. No report was downloaded. Buyer personal data was neither needed nor collected.
+
+### Workbook Mapping
+The workbook has visible sheets `INFO`, `UNIT 1 Nimba` and `UNIT 1 Ozon Galioni`; the two working tabs have the same 75-column layout. One product/Ozon SKU is filled per row from row 10. Manual or dropdown inputs are product name, Ozon SKU, seller article, cabinet-specific category, fulfillment type, package dimensions, internal cost and seller-paid per-unit costs, base price/seller discount/Ozon co-investment, optional manual commission, supply/delivery clusters, buyout percentage, paid acceptance, extra Ozon charges, advertising, tax/VAT and optional additional expenses. All other working columns are formula-driven. The hidden tariff reference reports update date 2026-07-15.
+
+### Minimum Export Pack
+For each cabinet request: (1) `Товары` from `Товары -> Список товаров -> Скачать шаблоны -> Товары`; (2) price XLSX from `Цены и акции -> Цены -> Скачать шаблон xlsx`; (3) FBO order XLSX for the latest 90 completed days from `Аналитика -> Моя аналитика -> Отчёты -> Заказы -> Заказы со складов Ozon`, with analytical data enabled and buyer/jewelry options disabled; (4) accrual detail for the same period from `Финансы -> Начисления и документы -> Экономика магазина -> Детализация начислений -> Скачать отчёт`. Request `Заказы с моих складов` only for a cabinet that actually uses FBS. Product analytics XLSX is not required and may be Premium-only.
+
+### Remaining Owner Inputs
+Ozon reports cannot establish internal purchase cost, seller-paid transport/packaging/fulfillment, tax and VAT settings or the desired paid-acceptance scenario. The owner must also confirm whether to keep workbook defaults of 1.5% acquiring, 14 storage days, 1.5% last mile and tax calculation after Ozon co-investment. Match cross-cabinet products by Ozon SKU plus seller article and map categories separately rather than inheriting Nimba categories into Galioni.
+
+## 2026-08-21 - Cost-price template filled from mini-PC production DB
+
+### Request
+Fill the supplied 155-row cost-price workbook from the current server database, add 35 rubles to each unit cost, and do not change the database.
+
+### Data Used
+Read-only access to the mini-PC production PostgreSQL reference tables for active WB accounts. No `.env` values, API keys or decrypted secrets were read or printed. No WB API or synchronization was invoked.
+
+### Mapping And Result
+85 rows matched `cost_prices` directly by normalized seller article. The current cream article was linked through its historical `nmId` to the existing server cost reference. The remaining 69 alternate marketplace labels were mapped explicitly to the equivalent WB model/material/color/size family, and the matched server cost was used. Each exported value equals the selected database cost plus 35 rubles. All 155 target cells are numeric and nonblank; the exported range has no formula errors and the preserved two-column layout passed visual inspection.
+
+### Output And Safety
+Created `outputs/cost_price_fill_2026-08-21/costPriceTemplate_себестоимость_плюс_35.xlsx`. The source workbook was left unchanged. No production database row, WB-side setting, price, card, stock, advertising state or sync state was modified.
+
+## 2026-08-13 - Portable delivery repair for August commission report
+
+The previously rendered MCP artifact for the WB Nimba July/August commission diagnostic did not open in the desktop interface. The complete validated report was recovered from its canonical artifact payload and repackaged as a self-contained HTML file at `output/reports/commission_shift_august_2026/commission_shift_august_2026.html`. The wide comparison tables were converted to equivalent compact narrative summaries and the grouped bar chart was changed to a two-series line chart using the same daily data. Currency labels were fixed to rubles. Canonical validation and packaging passed; browser QA was limited to structural verification because the packaged reader's strict Windows overflow check detected the vertical-scrollbar width, although the diagnostic browser render itself loaded the report content correctly. No analytical values, database rows, sync state or WB-side data changed.
+
+## 2026-08-13 - Negative WB commission audit: Galioni, 1-30 April
+
+### Question
+Означает ли отрицательная комиссия WB Galioni за 1-30 апреля прибыль продавца и почему комиссия стала отрицательной?
+
+### Data Used
+Локальная БД NimbaOS, штатный `calculateReport` и независимая агрегация `realization_reports` для `WB Galioni (WB_2)`. Для трактовки механизма использована официальная документация WB по КВВ и детализации финансового отчёта. WB API и повторная историческая синхронизация не вызывались.
+
+### Freshness Check
+`REPORTS_PERIOD` полностью покрывает 2026-04-01 - 2026-04-30. Проверено 2 396 финансовых строк, все `rrdId` уникальны, даты операций охватывают весь месяц. Штатный отчёт и независимый расчёт комиссии совпали до копейки.
+
+### Findings
+Комиссия по продажам составила -2 016,15 руб.; возвраты сторнировали 595,23 руб. начисления, поэтому чистая комиссия равна -1 420,92 руб. Средневзвешенный КВВ был 34,50%, а платформенная скидка — 34,99%, поэтому по части продаж итоговое вознаграждение WB стало отрицательным и увеличило взаиморасчёт в пользу продавца. Это не равно прибыли периода: после логистики 80 894,76 руб., хранения 16 192,42 руб., рекламы 6 265,69 руб., себестоимости 163 212 руб. и налогов 24 433,53 руб. операционная прибыль составила 3 708,03 руб., маржа 1,21%.
+
+### Recommendations
+Отрицательную комиссию трактовать как начисление/компенсацию в пользу продавца внутри взаиморасчётов WB. Для оценки фактической прибыльности всегда использовать операционную прибыль после всех учтённых расходов, а не знак одной строки комиссии.
+
+### Follow-up
+При необходимости бухгалтерского подтверждения сопоставить строки недельных детализаций WB за апрель по полям КВВ, платформенной скидки и итогового вознаграждения.
+
+## 2026-08-13 - WB Nimba commission shift: 1-12 July vs 1-12 August
+
+### Question
+Почему комиссия за 1-12 августа почти в семь раз выше, чем за 1-12 июля, и корректен ли расчёт?
+
+### Data Used
+Локальная БД NimbaOS, штатный `calculateReport` и независимая агрегация строк `realization_reports` для `WB Nimba (WB_1)`. Для внешней проверки механизма использованы официальные справочные материалы WB по КВВ, платформенной скидке и тарифам. WB API и повторная историческая синхронизация не вызывались.
+
+### Freshness Check
+`REPORTS_PERIOD` полностью покрывает оба окна. Синхронизация завершена 2026-08-13 по московскому времени. Проверено 4 912 июльских и 3 450 августовских финансовых строк; все `rrdId` уникальны, даты операций покрывают 1-12 число, штатный отчёт и независимый расчёт совпали до копейки.
+
+### Findings
+Комиссия выросла с 10 255,28 до 70 216,60 руб., то есть в 6,85 раза (+59 961,32 руб.), хотя продажи снизились на 36,07%, а чистые продажи в штуках — на 40,55%. Эффективная комиссия к базе до платформенной скидки выросла с 0,97% до 11,19%. Средневзвешенный КВВ поднялся с 36,38% до 44,04% (+7,66 п.п.), а платформенная скидка уменьшилась с 35,17% до 30,43% (-4,73 п.п.). Рост распределён широко: 52 из 64 августовских артикулов дали положительный вклад; топ-5 объясняют только 32,34% разницы. Контрольный кабинет Galioni показал аналогичный сдвиг комиссии в 5,71 раза при снижении продаж, поэтому это не ошибка одного кабинета.
+
+### Recommendations
+Считать августовскую комиссию реальным расходом и использовать фактическую нагрузку около 11-12% базы до платформенной скидки при расчёте маржи. В кабинете WB проверить историю раздела «Тарифы», категорийные комиссии и подключённые опции «Конструктора тарифов». Не менять цены, рекламу или карточки без отдельного подтверждения.
+
+### Follow-up
+Локальные данные доказывают механизм роста, но не хранят договорное основание изменения тарифа. Для точной атрибуции нужно сопоставить период изменения КВВ с историей тарифов/новостями конкретного кабинета WB.
+
 ## 2026-08-13 - Late FBS withdrawal audit: Nimba and Galioni
 
 Official CRPT guidance requires light-industry remote-sale withdrawal after shipment, within three working days and before actual delivery. That remains the normal prospective rule. A historical sync can first reveal the order/KIZ after WB already reports pickup cancellation or defect. If NimbaOS has no confirmed withdrawal in that case, submitting a late withdrawal solely to immediately return the code to circulation adds no useful state transition and creates avoidable operator work.
@@ -350,6 +446,33 @@ After the next local sync covers 2026-05-25, fill only the newly covered date ra
 `Заказано руб.` remains a money metric. The sync path was corrected so report sync refreshes WB orders for the selected period and existing order rows are updated when WB changes price/cancellation state. Google Sheet was not filled.
 
 Новые аналитические записи добавлять сверху.
+
+## 2026-08-14 — PDF delivery of the WB Nimba margin recovery plan
+
+### Result
+Создан PDF с тем же содержанием и визуальным оформлением, что у проверенного HTML-отчёта: `output/pdf/WB_Nimba_план_восстановления_маржи_01-12_августа_2026.pdf`. Формат A4 landscape, 6 страниц. Цвета, карточки, график, таблица и типографика сохранены; служебные браузерные колонтитулы удалены.
+
+### Validation
+Все 6 страниц отрисованы через Poppler и визуально проверены. Нет обрезанного текста, наложений, сломанных таблиц и служебного пути `file:///...`. Ключевые разделы подтверждены извлечением текста. Аналитические данные и состояние WB не менялись.
+
+## 2026-08-13 — WB Nimba margin recovery plan for 1-12 August
+
+### Question
+Что делать после резкого роста комиссии и падения маржинальности WB Nimba; могло ли снижение СПП быть причиной и какие конкретные артикулы нужно менять первыми.
+
+### Data Used
+Локальная БД NimbaOS: `calculateReport` за 2026-08-01 - 2026-08-12 и июльский контроль 2026-07-01 - 2026-07-12, ограниченная детализация `realization_reports`, локальная рекламная статистика. Финансовое и рекламное покрытие полное; 3 450 проверенных августовских `rrdId` уникальны. WB API и синхронизация не запускались. Расчёт сохранён в `output/analysis/nimba_margin_response_2026-08-01_12.json`; визуально проверенный самодостаточный отчёт — `output/reports/nimba_margin_recovery_august_2026/nimba_margin_recovery_august_2026.html`.
+
+### Findings
+Продажи 436 790,79 руб., ОП -17 149,00 руб., маржа -3,93%, комиссия 70 216,60 руб. (11,19% от базы до платформенной скидки). Реклама 0,49 руб. при полном покрытии и не объясняет убыток. При применении к августовской базе июльской эффективной комиссии 0,97% расчётная ОП составила бы +46 966,23 руб. и маржа 10,75%. Значит, переход в минус связан прежде всего с условиями КВВ/СПП: в предыдущем разложении рост КВВ объяснил около 62% расширения разрыва, снижение СПП — около 38%.
+
+Из 64 релевантных строк 50 отрицательные: общий убыток -38 795,66 руб.; 10 крупнейших дают 57,08% потерь. 17 отрицательных SKU имеют статический порог безубыточности до +15% средней реализованной цены, 9 — от 15% до 25%, 14 — выше 25%, ещё 10 имеют расходы без продаж. 11 SKU уже дают маржу выше 5%, ещё 3 находятся в диапазоне 0-5%.
+
+### Recommendations
+Не делать общее повышение цены. После подтверждения владельца: временно ограничить 14 SKU с порогом выше 25%, если это не осознанная ликвидация; на 17 SKU с порогом до 15% начать ступенчатый тест +7-10% к цене продавца / уменьшения скидки продавца; прибыльные карточки не трогать. Через три полных дня пересчитать среднюю реализованную цену, заказы, выкуп, КВВ, СПП, комиссию и ОП по SKU. Параллельно проверить категорийный тариф, «Конструктор тарифов», уровень продавца и новости WB. Статический порог по кабинету: +5,6% для нулевой маржи и +12,8% для около 5%, но он не учитывает эластичность спроса и изменение СПП.
+
+### Follow-up
+После явного подтверждения пользователя подготовить точный список изменения цен/скидок для первой волны и контрольную таблицу на три дня. До подтверждения не менять цены, акции, рекламу, карточки и остатки WB.
 
 ## 2026-05-25 — Morning WB report prep for Galioni
 
