@@ -14,6 +14,7 @@
 - Если dev server не стартует, проверить Node version, install state, порт 3000, `.next` only as build artifact.
 - `npm run type-check` безопаснее build для первичной проверки.
 - `npm run build` запускать, когда нужно проверить production compile.
+- Если localhost внезапно показывает голый HTML, проверить HTTP-статус `/_next/static/css/app/layout.css`. После concurrent `next build` + `next dev` CSS может стать 404 из-за общей `.next`; перезапустить только проверенный локальный dev process и затем перезагрузить страницу.
 
 ## Prisma / Database
 
@@ -49,4 +50,3 @@
 - Использовать report/dashboard/stock/plan services.
 - Избегать raw scans.
 - Если slow path повторяется, добавить вопрос об aggregate/index в `docs/core/OPEN_QUESTIONS.md`.
-

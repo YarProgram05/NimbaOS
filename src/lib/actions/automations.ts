@@ -10,10 +10,12 @@ import { morningWbReportPayload } from '@/lib/services/morning-wb-report-workflo
 import { AUTOMATION_WORKFLOW_KINDS, type UpdateMorningWbReportWorkflowInput } from '@/types/automations'
 import type { ActionResult } from '@/types'
 import type {
+  AutomationRunQuery,
   AutomationRunRow,
   AutomationWorkflowRow,
   EnqueuedAutomationRun,
 } from '@/types/automations'
+import type { RunHistoryPage } from '@/types/run-history'
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -36,10 +38,12 @@ export async function getMorningWbReportWorkflowAction(): Promise<ActionResult<A
   }
 }
 
-export async function getAutomationRunsAction(): Promise<ActionResult<AutomationRunRow[]>> {
+export async function getAutomationRunsAction(
+  query: AutomationRunQuery = {},
+): Promise<ActionResult<RunHistoryPage<AutomationRunRow>>> {
   try {
     await requireSession()
-    return { success: true, data: await listAutomationRuns() }
+    return { success: true, data: await listAutomationRuns(query) }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки истории' }
   }

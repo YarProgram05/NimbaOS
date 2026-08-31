@@ -10,13 +10,13 @@ export default async function AutomationsPage() {
   const canManage = checkRole(session, 'MANAGER')
   const [workflow, runs] = await Promise.all([
     getMorningWbReportWorkflow(),
-    listAutomationRuns(),
+    listAutomationRuns({ page: 1, pageSize: 25 }),
   ])
 
   return (
     <AutomationsClient
       initialWorkflow={workflow}
-      initialRuns={runs}
+      initialRunsPage={runs}
       canManage={canManage}
     />
   )

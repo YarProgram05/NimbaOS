@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import type { DateRange } from 'react-day-picker'
 import { RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DateRangePicker } from '@/components/date-range-picker'
+import { RunHistoryPager, RunHistorySortableHead } from '@/components/run-history-table'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -35,9 +38,12 @@ import {
 import {
   SYNC_JOB_KINDS,
   type SyncJobKind,
+  type SyncJobRunQuery,
   type SyncJobRunRow,
+  type SyncJobRunSortKey,
   type SyncScheduleRow,
 } from '@/types/sync'
+import type { RunHistoryPage, RunHistoryPageSize } from '@/types/run-history'
 
 interface AccountRow {
   id: string
@@ -47,7 +53,7 @@ interface AccountRow {
 
 interface SyncClientProps {
   accounts: AccountRow[]
-  initialJobs: SyncJobRunRow[]
+  initialJobsPage: RunHistoryPage<SyncJobRunRow>
   initialSchedules: SyncScheduleRow[]
   selectedAccountId: string | null
   canEnqueue: boolean
@@ -127,31 +133,75 @@ function formatNextRun(value: string | null): string {
 
 export function SyncClient({
   accounts,
-  initialJobs,
+  initialJobsPage,
   initialSchedules,
   selectedAccountId,
   canEnqueue,
 }: SyncClientProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const [jobs, setJobs] = useState(initialJobs)
+  const [jobsPage, setJobsPage] = useState(initialJobsPage)
+  const [jobFilters, setJobFilters] = useState<Required<Pick<
+    SyncJobRunQuery,
+    'kind' | 'status' | 'wbAccountId' | 'source' | 'createdFrom' | 'createdTo' | 'error'
+  >>>({
+    kind: 'ALL',
+    status: 'ALL',
+    wbAccountId: 'ALL',
+    source: 'ALL',
+    createdFrom: '',
+    createdTo: '',
+    error: '',
+  })
+  const [jobDateRange, setJobDateRange] = useState<DateRange>({ from: undefined })
+  const [jobSort, setJobSort] = useState<{
+    sortBy: SyncJobRunSortKey
+    sortDirection: 'asc' | 'desc'
+  }>({ sortBy: 'createdAt', sortDirection: 'desc' })
+  const [jobsLoading, setJobsLoading] = useState(false)
   const [schedules, setSchedules] = useState(initialSchedules)
   const [pendingKind, setPendingKind] = useState<SyncJobKind | null>(null)
   const [savingSchedule, setSavingSchedule] = useState<SyncJobKind | null>(null)
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null)
   const [isRefreshing, startRefresh] = useTransition()
+  const jobsRequestId = useRef(0)
+  const skipInitialJobFilterLoad = useRef(true)
+  const jobs = jobsPage.rows
   const hasActiveJobs = jobs.some((job) => job.status === 'QUEUED' || job.status === 'RUNNING')
+
+  const loadJobs = useCallback(async (page: number, pageSize: RunHistoryPageSize = jobsPage.pageSize) => {
+    const requestId = ++jobsRequestId.current
+    setJobsLoading(true)
+    const result = await getSyncJobRunsAction({
+      ...jobFilters,
+      ...jobSort,
+      page,
+      pageSize,
+    })
+    if (requestId !== jobsRequestId.current) return
+    setJobsLoading(false)
+    if (result.success) setJobsPage(result.data)
+    else toast.error(result.error)
+  }, [jobFilters, jobSort, jobsPage.pageSize])
 
   useEffect(() => {
     if (!hasActiveJobs) return
 
     const timer = window.setInterval(async () => {
-      const result = await getSyncJobRunsAction()
-      if (result.success) setJobs(result.data)
+      await loadJobs(jobsPage.page, jobsPage.pageSize)
     }, 5000)
 
     return () => window.clearInterval(timer)
-  }, [hasActiveJobs])
+  }, [hasActiveJobs, jobsPage.page, jobsPage.pageSize, loadJobs])
+
+  useEffect(() => {
+    if (skipInitialJobFilterLoad.current) {
+      skipInitialJobFilterLoad.current = false
+      return
+    }
+    const timer = window.setTimeout(() => void loadJobs(1), 300)
+    return () => window.clearTimeout(timer)
+  }, [jobFilters, jobSort, loadJobs])
 
   function handleAccountChange(id: string) {
     const params = new URLSearchParams(window.location.search)
@@ -172,14 +222,41 @@ export function SyncClient({
   }, [selectedAccountId])
 
   function refreshJobs() {
-    startRefresh(async () => {
-      const result = await getSyncJobRunsAction()
-      if (result.success) {
-        setJobs(result.data)
-      } else {
-        toast.error(result.error)
-      }
+    startRefresh(() => {
+      void loadJobs(jobsPage.page, jobsPage.pageSize)
     })
+  }
+
+  function patchJobFilters(patch: Partial<typeof jobFilters>) {
+    setJobFilters((current) => ({ ...current, ...patch }))
+  }
+
+  function changeJobDateRange(range: DateRange) {
+    setJobDateRange(range)
+    patchJobFilters({
+      createdFrom: range.from ? format(range.from, 'yyyy-MM-dd') : '',
+      createdTo: range.to ? format(range.to, 'yyyy-MM-dd') : range.from ? format(range.from, 'yyyy-MM-dd') : '',
+    })
+  }
+
+  function resetJobFilters() {
+    setJobDateRange({ from: undefined })
+    setJobFilters({
+      kind: 'ALL',
+      status: 'ALL',
+      wbAccountId: 'ALL',
+      source: 'ALL',
+      createdFrom: '',
+      createdTo: '',
+      error: '',
+    })
+  }
+
+  function sortJobs(sortBy: SyncJobRunSortKey) {
+    setJobSort((current) => ({
+      sortBy,
+      sortDirection: current.sortBy === sortBy && current.sortDirection === 'asc' ? 'desc' : 'asc',
+    }))
   }
 
   async function enqueue(kind: SyncJobKind) {
@@ -219,7 +296,7 @@ export function SyncClient({
       return
     }
 
-    setJobs((current) => current.filter((item) => item.id !== job.id))
+    await loadJobs(jobsPage.page, jobsPage.pageSize)
     toast.success('Задача удалена')
   }
 
@@ -436,21 +513,79 @@ export function SyncClient({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Последние задачи</CardTitle>
-          <CardDescription>История хранится в базе, выполнение идёт через Bull MQ и Redis.</CardDescription>
+          <CardDescription>Полная история из базы с фильтрами, сортировкой и постраничным просмотром.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <Select value={jobFilters.kind} onValueChange={(value) => patchJobFilters({ kind: value as SyncJobRunQuery['kind'] })}>
+              <SelectTrigger><SelectValue placeholder="Тип задачи" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все типы</SelectItem>
+                {Object.entries(JOB_LABELS).map(([kind, label]) => (
+                  <SelectItem key={kind} value={kind}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={jobFilters.status} onValueChange={(value) => patchJobFilters({ status: value as SyncJobRunQuery['status'] })}>
+              <SelectTrigger><SelectValue placeholder="Статус" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все статусы</SelectItem>
+                {Object.entries(STATUS_LABELS).map(([status, label]) => (
+                  <SelectItem key={status} value={status}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={jobFilters.wbAccountId} onValueChange={(value) => patchJobFilters({ wbAccountId: value })}>
+              <SelectTrigger><SelectValue placeholder="Кабинет" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все кабинеты</SelectItem>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={jobFilters.source} onValueChange={(value) => patchJobFilters({ source: value as SyncJobRunQuery['source'] })}>
+              <SelectTrigger><SelectValue placeholder="Источник" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все источники</SelectItem>
+                <SelectItem value="manual">Ручной</SelectItem>
+                <SelectItem value="scheduled">Расписание</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker
+              value={jobDateRange}
+              onChange={changeJobDateRange}
+              className="w-full min-w-0 md:col-span-2"
+            />
+            <div className="flex gap-2">
+              <Input
+                value={jobFilters.error}
+                onChange={(event) => patchJobFilters({ error: event.target.value })}
+                placeholder="Текст ошибки"
+                aria-label="Фильтр по ошибке"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetJobFilters}
+              >
+                Сбросить
+              </Button>
+            </div>
+          </div>
           <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[1100px]">
+            <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Тип</TableHead>
-                  <TableHead>Статус</TableHead>
-                  <TableHead>Кабинет</TableHead>
+                  <RunHistorySortableHead label="Тип" sortKey="kind" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
+                  <RunHistorySortableHead label="Статус" sortKey="status" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
+                  <RunHistorySortableHead label="Кабинет" sortKey="wbAccountName" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
+                  <TableHead>Источник</TableHead>
                   <TableHead>Период</TableHead>
-                  <TableHead>Создано</TableHead>
+                  <RunHistorySortableHead label="Создано" sortKey="createdAt" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
                   <TableHead>Длительность</TableHead>
-                  <TableHead>Попытки</TableHead>
-                  <TableHead>Ошибка</TableHead>
+                  <RunHistorySortableHead label="Попытки" sortKey="attempts" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
+                  <RunHistorySortableHead label="Ошибка" sortKey="error" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
                   <TableHead className="text-right">Действие</TableHead>
                 </TableRow>
               </TableHeader>
@@ -462,6 +597,7 @@ export function SyncClient({
                       <Badge variant={STATUS_VARIANTS[job.status]}>{STATUS_LABELS[job.status]}</Badge>
                     </TableCell>
                     <TableCell>{job.wbAccountName ?? '—'}</TableCell>
+                    <TableCell>{job.source === 'scheduled' ? 'Расписание' : job.source === 'manual' ? 'Ручной' : '—'}</TableCell>
                     <TableCell>{job.period ?? '—'}</TableCell>
                     <TableCell>{formatDateTime(job.createdAt)}</TableCell>
                     <TableCell>{formatDuration(job.durationMs)}</TableCell>
@@ -486,14 +622,22 @@ export function SyncClient({
                 ))}
                 {jobs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                      Задач пока нет.
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                      {jobsLoading ? 'Загрузка…' : 'Задачи по выбранным фильтрам не найдены.'}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          <RunHistoryPager
+            total={jobsPage.total}
+            page={jobsPage.page}
+            pageSize={jobsPage.pageSize}
+            loading={jobsLoading}
+            onPageChange={(page) => void loadJobs(page, jobsPage.pageSize)}
+            onPageSizeChange={(pageSize) => void loadJobs(1, pageSize)}
+          />
         </CardContent>
       </Card>
     </div>

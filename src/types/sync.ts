@@ -42,6 +42,28 @@ export interface SyncJobRunRow {
   durationMs: number | null
 }
 
+export type SyncJobRunSortKey =
+  | 'kind'
+  | 'status'
+  | 'wbAccountName'
+  | 'createdAt'
+  | 'attempts'
+  | 'error'
+
+export interface SyncJobRunQuery {
+  page?: number
+  pageSize?: number
+  sortBy?: SyncJobRunSortKey
+  sortDirection?: 'asc' | 'desc'
+  kind?: SyncJobKind | 'ALL'
+  status?: SyncJobStatus | 'ALL'
+  wbAccountId?: string | 'ALL'
+  source?: SyncJobSource | 'ALL'
+  createdFrom?: string
+  createdTo?: string
+  error?: string
+}
+
 export interface SyncScheduleRow {
   id: string | null
   kind: SyncJobKind

@@ -12,10 +12,12 @@ import {
   SYNC_JOB_KINDS,
   type EnqueuedSyncJob,
   type SyncJobKind,
+  type SyncJobRunQuery,
   type SyncJobRunRow,
   type SyncScheduleRow,
   type UpdateSyncScheduleInput,
 } from '@/types/sync'
+import type { RunHistoryPage } from '@/types/run-history'
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -48,10 +50,12 @@ async function getConfiguredRollingDays(wbAccountId: string, kind: SyncJobKind):
   return schedules.find((schedule) => schedule.kind === kind)?.rollingDays ?? 7
 }
 
-export async function getSyncJobRunsAction(): Promise<ActionResult<SyncJobRunRow[]>> {
+export async function getSyncJobRunsAction(
+  query: SyncJobRunQuery = {},
+): Promise<ActionResult<RunHistoryPage<SyncJobRunRow>>> {
   try {
     await requireSession()
-    return { success: true, data: await listSyncJobRuns() }
+    return { success: true, data: await listSyncJobRuns(query) }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки задач' }
   }

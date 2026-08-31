@@ -4,9 +4,15 @@ import { getSyncQueue } from '@/lib/queue'
 import {
   SYNC_JOB_KINDS,
   type SyncJobKind,
+  type SyncJobRunQuery,
   type SyncJobRunRow,
   type SyncJobSource,
 } from '@/types/sync'
+import {
+  normalizeRunHistoryPageSize,
+  type RunHistoryPage,
+  type RunHistorySortDirection,
+} from '@/types/run-history'
 
 export type PrismaSyncJobKind =
   | 'PRODUCTS_REFRESH'
@@ -41,6 +47,10 @@ const PRISMA_TO_KIND = Object.fromEntries(
   Object.entries(KIND_TO_PRISMA).map(([kind, prismaKind]) => [prismaKind, kind]),
 ) as Record<PrismaSyncJobKind, SyncJobKind>
 
+const SYNC_JOB_KIND_VALUES = new Set<SyncJobKind>(Object.values(SYNC_JOB_KINDS))
+const SYNC_JOB_STATUS_VALUES = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED'])
+const SYNC_JOB_SOURCE_VALUES = new Set(['manual', 'scheduled'])
+
 export function toPrismaSyncJobKind(kind: SyncJobKind): PrismaSyncJobKind {
   return KIND_TO_PRISMA[kind]
 }
@@ -67,10 +77,72 @@ function getSourceFromPayload(payload: unknown): SyncJobSource | null {
   return source === 'manual' || source === 'scheduled' ? source : null
 }
 
-export async function listSyncJobRuns(limit = 50): Promise<SyncJobRunRow[]> {
+function parseMoscowDay(value: string | undefined, endExclusive = false): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = new Date(`${value}T00:00:00+03:00`)
+  if (Number.isNaN(date.getTime())) return undefined
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1)
+  return date
+}
+
+function getSyncRunOrderBy(
+  sortBy: SyncJobRunQuery['sortBy'],
+  direction: RunHistorySortDirection,
+): Prisma.SyncJobRunOrderByWithRelationInput[] {
+  const primary: Prisma.SyncJobRunOrderByWithRelationInput = (() => {
+    switch (sortBy) {
+      case 'kind': return { kind: direction }
+      case 'status': return { status: direction }
+      case 'wbAccountName': return { wbAccount: { name: direction } }
+      case 'attempts': return { attempts: direction }
+      case 'error': return { error: direction }
+      default: return { createdAt: direction }
+    }
+  })()
+
+  return [primary, { createdAt: 'desc' }, { id: 'desc' }]
+}
+
+function getSyncRunWhere(query: SyncJobRunQuery): Prisma.SyncJobRunWhereInput {
+  const createdFrom = parseMoscowDay(query.createdFrom)
+  const createdTo = parseMoscowDay(query.createdTo, true)
+  const error = query.error?.trim()
+
+  return {
+    ...(query.kind && query.kind !== 'ALL' && SYNC_JOB_KIND_VALUES.has(query.kind)
+      ? { kind: toPrismaSyncJobKind(query.kind) }
+      : {}),
+    ...(query.status && query.status !== 'ALL' && SYNC_JOB_STATUS_VALUES.has(query.status)
+      ? { status: query.status }
+      : {}),
+    ...(query.wbAccountId && query.wbAccountId !== 'ALL' ? { wbAccountId: query.wbAccountId } : {}),
+    ...(query.source && query.source !== 'ALL' && SYNC_JOB_SOURCE_VALUES.has(query.source)
+      ? { payload: { path: ['source'], equals: query.source } }
+      : {}),
+    ...(createdFrom || createdTo
+      ? { createdAt: { ...(createdFrom ? { gte: createdFrom } : {}), ...(createdTo ? { lt: createdTo } : {}) } }
+      : {}),
+    ...(error ? { error: { contains: error, mode: 'insensitive' } } : {}),
+  }
+}
+
+export async function listSyncJobRuns(
+  query: SyncJobRunQuery = {},
+): Promise<RunHistoryPage<SyncJobRunRow>> {
+  const pageSize = normalizeRunHistoryPageSize(query.pageSize)
+  const requestedPage = Number.isFinite(query.page)
+    ? Math.max(1, Math.trunc(query.page as number))
+    : 1
+  const sortDirection: RunHistorySortDirection = query.sortDirection === 'asc' ? 'asc' : 'desc'
+  const where = getSyncRunWhere(query)
+  const total = await prisma.syncJobRun.count({ where })
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(requestedPage, pageCount)
   const rows = await prisma.syncJobRun.findMany({
-    take: limit,
-    orderBy: { createdAt: 'desc' },
+    where,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    orderBy: getSyncRunOrderBy(query.sortBy ?? 'createdAt', sortDirection),
     include: {
       wbAccount: {
         select: { name: true },
@@ -78,24 +150,29 @@ export async function listSyncJobRuns(limit = 50): Promise<SyncJobRunRow[]> {
     },
   })
 
-  return rows.map((row) => ({
-    id: row.id,
-    kind: PRISMA_TO_KIND[row.kind as PrismaSyncJobKind],
-    status: row.status as SyncJobRunRow['status'],
-    wbAccountId: row.wbAccountId,
-    wbAccountName: row.wbAccount?.name ?? null,
-    source: getSourceFromPayload(row.payload),
-    period: getPeriodFromPayload(row.payload),
-    bullJobId: row.bullJobId,
-    error: row.error,
-    attempts: row.attempts,
-    createdAt: row.createdAt.toISOString(),
-    startedAt: row.startedAt?.toISOString() ?? null,
-    finishedAt: row.finishedAt?.toISOString() ?? null,
-    durationMs: row.startedAt && row.finishedAt
-      ? row.finishedAt.getTime() - row.startedAt.getTime()
-      : null,
-  }))
+  return {
+    rows: rows.map((row) => ({
+      id: row.id,
+      kind: PRISMA_TO_KIND[row.kind as PrismaSyncJobKind],
+      status: row.status as SyncJobRunRow['status'],
+      wbAccountId: row.wbAccountId,
+      wbAccountName: row.wbAccount?.name ?? null,
+      source: getSourceFromPayload(row.payload),
+      period: getPeriodFromPayload(row.payload),
+      bullJobId: row.bullJobId,
+      error: row.error,
+      attempts: row.attempts,
+      createdAt: row.createdAt.toISOString(),
+      startedAt: row.startedAt?.toISOString() ?? null,
+      finishedAt: row.finishedAt?.toISOString() ?? null,
+      durationMs: row.startedAt && row.finishedAt
+        ? row.finishedAt.getTime() - row.startedAt.getTime()
+        : null,
+    })),
+    total,
+    page,
+    pageSize,
+  }
 }
 
 export async function deleteSyncJobRun(id: string): Promise<void> {

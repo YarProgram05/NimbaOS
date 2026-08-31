@@ -62,6 +62,25 @@ export interface AutomationRunRow {
   durationMs: number | null
 }
 
+export type AutomationRunSortKey =
+  | 'status'
+  | 'source'
+  | 'createdAt'
+  | 'attempts'
+  | 'error'
+
+export interface AutomationRunQuery {
+  page?: number
+  pageSize?: number
+  sortBy?: AutomationRunSortKey
+  sortDirection?: 'asc' | 'desc'
+  status?: AutomationRunStatus | 'ALL'
+  source?: AutomationRunSource | 'ALL'
+  createdFrom?: string
+  createdTo?: string
+  error?: string
+}
+
 export interface EnqueuedAutomationRun {
   id: string
   kind: AutomationWorkflowKind

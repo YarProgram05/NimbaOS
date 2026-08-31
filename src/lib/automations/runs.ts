@@ -8,7 +8,19 @@ import {
   toPrismaAutomationKind,
   type PrismaAutomationWorkflowKind,
 } from '@/lib/automations/mapping'
-import type { AutomationRunRow, EnqueuedAutomationRun } from '@/types/automations'
+import type {
+  AutomationRunQuery,
+  AutomationRunRow,
+  EnqueuedAutomationRun,
+} from '@/types/automations'
+import {
+  normalizeRunHistoryPageSize,
+  type RunHistoryPage,
+  type RunHistorySortDirection,
+} from '@/types/run-history'
+
+const AUTOMATION_RUN_STATUS_VALUES = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED'])
+const AUTOMATION_RUN_SOURCE_VALUES = new Set(['manual', 'scheduled'])
 
 export function toAutomationPayloadJson(payload: unknown): Prisma.InputJsonValue {
   return payload as Prisma.InputJsonValue
@@ -118,32 +130,94 @@ export async function createAutomationRunForBullJob(data: AutomationJobData, bul
   })
 }
 
-export async function listAutomationRuns(limit = 50): Promise<AutomationRunRow[]> {
-  const rows = await prisma.automationRun.findMany({
-    take: limit,
-    orderBy: { createdAt: 'desc' },
-  })
+function parseMoscowDay(value: string | undefined, endExclusive = false): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = new Date(`${value}T00:00:00+03:00`)
+  if (Number.isNaN(date.getTime())) return undefined
+  if (endExclusive) date.setUTCDate(date.getUTCDate() + 1)
+  return date
+}
 
-  return rows.map((row) => {
-    const accountErrors = getAccountErrors(row.result)
-
-    return {
-      id: row.id,
-      kind: fromPrismaAutomationKind(row.kind as PrismaAutomationWorkflowKind),
-      status: row.status as AutomationRunRow['status'],
-      source: parseAutomationSource(row.payload),
-      bullJobId: row.bullJobId,
-      targetDate: parseTargetDate(row.payload),
-      period: getPeriodFromPayload(row.payload),
-      resultSummary: getResultSummary(row.result),
-      error: accountErrors ?? row.error,
-      attempts: row.attempts,
-      createdAt: row.createdAt.toISOString(),
-      startedAt: row.startedAt?.toISOString() ?? null,
-      finishedAt: row.finishedAt?.toISOString() ?? null,
-      durationMs: row.startedAt && row.finishedAt
-        ? row.finishedAt.getTime() - row.startedAt.getTime()
-        : null,
+function getAutomationRunOrderBy(
+  sortBy: AutomationRunQuery['sortBy'],
+  direction: RunHistorySortDirection,
+): Prisma.AutomationRunOrderByWithRelationInput[] {
+  const primary: Prisma.AutomationRunOrderByWithRelationInput = (() => {
+    switch (sortBy) {
+      case 'status': return { status: direction }
+      case 'source': return { source: direction }
+      case 'attempts': return { attempts: direction }
+      case 'error': return { error: direction }
+      default: return { createdAt: direction }
     }
+  })()
+
+  return [primary, { createdAt: 'desc' }, { id: 'desc' }]
+}
+
+function getAutomationRunWhere(query: AutomationRunQuery): Prisma.AutomationRunWhereInput {
+  const createdFrom = parseMoscowDay(query.createdFrom)
+  const createdTo = parseMoscowDay(query.createdTo, true)
+  const error = query.error?.trim()
+
+  return {
+    ...(query.status && query.status !== 'ALL' && AUTOMATION_RUN_STATUS_VALUES.has(query.status)
+      ? { status: query.status }
+      : {}),
+    ...(query.source && query.source !== 'ALL' && AUTOMATION_RUN_SOURCE_VALUES.has(query.source)
+      ? { source: query.source }
+      : {}),
+    ...(createdFrom || createdTo
+      ? { createdAt: { ...(createdFrom ? { gte: createdFrom } : {}), ...(createdTo ? { lt: createdTo } : {}) } }
+      : {}),
+    ...(error ? { error: { contains: error, mode: 'insensitive' } } : {}),
+  }
+}
+
+export async function listAutomationRuns(
+  query: AutomationRunQuery = {},
+): Promise<RunHistoryPage<AutomationRunRow>> {
+  const pageSize = normalizeRunHistoryPageSize(query.pageSize)
+  const requestedPage = Number.isFinite(query.page)
+    ? Math.max(1, Math.trunc(query.page as number))
+    : 1
+  const sortDirection: RunHistorySortDirection = query.sortDirection === 'asc' ? 'asc' : 'desc'
+  const where = getAutomationRunWhere(query)
+  const total = await prisma.automationRun.count({ where })
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(requestedPage, pageCount)
+  const rows = await prisma.automationRun.findMany({
+    where,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    orderBy: getAutomationRunOrderBy(query.sortBy ?? 'createdAt', sortDirection),
   })
+
+  return {
+    rows: rows.map((row) => {
+      const accountErrors = getAccountErrors(row.result)
+
+      return {
+        id: row.id,
+        kind: fromPrismaAutomationKind(row.kind as PrismaAutomationWorkflowKind),
+        status: row.status as AutomationRunRow['status'],
+        source: parseAutomationSource(row.payload),
+        bullJobId: row.bullJobId,
+        targetDate: parseTargetDate(row.payload),
+        period: getPeriodFromPayload(row.payload),
+        resultSummary: getResultSummary(row.result),
+        error: accountErrors ?? row.error,
+        attempts: row.attempts,
+        createdAt: row.createdAt.toISOString(),
+        startedAt: row.startedAt?.toISOString() ?? null,
+        finishedAt: row.finishedAt?.toISOString() ?? null,
+        durationMs: row.startedAt && row.finishedAt
+          ? row.finishedAt.getTime() - row.startedAt.getTime()
+          : null,
+      }
+    }),
+    total,
+    page,
+    pageSize,
+  }
 }

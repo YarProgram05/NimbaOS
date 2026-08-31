@@ -20,7 +20,7 @@ export default async function SyncPage({ searchParams }: SyncPageProps) {
       select: { id: true, name: true, sellerName: true },
       orderBy: { createdAt: 'asc' },
     }),
-    listSyncJobRuns(),
+    listSyncJobRuns({ page: 1, pageSize: 25 }),
   ])
 
   const selectedAccountId =
@@ -32,7 +32,7 @@ export default async function SyncPage({ searchParams }: SyncPageProps) {
   return (
     <SyncClient
       accounts={accounts}
-      initialJobs={jobs}
+      initialJobsPage={jobs}
       initialSchedules={schedules}
       selectedAccountId={selectedAccountId}
       canEnqueue={canEnqueue}

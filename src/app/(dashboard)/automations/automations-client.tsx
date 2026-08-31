@@ -1,14 +1,24 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import type { DateRange } from 'react-day-picker'
 import { Play, RotateCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DateRangePicker } from '@/components/date-range-picker'
 import { Input } from '@/components/ui/input'
+import { RunHistoryPager, RunHistorySortableHead } from '@/components/run-history-table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -18,9 +28,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type {
+  AutomationRunQuery,
   AutomationRunRow,
+  AutomationRunSortKey,
   AutomationWorkflowRow,
 } from '@/types/automations'
+import type { RunHistoryPage, RunHistoryPageSize } from '@/types/run-history'
 import {
   enqueueMorningWbReportAction,
   getAutomationRunsAction,
@@ -30,7 +43,7 @@ import {
 
 interface AutomationsClientProps {
   initialWorkflow: AutomationWorkflowRow
-  initialRuns: AutomationRunRow[]
+  initialRunsPage: RunHistoryPage<AutomationRunRow>
   canManage: boolean
 }
 
@@ -79,26 +92,68 @@ function formatNextRun(value: string | null): string {
 
 export function AutomationsClient({
   initialWorkflow,
-  initialRuns,
+  initialRunsPage,
   canManage,
 }: AutomationsClientProps) {
   const [workflow, setWorkflow] = useState(initialWorkflow)
-  const [runs, setRuns] = useState(initialRuns)
+  const [runsPage, setRunsPage] = useState(initialRunsPage)
+  const [runFilters, setRunFilters] = useState<Required<Pick<
+    AutomationRunQuery,
+    'status' | 'source' | 'createdFrom' | 'createdTo' | 'error'
+  >>>({
+    status: 'ALL',
+    source: 'ALL',
+    createdFrom: '',
+    createdTo: '',
+    error: '',
+  })
+  const [runDateRange, setRunDateRange] = useState<DateRange>({ from: undefined })
+  const [runSort, setRunSort] = useState<{
+    sortBy: AutomationRunSortKey
+    sortDirection: 'asc' | 'desc'
+  }>({ sortBy: 'createdAt', sortDirection: 'desc' })
+  const [runsLoading, setRunsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [isRefreshing, startRefresh] = useTransition()
+  const runsRequestId = useRef(0)
+  const skipInitialRunFilterLoad = useRef(true)
+  const runs = runsPage.rows
   const hasActiveRuns = runs.some((run) => run.status === 'QUEUED' || run.status === 'RUNNING')
+
+  const loadRuns = useCallback(async (page: number, pageSize: RunHistoryPageSize = runsPage.pageSize) => {
+    const requestId = ++runsRequestId.current
+    setRunsLoading(true)
+    const result = await getAutomationRunsAction({
+      ...runFilters,
+      ...runSort,
+      page,
+      pageSize,
+    })
+    if (requestId !== runsRequestId.current) return
+    setRunsLoading(false)
+    if (result.success) setRunsPage(result.data)
+    else toast.error(result.error)
+  }, [runFilters, runSort, runsPage.pageSize])
 
   useEffect(() => {
     if (!hasActiveRuns) return
 
     const timer = window.setInterval(async () => {
-      const result = await getAutomationRunsAction()
-      if (result.success) setRuns(result.data)
+      await loadRuns(runsPage.page, runsPage.pageSize)
     }, 5000)
 
     return () => window.clearInterval(timer)
-  }, [hasActiveRuns])
+  }, [hasActiveRuns, loadRuns, runsPage.page, runsPage.pageSize])
+
+  useEffect(() => {
+    if (skipInitialRunFilterLoad.current) {
+      skipInitialRunFilterLoad.current = false
+      return
+    }
+    const timer = window.setTimeout(() => void loadRuns(1), 300)
+    return () => window.clearTimeout(timer)
+  }, [loadRuns, runFilters, runSort])
 
   function patchWorkflow(patch: Partial<AutomationWorkflowRow>) {
     setWorkflow((current) => ({ ...current, ...patch }))
@@ -115,15 +170,41 @@ export function AutomationsClient({
 
   function refresh() {
     startRefresh(async () => {
-      const [workflowResult, runsResult] = await Promise.all([
-        getMorningWbReportWorkflowAction(),
-        getAutomationRunsAction(),
-      ])
+      const workflowResult = await getMorningWbReportWorkflowAction()
       if (workflowResult.success) setWorkflow(workflowResult.data)
       else toast.error(workflowResult.error)
-      if (runsResult.success) setRuns(runsResult.data)
-      else toast.error(runsResult.error)
+      await loadRuns(runsPage.page, runsPage.pageSize)
     })
+  }
+
+  function patchRunFilters(patch: Partial<typeof runFilters>) {
+    setRunFilters((current) => ({ ...current, ...patch }))
+  }
+
+  function changeRunDateRange(range: DateRange) {
+    setRunDateRange(range)
+    patchRunFilters({
+      createdFrom: range.from ? format(range.from, 'yyyy-MM-dd') : '',
+      createdTo: range.to ? format(range.to, 'yyyy-MM-dd') : range.from ? format(range.from, 'yyyy-MM-dd') : '',
+    })
+  }
+
+  function resetRunFilters() {
+    setRunDateRange({ from: undefined })
+    setRunFilters({
+      status: 'ALL',
+      source: 'ALL',
+      createdFrom: '',
+      createdTo: '',
+      error: '',
+    })
+  }
+
+  function sortRuns(sortBy: AutomationRunSortKey) {
+    setRunSort((current) => ({
+      sortBy,
+      sortDirection: current.sortBy === sortBy && current.sortDirection === 'asc' ? 'desc' : 'asc',
+    }))
   }
 
   async function saveWorkflow() {
@@ -310,22 +391,59 @@ export function AutomationsClient({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">История запусков</CardTitle>
-          <CardDescription>Последние ручные и запланированные выполнения workflow.</CardDescription>
+          <CardDescription>Полная история ручных и запланированных выполнений workflow.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <Select value={runFilters.status} onValueChange={(value) => patchRunFilters({ status: value as AutomationRunQuery['status'] })}>
+              <SelectTrigger><SelectValue placeholder="Статус" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все статусы</SelectItem>
+                {Object.entries(STATUS_LABELS).map(([status, label]) => (
+                  <SelectItem key={status} value={status}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={runFilters.source} onValueChange={(value) => patchRunFilters({ source: value as AutomationRunQuery['source'] })}>
+              <SelectTrigger><SelectValue placeholder="Источник" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все источники</SelectItem>
+                <SelectItem value="manual">Ручной</SelectItem>
+                <SelectItem value="scheduled">Расписание</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker
+              value={runDateRange}
+              onChange={changeRunDateRange}
+              className="w-full min-w-0 md:col-span-2"
+            />
+            <Input
+              value={runFilters.error}
+              onChange={(event) => patchRunFilters({ error: event.target.value })}
+              placeholder="Текст ошибки"
+              aria-label="Фильтр по ошибке"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetRunFilters}
+            >
+              Сбросить фильтры
+            </Button>
+          </div>
           <div className="overflow-x-auto rounded-md border">
             <Table className="min-w-[1050px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Статус</TableHead>
-                  <TableHead>Источник</TableHead>
+                  <RunHistorySortableHead label="Статус" sortKey="status" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
+                  <RunHistorySortableHead label="Источник" sortKey="source" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <TableHead>Дата отчета</TableHead>
                   <TableHead>Период</TableHead>
-                  <TableHead>Создано</TableHead>
+                  <RunHistorySortableHead label="Создано" sortKey="createdAt" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <TableHead>Длительность</TableHead>
-                  <TableHead>Попытки</TableHead>
+                  <RunHistorySortableHead label="Попытки" sortKey="attempts" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <TableHead>Результат</TableHead>
-                  <TableHead>Ошибка</TableHead>
+                  <RunHistorySortableHead label="Ошибка" sortKey="error" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -347,13 +465,21 @@ export function AutomationsClient({
                 {runs.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                      Запусков пока нет.
+                      {runsLoading ? 'Загрузка…' : 'Запуски по выбранным фильтрам не найдены.'}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          <RunHistoryPager
+            total={runsPage.total}
+            page={runsPage.page}
+            pageSize={runsPage.pageSize}
+            loading={runsLoading}
+            onPageChange={(page) => void loadRuns(page, runsPage.pageSize)}
+            onPageSizeChange={(pageSize) => void loadRuns(1, pageSize)}
+          />
         </CardContent>
       </Card>
     </div>

@@ -28,6 +28,7 @@
 - Prices/cards: `products`, `product_sizes`; WB API only for approved refresh/sync.
 - Feedback: `product_reviews`, `product_questions`; answer writes require confirmation.
 - Automations: `automation_workflow_settings`, `automation_workflow_accounts`, `automation_runs` for workflow configuration/history; do not query raw WB tables manually for automation output.
+- Run histories: use paginated `listSyncJobRuns` and `listAutomationRuns`; both apply filters and sorting before `skip`/`take` and return an exact total, so UI callers must not replace them with a fixed recent-row window or client-side archive filtering.
 
 ## Raw Tables
 
