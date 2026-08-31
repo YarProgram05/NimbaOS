@@ -1,23 +1,17 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { checkRole } from '@/lib/auth/check-role'
-import { getMorningWbReportWorkflow } from '@/lib/automations/workflows'
+import { getAutomationCatalog } from '@/lib/automations/workflows'
 import { listAutomationRuns } from '@/lib/automations/runs'
 import { AutomationsClient } from './automations-client'
 
 export default async function AutomationsPage() {
-  const session = await getServerSession(authOptions)
-  const canManage = checkRole(session, 'MANAGER')
-  const [workflow, runs] = await Promise.all([
-    getMorningWbReportWorkflow(),
+  const [automations, runs] = await Promise.all([
+    getAutomationCatalog(),
     listAutomationRuns({ page: 1, pageSize: 25 }),
   ])
 
   return (
     <AutomationsClient
-      initialWorkflow={workflow}
+      initialAutomations={automations}
       initialRunsPage={runs}
-      canManage={canManage}
     />
   )
 }

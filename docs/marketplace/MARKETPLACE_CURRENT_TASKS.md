@@ -35,6 +35,33 @@
 
 ## Done Recently
 
+- ID: MKT-FBS-SHEET-DAILY-WORKFLOW
+  Status: Done locally; disabled
+  Priority: High
+  Description: Implemented and verified the DB-first daily FBS lifecycle workflow. Initial live load through 2026-08-31 wrote 250 missing events and corrected 5 existing rows; retry verification found 255 unchanged events and no writes. The duplicate listing `парео леопард/пятна` maps to canonical physical product `туника леопард/пятна` by stable tuple.
+  Next step: Deploy code/migration normally and explicitly enable the production schedule after worker smoke-testing.
+  Related reports/metrics: 251 orders, 3 pre-handoff cancellations, 1 accepted return, 0 failed accounts, 0 retry inserts/updates.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: Workflow is intentionally disabled; unknown tuples stop the run and shipped cancellation/defect alone never restores stock.
+
+- ID: MKT-FBS-SHEET-AUTOMATION-BASELINE-2026-09-01
+  Status: Done
+  Priority: High
+  Description: Prepared the live FBS movement workbook for daily automation and replaced manual order quantities through 2026-08-09 with 366 current production orders, one row per real WB order ID. Added stable `nmId`/`chrtId`, account, source, status, idempotency key, load timestamp, ten pre-shipment cancellation offsets, Moscow timezone, corrected/cancellation-aware formulas, protected calculation ranges, automation settings and a daily load-control tab. Preserved the pre-replacement journal in a hidden archive.
+  Next step: Implement the daily workflow starting with 2026-08-10: read NimbaOS only, append missing events by idempotency key, update statuses without duplicating orders, create pre-shipment cancellation offsets, and write one control row per account/date. Do not convert shipped cancellations/defects into stock returns until actual return acceptance is recorded.
+  Related reports/metrics: production `fbs_orders`, Moscow creation date, account + externalOrderId uniqueness, `nmId`, `chrtId`, idempotency keys, daily expected/written/skipped counts, physical and cabinet stock formulas.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: Product mapping is explicit for the 45 account/nmId/chrtId combinations present in the baseline and must be extended or rejected visibly when a new product appears. The 159 shipped client cancellations and four shipped defects remain subtracted until a real accepted-return event exists. Visual browser QA was unavailable because Computer Use could not establish the current Chrome URL, although API readback and formula validation passed.
+
+- ID: MKT-FBS-SHEET-DAILY-RECONCILIATION-2026-09-01
+  Status: Done
+  Priority: High
+  Description: Reconciled `ФБС перемещение — автоматизированная версия` against production `fbs_orders` for every Moscow day from 2026-07-28 through 2026-08-09. Sheet total is 345 versus 362 in NimbaOS, with no matching combined day; 7 August is absent in the journal and 8 August is materially overstated.
+  Next step: Before creating the daily workflow, add stable account/order/product identifiers and idempotency, model cancellation/return events, restore the overwritten summary formula, and align the spreadsheet timezone to Europe/Moscow. Then backtest the new workflow on this fixed period without writing duplicate rows.
+  Related reports/metrics: daily created FBS orders, `fbs_orders.createdAtWb`, account + externalOrderId uniqueness, sheet operation quantities, workflow idempotency.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: A blind append workflow will duplicate rows on retries; current formulas permanently subtract canceled orders from stock; text product names are not safe join keys. No source data or marketplace state was changed.
+
 - ID: MKT-OZON-UNIT-3-FILL-2026-08-24
   Status: Done
   Priority: High
@@ -339,3 +366,8 @@
   Related cabinets: all active WB accounts after explicit rollout selection.
   Risks: only codes actually attached in WB appear in metadata; invalid/reused/mismatched codes require operator review; endpoint response drift, initial balance reconciliation, missing KIZ circulation status and overdue manual Chestny Znak operations.
 2026-08-13 - Galioni corrected withdrawal files: completed. Use the corrected 11-row and 173-row XLSX files; do not upload the original 16-row and 179-row copies.
+## FBS accounting sheet
+
+- Status: WB stock snapshot and reconciliation are live in the Google Sheet; code rollout remains pending.
+- Operator action: review 11 yellow `ВНЕСТИ ПОПОЛНЕНИЕ +N` rows and enter only the real missing local replenishments into the operations ledger.
+- Do not edit the WB snapshot technical columns; they are hidden and maintained by stable tuple upsert.

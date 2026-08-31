@@ -48,7 +48,7 @@ Update 2026-08-13: BUG-025 prevents late historical pickup-cancellation/defect r
 
 Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdrawal XLSX files using the linked WB order `convertedPriceRaw / 100`, without VAT markup for the current 0% VAT seller. Four historical downloads were rebuilt as corrected copies. A read-only audit tied all 57 apparent `IN_STOCK + UNKNOWN` units to historical post-handoff pickup-cancellation/defect orders; no live sync or data mutation was performed.
 
-Текущее состояние NimbaOS. Last updated: 2026-08-27.
+Текущее состояние NimbaOS. Last updated: 2026-09-01.
 
 ## Current Phase
 
@@ -64,7 +64,7 @@ Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdra
 - Sales plan: CRUD, article detail, account-wide orders/sales sync, funnel sync for plan items, daily metrics, add from stock, XLSX export.
 - Advertising: campaigns, stats, nm stats, clusters, logs, XLSX export, bid/budget/status actions.
 - Background sync: BullMQ jobs, `SyncJobRun`, schedules, `/sync`, manual enqueue actions.
-- Automations: `/automations`, `AutomationWorkflowSetting`, `AutomationWorkflowAccount`, `AutomationRun`, separate automation queue, `Утренний отчет WB` Google Sheet workflow.
+- Automations: catalog at `/automations`, per-workflow settings at `/automations/[kind]`, flexible JSON-backed schedules, named/filterable `AutomationRun` history, separate automation queue, `Утренний отчет WB` and disabled-by-default `Заказы FBS → таблица учета` Google Sheet workflows. The FBS workflow upserts stable lifecycle-event keys, verifies daily reconciliation and supports explicit physical-product aliases.
 - Dashboard analytics: summary, freshness, problem center, product risk, stock risk, feedback workload, forecasts, deterministic recommendations, dashboard exports.
 - Inventory: WB warehouse stock snapshots, current stock screen and turnover days.
 - FBS: seller-owned stock, assortment per warehouse/chrtId, operational orders, supplies/stickers, automatic encrypted order-to-KIZ ingestion from WB metadata, manual Chestny Znak XLSX flow, audited per-warehouse WB write gate.
@@ -95,6 +95,8 @@ Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdra
 - Do not read every `.md` at session startup.
 
 ## Important Risks
+
+- FBS Sheet WB-stock support is complete locally and applied to the live Google Sheet. The local workflow is enabled/applied at 23:30 Europe/Moscow, but the application code/migration and schedule change are not deployed to production. Live verified totals on 2026-09-01: Nimba 264, Galioni 278; 11 local-replenishment warnings remain for operator review.
 
 - Financial report sync uses live-verified `POST /api/finance/v1/sales-reports/detailed`; broad historical refreshes still require confirmation.
 - The FBS migration is applied to both local development and production databases. Production received it through the restored source database before the 2026-08-21 rollout. Interval schedules and the `2026-07-20` - `2026-07-30` backfill were not run. All FBS schedule defaults and warehouse write gates remain disabled.

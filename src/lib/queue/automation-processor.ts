@@ -6,6 +6,11 @@ import { createAutomationRunForBullJob, toAutomationPayloadJson } from '@/lib/au
 import { toPrismaAutomationKind } from '@/lib/automations/mapping'
 import { minutesSinceMoscowScheduledTime } from '@/lib/time/moscow'
 import {
+  automationScheduleFingerprint,
+  automationScheduleMatchesMoscowDate,
+  normalizeAutomationSchedule,
+} from '@/lib/automations/schedule'
+import {
   isScheduledJobTooLate,
   resolveScheduledStartGraceMinutes,
 } from '@/lib/queue/scheduled-job-policy'
@@ -13,6 +18,10 @@ import {
   morningWbReportPayload,
   runMorningWbReportWorkflow,
 } from '@/lib/services/morning-wb-report-workflow'
+import {
+  fbsMovementSheetPayload,
+  runFbsMovementSheetWorkflow,
+} from '@/lib/services/fbs-movement-sheet-workflow'
 
 function minutesSinceScheduledTime(timeOfDay: string, now = new Date()): number {
   return minutesSinceMoscowScheduledTime(timeOfDay, now)
@@ -23,12 +32,37 @@ async function shouldSkipScheduledJob(data: AutomationJobData): Promise<string |
 
   const schedule = await prisma.automationWorkflowSetting.findUnique({
     where: { kind: toPrismaAutomationKind(data.kind) },
-    select: { enabled: true, timeOfDay: true },
+    select: { enabled: true, timeOfDay: true, config: true },
   })
 
   if (!schedule?.enabled) return 'scheduled workflow is disabled'
 
-  const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
+  const configuredSchedule = normalizeAutomationSchedule(
+    schedule.config && typeof schedule.config === 'object'
+      ? (schedule.config as { schedule?: unknown }).schedule
+      : null,
+    schedule.timeOfDay,
+  )
+  if (
+    data.scheduleFingerprint &&
+    data.scheduleFingerprint !== automationScheduleFingerprint(configuredSchedule)
+  ) {
+    return 'scheduled workflow configuration has changed'
+  }
+
+  if (configuredSchedule.cadence === 'every-n-weeks') {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date())
+    const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value)
+    if (!automationScheduleMatchesMoscowDate(configuredSchedule, {
+      year: read('year'), month: read('month'), day: read('day'),
+    })) {
+      return 'scheduled workflow is outside the selected week interval'
+    }
+  }
+
+  const lateMinutes = minutesSinceScheduledTime(data.scheduledTime ?? schedule.timeOfDay)
   if (isScheduledJobTooLate(lateMinutes, resolveScheduledStartGraceMinutes())) {
     return `scheduled workflow is ${lateMinutes} minutes late`
   }
@@ -40,6 +74,8 @@ async function processAutomationJobData(data: AutomationJobData) {
   switch (data.kind) {
     case AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT:
       return runMorningWbReportWorkflow({ targetDate: data.targetDate })
+    case AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET:
+      return runFbsMovementSheetWorkflow({ targetDate: data.targetDate })
   }
 }
 
@@ -76,6 +112,11 @@ function enrichedPayload(data: AutomationJobData) {
       return {
         ...data,
         ...morningWbReportPayload(data.targetDate),
+      }
+    case AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET:
+      return {
+        ...data,
+        ...fbsMovementSheetPayload(data.targetDate),
       }
   }
 }

@@ -1,5 +1,46 @@
 # Marketplace Analysis Log
 
+## 2026-09-01 - FBS daily workflow implementation and initial load
+
+Implemented the DB-first FBS movement workflow and performed the owner-authorized initial load into `ФБС перемещение — автоматизированная версия` through 2026-08-31. The source projection contained 251 orders, three pre-handoff cancellations and one explicit accepted return for two cabinets. Google Sheets upsert inserted 250 events and updated five existing stable-key rows; built-in readback verified the operations and control rows. A second dry-run returned 0 inserts, 0 updates and 255 unchanged events, confirming retry idempotency.
+
+Corrected the duplicate-listing interpretation: `парео леопард/пятна` is the same physical product as `туника леопард/пятна`. The technical tuple `nimba:297175085:452136209` is now explicitly aliased to the canonical name, covered by an automated test, and the accidental separate reference-list row was cleared. The automation is still disabled and was not deployed or scheduled in production.
+
+Post-write readback also identified that the first load timestamp values displayed UTC wall time. The conversion was fixed to Moscow wall time, all 255 affected timestamps were repaired, and the final workflow rerun remained a 0-insert/0-update idempotent no-op.
+
+## 2026-09-01 - FBS workbook pre-automation re-audit
+
+### Question
+Re-check whether all seven mandatory safeguards are actually complete before developing the new FBS-to-Google-Sheets automation.
+
+### Evidence
+Read the live workbook metadata, operation rows 5-1500, `Сводка!C14`, the cancellation-aware stock formulas, automation settings and all load-control rows. Audited the current automation registry, Prisma-kind mapping, Server Actions and queue processor in the repository. No sheet value, database row, queue, scheduler, WB API or production state was changed.
+
+### Result
+The workbook baseline is prepared correctly: timezone is `Europe/Moscow`; headers include cabinet, WB order ID, `nmId`, `chrtId`, source, idempotency key, status and load time; 366 order rows have 366 unique account/order IDs; 376 automatic events have 376 unique keys and zero missing technical fields. There are ten pre-shipment cancellation offsets and no accepted-return events. `Сводка!C14` is a `SUMIFS` formula returning 40, and the cancellation/accepted-return-aware stock formulas are present. The 26 account/date control rows are unique and all reconcile with zero discrepancy.
+
+The seven-point requirement is nevertheless not complete end to end. NimbaOS still registers and processes only `morning-wb-report`; no FBS Sheet workflow exists. Therefore retry-safe upsert/status update behavior, future automatic cancellation/accepted-return event creation and automatic post-load reconciliation have not yet been implemented or tested. The table is ready for development, but the automation itself must still be built before it can be enabled.
+
+## 2026-09-01 - FBS movement sheet automated baseline and production order replacement
+
+### Request
+Prepare the live Google Sheet `ФБС перемещение — автоматизированная версия` for a simple employee-readable daily workflow, then replace its manual FBS order quantities through 2026-08-09 with all orders currently present in the NimbaOS production database and include their identifiers.
+
+### Sources And Safety
+Read the bounded production `fbs_orders` range for 2026-07-28 through 2026-08-09 by `createdAtWb` converted to Europe/Moscow, after verifying the mini-PC identity, repository path, compose project and `nimba_production` database. No WB API, sync, historical resync, production DB write, WB/CRPT write or marketplace mutation was performed. The original operations tab was duplicated to hidden `Операции_архив_до_БД_2026-09-01` before replacement.
+
+### Workbook Changes
+Kept the visible employee journal as date, product, operation, quantity, comment and cabinet. Added hidden automation fields for WB order ID, `nmId`, `chrtId`, source, idempotency key, order status and load timestamp. Changed the spreadsheet timezone to Europe/Moscow, extended validations and date/number formats through row 1000, added cancellation and accepted-return operation types, restored the overwritten arrival formula in `Сводка!C14`, made the latest-date formula open-ended, and updated physical/cabinet stock formulas for cancellation and accepted-return events. Added warning-only protection to calculation ranges and a readable `Контроль загрузки` tab with status validation and conditional colors. Automation settings now mark 2026-08-10 as the next load date after the validated 2026-08-09 baseline.
+
+### Production Replacement And Mapping
+The current database returned 366 unique orders, not the 362 observed in the earlier audit: four late-fetched historical orders were present by the final export. Totals are 165 WB Nimba/Grebnev and 201 WB Galioni/Snigireva. All 45 distinct account + `nmId` + `chrtId` product combinations mapped to an existing human-readable workbook product; no order or product key was unresolved. The 199 previous aggregated order rows totaling 345 units were replaced with 366 quantity-1 rows so every order carries its real identifiers. Ten non-shipped `declined_by_client` orders received separate cancellation-offset events. Shipped `canceled_by_client` and `defect` orders were retained as orders with status but were not restored to stock because actual physical return receipt is not evidenced by final order status alone.
+
+### Validation
+Google Sheets API readback shows 366 order rows with quantity 366, 366 unique account-order IDs, 376 unique idempotency keys including cancellation events, no missing technical fields, 26 successful account/day control rows, Europe/Moscow timezone and a hidden rollback archive. Every day and cabinet matches production: combined daily totals are 14, 24, 10, 19, 27, 28, 21, 37, 49, 37, 34, 27 and 39 from 28 July through 9 August. Summary and daily-report ranges contain no formula errors. Corrected physical stock is 1,414. Windows Computer Use stopped before screenshot inspection because it could not determine the current browser URL with enough confidence; visual QA is therefore not claimed, while values, formulas, validations, formats and structure were verified through the Sheets connector.
+
+### Follow-up
+Build the daily workflow from 2026-08-10 onward using the hidden idempotency key, reject or flag unknown product mappings, write one control row per account/date, and never create an accepted-return event from a shipped cancellation/defect without evidence that the item was physically received and checked.
+
 ## 2026-08-24 - Ozon Unit 3.0 filled for Nimba and Galioni
 
 ### Request
@@ -536,3 +577,29 @@ Stage 2 direct True API requires separate credentials, certificate/signature and
 ## 2026-08-13 - Corrected Galioni withdrawal workbooks
 
 Compared both historical Galioni export batches with the reconciled local compliance queue. The 2026-07-30 batch contains 11 still-required withdrawals and 5 canceled tasks; the 2026-08-12 batch contains 173 still-required withdrawals and 6 canceled tasks. Generated separate corrected copies with all 11 canceled rows removed, preserved numeric unit prices (VAT 0%), and verified 184 unique KIZs with no overlap across the two files.
+
+## 2026-09-01 — FBS movement sheet versus NimbaOS
+
+### Question
+Do daily FBS order quantities in `ФБС перемещение — автоматизированная версия` match production NimbaOS through 2026-08-09, and is the file ready for an unattended daily workflow?
+
+### Data Used
+Read-only Google Sheets ranges and formula/cell metadata for `Сводка`, `Операции`, `Отчёт за день` and `Справочники`; bounded read-only production SQL over `fbs_orders`, `wb_accounts` and seller warehouse metadata. Orders were grouped by WB creation timestamp converted to Europe/Moscow. No WB API call or sync was run.
+
+### Freshness Check
+Production FBS order coverage starts on 2026-07-28 for both active cabinets and extends beyond the comparison window. The latest stored fetch timestamps were 2026-08-31 Moscow time. No duplicate `(wbAccountId, externalOrderId)` pairs were found.
+
+### Findings
+The sheet records 345 orders (159 Grebnev/Nimba and 186 Snigireva/Galioni) versus 362 unique production orders (163 Nimba and 199 Galioni), a net sheet shortfall of 17. None of the 13 combined daily totals matches. The largest discrepancies are 2026-08-07 (0 versus 33) and 2026-08-08 (61 versus 26); Galioni's sheet value of 41 on 8 August exactly equals production Galioni 7-8 August combined, while Nimba is 20 versus 18 combined, suggesting a two-day manual lump plus two additional rows. The sheet journal itself has no exact duplicate rows or incomplete required fields. Its formulas use open-ended operation ranges and dropdown validation, but `Сводка!C14` was manually overwritten with 41 although journal arrival for that product is 40, creating a one-unit physical-stock overstatement.
+
+### Recommendations
+Do not automate blind appends to the current schema. Add stable `wbAccountId`, `externalOrderId`, `nmId/chrtId` or barcode, event type, source and sync timestamp; enforce uniqueness for idempotent reruns; keep one order per source key or preserve an auditable aggregation key. Add explicit cancellation-before-handoff and post-handoff return events so inventory does not permanently fall on every created order. Align the workbook timezone to Europe/Moscow, restore/protect formulas, and derive the summary's as-of date from the journal. Backtest the workflow read-only on 2026-07-28 through 2026-08-09 before enabling daily writes.
+
+### Follow-up
+After owner approval to edit the sheet, repair the schema/formula/timezone and implement a DB-first daily writer that reads the completed prior Moscow day, upserts by stable order identity, verifies counts after write, and leaves a reconciliation result instead of duplicating rows.
+## 2026-09-01 — FBS stock discrepancy diagnosis
+
+- Root cause: former Summary columns calculated stock from local initial balance/movements/orders. They did not represent the current WB-confirmed sellable quantity and missed local replenishment entries.
+- Fresh source totals: Nimba 264, Galioni 278. Live Summary readback after the snapshot load matched exactly.
+- The remaining differences are operational ledger warnings, not WB-data errors: 11 products require a proposed local replenishment totaling 211 units if each warning is confirmed physically.
+- The workflow now distinguishes hard failures (stale/missing WB snapshot, unknown tuple, Sheet/WB mismatch) from non-blocking missing-local-replenishment warnings.

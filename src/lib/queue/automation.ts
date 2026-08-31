@@ -15,6 +15,8 @@ export interface AutomationJobData {
   workflowId?: string
   runId?: string
   targetDate?: string
+  scheduledTime?: string
+  scheduleFingerprint?: string
 }
 
 export const DEFAULT_AUTOMATION_JOB_OPTIONS: JobsOptions = {

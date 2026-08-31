@@ -18,6 +18,7 @@ import {
   type RunHistoryPage,
   type RunHistorySortDirection,
 } from '@/types/run-history'
+import { getAutomationName } from '@/lib/automations/catalog'
 
 const AUTOMATION_RUN_STATUS_VALUES = new Set(['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED'])
 const AUTOMATION_RUN_SOURCE_VALUES = new Set(['manual', 'scheduled'])
@@ -37,8 +38,24 @@ function getPeriodFromPayload(payload: unknown): string | null {
 
 function getResultSummary(result: unknown): string | null {
   if (!result || typeof result !== 'object') return null
-  const data = result as { accountsProcessed?: unknown; accountsFailed?: unknown; targetDate?: unknown }
+  const data = result as {
+    accountsProcessed?: unknown
+    accountsFailed?: unknown
+    targetDate?: unknown
+    rowsInserted?: unknown
+    rowsUpdated?: unknown
+    wbStockUnits?: unknown
+    stockRowsInserted?: unknown
+    stockRowsUpdated?: unknown
+    warningsCount?: unknown
+  }
   if (typeof data.accountsProcessed === 'number' && typeof data.accountsFailed === 'number') {
+    if (typeof data.rowsInserted === 'number' && typeof data.rowsUpdated === 'number') {
+      const stock = typeof data.wbStockUnits === 'number'
+        ? `, остаток WB: ${data.wbStockUnits}, строк остатков добавлено: ${Number(data.stockRowsInserted ?? 0)}, обновлено: ${Number(data.stockRowsUpdated ?? 0)}, предупреждений учета: ${Number(data.warningsCount ?? 0)}`
+        : ''
+      return `Кабинетов: ${data.accountsProcessed}, ошибок: ${data.accountsFailed}, добавлено: ${data.rowsInserted}, обновлено: ${data.rowsUpdated}${stock}`
+    }
     return `Кабинетов: ${data.accountsProcessed}, ошибок: ${data.accountsFailed}`
   }
   if (typeof data.targetDate === 'string') return data.targetDate
@@ -144,6 +161,7 @@ function getAutomationRunOrderBy(
 ): Prisma.AutomationRunOrderByWithRelationInput[] {
   const primary: Prisma.AutomationRunOrderByWithRelationInput = (() => {
     switch (sortBy) {
+      case 'name': return { kind: direction }
       case 'status': return { status: direction }
       case 'source': return { source: direction }
       case 'attempts': return { attempts: direction }
@@ -161,6 +179,9 @@ function getAutomationRunWhere(query: AutomationRunQuery): Prisma.AutomationRunW
   const error = query.error?.trim()
 
   return {
+    ...(query.kind && query.kind !== 'ALL'
+      ? { kind: toPrismaAutomationKind(query.kind) }
+      : {}),
     ...(query.status && query.status !== 'ALL' && AUTOMATION_RUN_STATUS_VALUES.has(query.status)
       ? { status: query.status }
       : {}),
@@ -197,9 +218,11 @@ export async function listAutomationRuns(
     rows: rows.map((row) => {
       const accountErrors = getAccountErrors(row.result)
 
+      const kind = fromPrismaAutomationKind(row.kind as PrismaAutomationWorkflowKind)
       return {
         id: row.id,
-        kind: fromPrismaAutomationKind(row.kind as PrismaAutomationWorkflowKind),
+        kind,
+        name: getAutomationName(kind),
         status: row.status as AutomationRunRow['status'],
         source: parseAutomationSource(row.payload),
         bullJobId: row.bullJobId,

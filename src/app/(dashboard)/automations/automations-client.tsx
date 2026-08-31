@@ -1,10 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
-import { Play, RotateCw, Save } from 'lucide-react'
+import { ArrowRight, Clock3, FileSpreadsheet, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,109 +13,59 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { RunHistoryPager, RunHistorySortableHead } from '@/components/run-history-table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type {
+  AutomationCatalogItem,
   AutomationRunQuery,
   AutomationRunRow,
   AutomationRunSortKey,
-  AutomationWorkflowRow,
 } from '@/types/automations'
 import type { RunHistoryPage, RunHistoryPageSize } from '@/types/run-history'
-import {
-  enqueueMorningWbReportAction,
-  getAutomationRunsAction,
-  getMorningWbReportWorkflowAction,
-  updateMorningWbReportWorkflowAction,
-} from '@/lib/actions/automations'
+import { getAutomationCatalogAction, getAutomationRunsAction } from '@/lib/actions/automations'
 
 interface AutomationsClientProps {
-  initialWorkflow: AutomationWorkflowRow
+  initialAutomations: AutomationCatalogItem[]
   initialRunsPage: RunHistoryPage<AutomationRunRow>
-  canManage: boolean
 }
 
 const STATUS_LABELS: Record<AutomationRunRow['status'], string> = {
-  QUEUED: 'В очереди',
-  RUNNING: 'В работе',
-  SUCCEEDED: 'Готово',
-  FAILED: 'Ошибка',
+  QUEUED: 'В очереди', RUNNING: 'В работе', SUCCEEDED: 'Готово', FAILED: 'Ошибка',
 }
-
 const STATUS_VARIANTS: Record<AutomationRunRow['status'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  QUEUED: 'secondary',
-  RUNNING: 'outline',
-  SUCCEEDED: 'default',
-  FAILED: 'destructive',
+  QUEUED: 'secondary', RUNNING: 'outline', SUCCEEDED: 'default', FAILED: 'destructive',
 }
-
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
 
 function formatDateTime(value: string | null): string {
-  if (!value) return '-'
-  return format(new Date(value), 'd MMM yyyy HH:mm', { locale: ru })
+  return value ? format(new Date(value), 'd MMM yyyy HH:mm', { locale: ru }) : '-'
 }
 
 function formatDuration(value: number | null): string {
   if (value === null) return '-'
-  if (value < 1000) return `${value} мс`
-  return `${Math.round(value / 1000)} с`
+  return value < 1000 ? `${value} мс` : `${Math.round(value / 1000)} с`
 }
 
 function formatNextRun(value: string | null): string {
-  if (!value) return '-'
-  const parts = new Intl.DateTimeFormat('ru-RU', {
+  if (!value) return 'Не запланирован'
+  return new Intl.DateTimeFormat('ru-RU', {
     timeZone: MOSCOW_TIME_ZONE,
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date(value))
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? ''
-
-  return `${part('day')} ${part('month')} ${part('hour')}:${part('minute')}`.trim()
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date(value))
 }
 
-export function AutomationsClient({
-  initialWorkflow,
-  initialRunsPage,
-  canManage,
-}: AutomationsClientProps) {
-  const [workflow, setWorkflow] = useState(initialWorkflow)
+export function AutomationsClient({ initialAutomations, initialRunsPage }: AutomationsClientProps) {
+  const [automations, setAutomations] = useState(initialAutomations)
   const [runsPage, setRunsPage] = useState(initialRunsPage)
   const [runFilters, setRunFilters] = useState<Required<Pick<
     AutomationRunQuery,
-    'status' | 'source' | 'createdFrom' | 'createdTo' | 'error'
-  >>>({
-    status: 'ALL',
-    source: 'ALL',
-    createdFrom: '',
-    createdTo: '',
-    error: '',
-  })
+    'kind' | 'status' | 'source' | 'createdFrom' | 'createdTo' | 'error'
+  >>>({ kind: 'ALL', status: 'ALL', source: 'ALL', createdFrom: '', createdTo: '', error: '' })
   const [runDateRange, setRunDateRange] = useState<DateRange>({ from: undefined })
-  const [runSort, setRunSort] = useState<{
-    sortBy: AutomationRunSortKey
-    sortDirection: 'asc' | 'desc'
-  }>({ sortBy: 'createdAt', sortDirection: 'desc' })
+  const [runSort, setRunSort] = useState<{ sortBy: AutomationRunSortKey; sortDirection: 'asc' | 'desc' }>({
+    sortBy: 'createdAt', sortDirection: 'desc',
+  })
   const [runsLoading, setRunsLoading] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isRunning, setIsRunning] = useState(false)
   const [isRefreshing, startRefresh] = useTransition()
   const runsRequestId = useRef(0)
   const skipInitialRunFilterLoad = useRef(true)
@@ -124,12 +75,7 @@ export function AutomationsClient({
   const loadRuns = useCallback(async (page: number, pageSize: RunHistoryPageSize = runsPage.pageSize) => {
     const requestId = ++runsRequestId.current
     setRunsLoading(true)
-    const result = await getAutomationRunsAction({
-      ...runFilters,
-      ...runSort,
-      page,
-      pageSize,
-    })
+    const result = await getAutomationRunsAction({ ...runFilters, ...runSort, page, pageSize })
     if (requestId !== runsRequestId.current) return
     setRunsLoading(false)
     if (result.success) setRunsPage(result.data)
@@ -138,11 +84,7 @@ export function AutomationsClient({
 
   useEffect(() => {
     if (!hasActiveRuns) return
-
-    const timer = window.setInterval(async () => {
-      await loadRuns(runsPage.page, runsPage.pageSize)
-    }, 5000)
-
+    const timer = window.setInterval(() => void loadRuns(runsPage.page, runsPage.pageSize), 5000)
     return () => window.clearInterval(timer)
   }, [hasActiveRuns, loadRuns, runsPage.page, runsPage.pageSize])
 
@@ -155,24 +97,11 @@ export function AutomationsClient({
     return () => window.clearTimeout(timer)
   }, [loadRuns, runFilters, runSort])
 
-  function patchWorkflow(patch: Partial<AutomationWorkflowRow>) {
-    setWorkflow((current) => ({ ...current, ...patch }))
-  }
-
-  function patchAccount(wbAccountId: string, patch: Partial<AutomationWorkflowRow['accounts'][number]>) {
-    setWorkflow((current) => ({
-      ...current,
-      accounts: current.accounts.map((account) =>
-        account.wbAccountId === wbAccountId ? { ...account, ...patch } : account,
-      ),
-    }))
-  }
-
   function refresh() {
     startRefresh(async () => {
-      const workflowResult = await getMorningWbReportWorkflowAction()
-      if (workflowResult.success) setWorkflow(workflowResult.data)
-      else toast.error(workflowResult.error)
+      const catalog = await getAutomationCatalogAction()
+      if (catalog.success) setAutomations(catalog.data)
+      else toast.error(catalog.error)
       await loadRuns(runsPage.page, runsPage.pageSize)
     })
   }
@@ -191,13 +120,7 @@ export function AutomationsClient({
 
   function resetRunFilters() {
     setRunDateRange({ from: undefined })
-    setRunFilters({
-      status: 'ALL',
-      source: 'ALL',
-      createdFrom: '',
-      createdTo: '',
-      error: '',
-    })
+    setRunFilters({ kind: 'ALL', status: 'ALL', source: 'ALL', createdFrom: '', createdTo: '', error: '' })
   }
 
   function sortRuns(sortBy: AutomationRunSortKey) {
@@ -207,201 +130,72 @@ export function AutomationsClient({
     }))
   }
 
-  async function saveWorkflow() {
-    setIsSaving(true)
-    const result = await updateMorningWbReportWorkflowAction({
-      enabled: workflow.enabled,
-      timeOfDay: workflow.timeOfDay,
-      spreadsheetUrl: workflow.config.spreadsheetUrl || workflow.config.spreadsheetId,
-      accounts: workflow.accounts.map((account) => ({
-        wbAccountId: account.wbAccountId,
-        enabled: account.enabled,
-        sheetName: account.sheetName,
-      })),
-    })
-    setIsSaving(false)
-
-    if (!result.success) {
-      toast.error(result.error)
-      return
-    }
-
-    setWorkflow(result.data)
-    toast.success('Workflow сохранен')
-  }
-
-  async function runWorkflow() {
-    setIsRunning(true)
-    const result = await enqueueMorningWbReportAction()
-    setIsRunning(false)
-
-    if (!result.success) {
-      toast.error(result.error)
-      return
-    }
-
-    toast.success(`Workflow поставлен в очередь: ${result.data.id}`)
-    refresh()
-  }
-
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Автоматизации</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Управление регулярными workflow, которые работают поверх локальной базы и безопасных фоновых задач.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Выберите процесс, чтобы открыть его настройки и расписание.</p>
         </div>
-
         <Button variant="outline" onClick={refresh} disabled={isRefreshing}>
-          <RotateCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Обновить
+          <RotateCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Обновить
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Утренний отчет WB</CardTitle>
-              <CardDescription>
-                Ежедневно заполняет Google Sheet за текущий месяц и строку итога с начала года.
-              </CardDescription>
-            </div>
-            <Badge variant={workflow.enabled ? 'default' : 'secondary'}>
-              {workflow.enabled ? 'Включено' : 'Выключено'}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-[160px_1fr]">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={workflow.enabled}
-                disabled={!canManage}
-                onChange={(event) => patchWorkflow({ enabled: event.target.checked })}
-                className="h-4 w-4"
-              />
-              Активен
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Время МСК</label>
-                <Input
-                  type="time"
-                  value={workflow.timeOfDay}
-                  disabled={!canManage}
-                  onChange={(event) => patchWorkflow({ timeOfDay: event.target.value })}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Google Sheet URL или ID</label>
-                <Input
-                  value={workflow.config.spreadsheetUrl}
-                  disabled={!canManage}
-                  onChange={(event) =>
-                    patchWorkflow({
-                      config: {
-                        ...workflow.config,
-                        spreadsheetUrl: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Кабинет</TableHead>
-                  <TableHead>Вкл.</TableHead>
-                  <TableHead>Вкладка</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {workflow.accounts.map((account) => (
-                  <TableRow key={account.wbAccountId}>
-                    <TableCell>
-                      <div className="font-medium">{account.wbAccountName}</div>
-                      {account.sellerName && (
-                        <div className="text-xs text-muted-foreground">{account.sellerName}</div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={account.enabled}
-                        disabled={!canManage}
-                        onChange={(event) => patchAccount(account.wbAccountId, { enabled: event.target.checked })}
-                        className="h-4 w-4"
-                        aria-label="Включить кабинет"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={account.sheetName}
-                        disabled={!canManage || !account.enabled}
-                        onChange={(event) => patchAccount(account.wbAccountId, { sheetName: event.target.value })}
-                        className="max-w-sm"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {workflow.accounts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="h-20 text-center text-muted-foreground">
-                      Активных кабинетов пока нет.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-muted-foreground">
-              Следующий запуск: {formatNextRun(workflow.nextRunAt)}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" disabled={!canManage || isRunning} onClick={runWorkflow}>
-                <Play className="mr-2 h-4 w-4" />
-                {isRunning ? 'Запускаем...' : 'Запустить сейчас'}
-              </Button>
-              <Button disabled={!canManage || isSaving} onClick={saveWorkflow}>
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? 'Сохраняем...' : 'Сохранить'}
-              </Button>
-            </div>
-          </div>
-
-          {!canManage && (
-            <p className="text-sm text-muted-foreground">
-              У вашей роли доступен только просмотр автоматизаций.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <section aria-labelledby="automation-list-title">
+        <div className="mb-3">
+          <h2 id="automation-list-title" className="text-lg font-semibold">Доступные автоматизации</h2>
+          <p className="text-sm text-muted-foreground">Настройки каждой автоматизации хранятся отдельно.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {automations.map((automation) => (
+            <Card key={automation.kind} className="flex h-full flex-col transition-colors hover:border-primary/40">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FileSpreadsheet className="h-5 w-5" />
+                  </div>
+                  <Badge variant={automation.enabled ? 'default' : 'secondary'}>{automation.enabled ? 'Включено' : 'Выключено'}</Badge>
+                </div>
+                <CardTitle className="pt-2 text-base">{automation.name}</CardTitle>
+                <CardDescription className="min-h-10">{automation.description}</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-1 flex-col justify-between gap-4">
+                <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{automation.scheduleSummary}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Следующий запуск: {formatNextRun(automation.nextRunAt)}</div>
+                </div>
+                <Button asChild className="w-full">
+                  <Link href={`/automations/${automation.kind}`}>Открыть настройки <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">История запусков</CardTitle>
-          <CardDescription>Полная история ручных и запланированных выполнений workflow.</CardDescription>
+          <CardDescription>Полная история всех ручных и запланированных автоматизаций.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <Select value={runFilters.kind} onValueChange={(value) => patchRunFilters({ kind: value as AutomationRunQuery['kind'] })}>
+              <SelectTrigger><SelectValue placeholder="Автоматизация" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Все автоматизации</SelectItem>
+                {automations.map((automation) => <SelectItem key={automation.kind} value={automation.kind}>{automation.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={runFilters.status} onValueChange={(value) => patchRunFilters({ status: value as AutomationRunQuery['status'] })}>
               <SelectTrigger><SelectValue placeholder="Статус" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Все статусы</SelectItem>
-                {Object.entries(STATUS_LABELS).map(([status, label]) => (
-                  <SelectItem key={status} value={status}>{label}</SelectItem>
-                ))}
+                {Object.entries(STATUS_LABELS).map(([status, label]) => <SelectItem key={status} value={status}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={runFilters.source} onValueChange={(value) => patchRunFilters({ source: value as AutomationRunQuery['source'] })}>
@@ -412,29 +206,15 @@ export function AutomationsClient({
                 <SelectItem value="scheduled">Расписание</SelectItem>
               </SelectContent>
             </Select>
-            <DateRangePicker
-              value={runDateRange}
-              onChange={changeRunDateRange}
-              className="w-full min-w-0 md:col-span-2"
-            />
-            <Input
-              value={runFilters.error}
-              onChange={(event) => patchRunFilters({ error: event.target.value })}
-              placeholder="Текст ошибки"
-              aria-label="Фильтр по ошибке"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={resetRunFilters}
-            >
-              Сбросить фильтры
-            </Button>
+            <DateRangePicker value={runDateRange} onChange={changeRunDateRange} className="w-full min-w-0" />
+            <Input value={runFilters.error} onChange={(event) => patchRunFilters({ error: event.target.value })} placeholder="Текст ошибки" aria-label="Фильтр по ошибке" />
+            <Button type="button" variant="outline" onClick={resetRunFilters}>Сбросить фильтры</Button>
           </div>
           <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[1050px]">
+            <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow>
+                  <RunHistorySortableHead label="Автоматизация" sortKey="name" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <RunHistorySortableHead label="Статус" sortKey="status" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <RunHistorySortableHead label="Источник" sortKey="source" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
                   <TableHead>Дата отчета</TableHead>
@@ -449,10 +229,9 @@ export function AutomationsClient({
               <TableBody>
                 {runs.map((run) => (
                   <TableRow key={run.id}>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANTS[run.status]}>{STATUS_LABELS[run.status]}</Badge>
-                    </TableCell>
-                    <TableCell>{run.source === 'scheduled' ? 'Расписание' : 'Ручной'}</TableCell>
+                    <TableCell className="font-medium">{run.name}</TableCell>
+                    <TableCell><Badge variant={STATUS_VARIANTS[run.status]}>{STATUS_LABELS[run.status]}</Badge></TableCell>
+                    <TableCell>{run.source === 'scheduled' ? 'Расписание' : run.source === 'manual' ? 'Ручной' : '—'}</TableCell>
                     <TableCell>{run.targetDate ?? '-'}</TableCell>
                     <TableCell>{run.period ?? '-'}</TableCell>
                     <TableCell>{formatDateTime(run.createdAt)}</TableCell>
@@ -463,23 +242,12 @@ export function AutomationsClient({
                   </TableRow>
                 ))}
                 {runs.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                      {runsLoading ? 'Загрузка…' : 'Запуски по выбранным фильтрам не найдены.'}
-                    </TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">{runsLoading ? 'Загрузка…' : 'Запуски по выбранным фильтрам не найдены.'}</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-          <RunHistoryPager
-            total={runsPage.total}
-            page={runsPage.page}
-            pageSize={runsPage.pageSize}
-            loading={runsLoading}
-            onPageChange={(page) => void loadRuns(page, runsPage.pageSize)}
-            onPageSizeChange={(pageSize) => void loadRuns(1, pageSize)}
-          />
+          <RunHistoryPager total={runsPage.total} page={runsPage.page} pageSize={runsPage.pageSize} loading={runsLoading} onPageChange={(page) => void loadRuns(page, runsPage.pageSize)} onPageSizeChange={(pageSize) => void loadRuns(1, pageSize)} />
         </CardContent>
       </Card>
     </div>

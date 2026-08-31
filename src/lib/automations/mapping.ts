@@ -4,10 +4,11 @@ import {
   type AutomationWorkflowKind,
 } from '@/types/automations'
 
-export type PrismaAutomationWorkflowKind = 'MORNING_WB_REPORT'
+export type PrismaAutomationWorkflowKind = 'MORNING_WB_REPORT' | 'FBS_MOVEMENT_SHEET'
 
 const KIND_TO_PRISMA: Record<AutomationWorkflowKind, PrismaAutomationWorkflowKind> = {
   [AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT]: 'MORNING_WB_REPORT',
+  [AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET]: 'FBS_MOVEMENT_SHEET',
 }
 
 const PRISMA_TO_KIND = Object.fromEntries(

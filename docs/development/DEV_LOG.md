@@ -1,5 +1,27 @@
 # Development Log
 
+## 2026-09-01 - Daily FBS movement Google Sheet workflow
+
+Implemented `FBS_MOVEMENT_SHEET` as the second registered automation. Its settings page reuses the flexible schedule editor and adds spreadsheet/tab/start-date, cabinet label and stable account-key controls. The queue processor runs the previous Moscow day; manual runs accept an explicit target date. The local Prisma migration adds the new workflow enum value.
+
+The service requires completed local FBS operational coverage, validates the live workbook contract and projects orders, pre-handoff cancellations and explicit accepted-return movements. Rows are upserted by stable event key, not display text or first-empty-row logic. Writes are followed by full readback, a second upsert plan that must be a no-op, and per-day/per-cabinet control-row verification. Unknown products, duplicate keys, broken headers/formula/timezone or reconciliation mismatches fail the workflow.
+
+Added an explicit physical-product alias for the duplicate WB listing `парео леопард/пятна`: tuple `nimba:297175085:452136209` maps to canonical `туника леопард/пятна`. The authorized live initial load through 2026-08-31 inserted 250 rows and updated 5 existing rows; retry preview was exactly 0 inserts, 0 updates and 255 unchanged. The workflow remains disabled. No production deployment, production migration, worker or schedule was changed.
+
+Connector readback caught a timestamp-only issue: Google serial values initially represented UTC wall time even though the workbook is Moscow-based. `sheetSerialDateTime` now serializes Moscow wall time, a regression test covers the conversion, and all 255 timestamps from the initial run were corrected and read back as Moscow time.
+
+Verification: 49 tests, `npm run type-check`, `npm run lint` and `npm run build` passed. Browser QA after replacing a stale local Next.js process confirmed normal CSS and layout on `/automations` at port 3000.
+
+## 2026-09-01 - Automation catalog and flexible workflow schedules
+
+Changed `/automations` from a settings page dedicated to `Утренний отчет WB` into a catalog of registered workflows. Each catalog card shows a human-readable name, purpose, enabled state, schedule summary and next run; settings are now opened through `/automations/[kind]`. The shared run history remains on the catalog page and now includes the workflow name as its first column, with server-side sorting and filtering by the persisted workflow kind.
+
+Added a reusable schedule value stored inside the existing `AutomationWorkflowSetting.config` JSON. It supports daily, weekly, every-N-weeks and monthly cadence; one or many exact times; or repeated runs between start/end times. Weekly modes select one or more weekdays, every-N-weeks stores a cycle anchor, and monthly mode selects one or more month days. The legacy `timeOfDay` column remains the primary/compatibility time, so existing rows load as daily schedules and no Prisma schema or migration was changed.
+
+BullMQ schedule application now removes the workflow's legacy/current scheduler keys and registers one job scheduler per effective time. Daily, weekday and month-day constraints are represented in cron patterns. Every-N-weeks uses the selected weekday cron pattern and a worker-side Moscow-calendar cycle check because cron has no stable anchored multi-week expression. Scheduled jobs carry a schedule fingerprint and selected time so stale jobs are skipped after configuration changes and lateness is measured against the correct run time.
+
+Authenticated browser QA confirmed the catalog, history name column/filter, detail navigation, weekly controls and interval controls. The UI test did not save settings or enqueue a run. `npm run type-check`, `npm run lint`, all 40 tests and a clean `npm run build` passed; lint/build retain only two existing unrelated `<img>` warnings. The verified local dev server was restarted on port 3000 after the build. No local or production worker, scheduler, WB API call or production mutation was performed.
+
 ## 2026-08-31 - Restored local styles after `.next` collision
 
 During authenticated in-app-browser QA, localhost rendered the application as unstyled HTML. The page referenced `/_next/static/css/app/layout.css?...`, but that URL returned HTTP 404 and the browser had no loaded application stylesheet. Process inspection proved port 3000 belonged to this checkout's local `next dev` chain.
@@ -729,3 +751,11 @@ The original global-region Cloudflared Windows service configuration was restore
 ## 2026-08-14 - Mini-PC unattended remote access
 
 Converted the downloaded portable AnyDesk client into an installed Windows service at `C:\Program Files (x86)\AnyDesk`. Verified that `AnyDesk Service` is running as `LocalSystem` with automatic startup. The active Windows power plan already has AC sleep and hibernation timeouts set to zero (Never). The operator still needs to set and test the AnyDesk Unattended Access password locally. Existing SSH access at `192.168.2.147` is LAN-only and will require Tailscale/VPN before it can be used directly from another network.
+## 2026-09-01 — FBS WB stock authority and replenishment warnings
+
+- Added current `Остатки WB` projection with stable `accountKey + nmId + chrtId` keys, zeroing of disappeared tuples and readback verification.
+- Switched Summary WB columns to the snapshot and added a human-readable non-blocking `ВНЕСТИ ПОПОЛНЕНИЕ +N` warning when the local movement ledger is below WB.
+- Added four explicit tuple aliases to both the live workflow config and code defaults, plus the new reference product `парео синяя полоска`; retained `туника леопард/пятна` as the canonical duplicate-listing product. Production deployment will therefore not depend on the current local DB config for these mappings.
+- Fresh read-only WB stock sync returned 264 Nimba and 278 Galioni units. Live Sheet readback matched both totals exactly; 53 stock rows were loaded and the retry produced 0 inserts/updates.
+- Verification: 51 tests passed, TypeScript passed, lint/build passed with only the two pre-existing `<img>` warnings.
+- Freshness tolerance was aligned with the operator's hourly FBS sync cadence: 75 minutes instead of 30, so normal scheduling jitter is accepted and a missed hourly cycle still fails the Sheet workflow.

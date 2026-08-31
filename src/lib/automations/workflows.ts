@@ -9,31 +9,57 @@ import { toPrismaAutomationKind } from '@/lib/automations/mapping'
 import {
   AUTOMATION_WORKFLOW_KINDS,
   type AutomationAccountRow,
+  type AutomationCatalogItem,
+  type AutomationSchedule,
   type AutomationWorkflowRow,
+  type AutomationWorkflowKind,
+  type FbsMovementSheetConfig,
+  type FbsMovementSheetWorkflowRow,
+  type MorningWbReportWorkflowRow,
   type MorningWbReportConfig,
+  type UpdateFbsMovementSheetWorkflowInput,
   type UpdateMorningWbReportWorkflowInput,
 } from '@/types/automations'
-import { getNextMoscowRunAt } from '@/lib/time/moscow'
+import { validateFbsAccountTechnicalKey } from '@/lib/automations/fbs-sheet'
+import { getAutomationDefinition } from '@/lib/automations/catalog'
+import {
+  automationScheduleFingerprint,
+  buildAutomationScheduleRules,
+  defaultAutomationSchedule,
+  formatAutomationSchedule,
+  getNextAutomationRunAt,
+  normalizeAutomationSchedule,
+  primaryAutomationTime,
+  validateAutomationSchedule,
+} from '@/lib/automations/schedule'
 
 const TIMEZONE = 'Europe/Moscow'
 const DEFAULT_TIME_OF_DAY = '10:00'
 const MORNING_WB_REPORT_SPREADSHEET_ID = '1DH-Br4Co7h1yiU9LG0Wg8bPxIRuk9TswcyYtCL9VnXw'
 const MORNING_WB_REPORT_SPREADSHEET_URL =
   `https://docs.google.com/spreadsheets/d/${MORNING_WB_REPORT_SPREADSHEET_ID}/edit`
+const FBS_MOVEMENT_SPREADSHEET_ID = '18UZ2rI29JEy19ng_3HR4R92WFkdpFaqAAgC3Ttwklt4'
+const FBS_MOVEMENT_SPREADSHEET_URL =
+  `https://docs.google.com/spreadsheets/d/${FBS_MOVEMENT_SPREADSHEET_ID}/edit`
+const FBS_DEFAULT_TIME_OF_DAY = '10:30'
 
 const MORNING_WB_REPORT_PRISMA_KIND = toPrismaAutomationKind(
   AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
 )
+const FBS_MOVEMENT_SHEET_PRISMA_KIND = toPrismaAutomationKind(
+  AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET,
+)
 
-function defaultMorningConfig(): MorningWbReportConfig {
+function defaultMorningConfig(timeOfDay = DEFAULT_TIME_OF_DAY): MorningWbReportConfig {
   return {
     spreadsheetId: MORNING_WB_REPORT_SPREADSHEET_ID,
     spreadsheetUrl: MORNING_WB_REPORT_SPREADSHEET_URL,
+    schedule: defaultAutomationSchedule(timeOfDay),
   }
 }
 
-function parseMorningConfig(value: unknown): MorningWbReportConfig {
-  if (!value || typeof value !== 'object') return defaultMorningConfig()
+function parseMorningConfig(value: unknown, timeOfDay = DEFAULT_TIME_OF_DAY): MorningWbReportConfig {
+  if (!value || typeof value !== 'object') return defaultMorningConfig(timeOfDay)
   const config = value as Partial<MorningWbReportConfig>
   const spreadsheetId = typeof config.spreadsheetId === 'string' && config.spreadsheetId.trim()
     ? config.spreadsheetId.trim()
@@ -42,7 +68,63 @@ function parseMorningConfig(value: unknown): MorningWbReportConfig {
     ? config.spreadsheetUrl.trim()
     : `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
 
-  return { spreadsheetId, spreadsheetUrl }
+  return {
+    spreadsheetId,
+    spreadsheetUrl,
+    schedule: normalizeAutomationSchedule(config.schedule, timeOfDay),
+  }
+}
+
+function defaultFbsConfig(timeOfDay = FBS_DEFAULT_TIME_OF_DAY): FbsMovementSheetConfig {
+  return {
+    spreadsheetId: FBS_MOVEMENT_SPREADSHEET_ID,
+    spreadsheetUrl: FBS_MOVEMENT_SPREADSHEET_URL,
+    operationsSheetName: 'Операции',
+    controlSheetName: 'Контроль загрузки',
+    summarySheetName: 'Сводка',
+    referenceSheetName: 'Справочники',
+    wbStockSheetName: 'Остатки WB',
+    startDate: '2026-08-10',
+    accountKeys: {},
+    productAliases: {
+      'nimba:158472051:263727213': 'парео черн шиф',
+      'nimba:232092449:366203604': 'парео синяя полоска',
+      'nimba:297175085:452136209': 'туника леопард/пятна',
+      'nimba:375529934:547426076': 'длинная жираф ЧЕРНО/белый',
+      'galioni:365509886:535488707': 'парео синий шиф',
+    },
+    schedule: defaultAutomationSchedule(timeOfDay),
+  }
+}
+
+function parseFbsConfig(value: unknown, timeOfDay = FBS_DEFAULT_TIME_OF_DAY): FbsMovementSheetConfig {
+  const defaults = defaultFbsConfig(timeOfDay)
+  if (!value || typeof value !== 'object') return defaults
+  const config = value as Partial<FbsMovementSheetConfig>
+  const spreadsheetId = typeof config.spreadsheetId === 'string' && config.spreadsheetId.trim()
+    ? config.spreadsheetId.trim()
+    : defaults.spreadsheetId
+  const readText = (candidate: unknown, fallback: string) =>
+    typeof candidate === 'string' && candidate.trim() ? candidate.trim() : fallback
+  const accountKeys = config.accountKeys && typeof config.accountKeys === 'object' && !Array.isArray(config.accountKeys)
+    ? Object.fromEntries(Object.entries(config.accountKeys).filter(([, key]) => typeof key === 'string')) as Record<string, string>
+    : {}
+  const configuredAliases = config.productAliases && typeof config.productAliases === 'object' && !Array.isArray(config.productAliases)
+    ? Object.fromEntries(Object.entries(config.productAliases).filter(([, name]) => typeof name === 'string')) as Record<string, string>
+    : {}
+  return {
+    spreadsheetId,
+    spreadsheetUrl: readText(config.spreadsheetUrl, `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`),
+    operationsSheetName: readText(config.operationsSheetName, defaults.operationsSheetName),
+    controlSheetName: readText(config.controlSheetName, defaults.controlSheetName),
+    summarySheetName: readText(config.summarySheetName, defaults.summarySheetName),
+    referenceSheetName: readText(config.referenceSheetName, defaults.referenceSheetName),
+    wbStockSheetName: readText(config.wbStockSheetName, defaults.wbStockSheetName),
+    startDate: readText(config.startDate, defaults.startDate),
+    accountKeys,
+    productAliases: { ...defaults.productAliases, ...configuredAliases },
+    schedule: normalizeAutomationSchedule(config.schedule, timeOfDay),
+  }
 }
 
 export function extractSpreadsheetId(value: string): string {
@@ -52,26 +134,17 @@ export function extractSpreadsheetId(value: string): string {
   return match?.[1] ?? trimmed
 }
 
-function validateTimeOfDay(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) throw new Error('Укажите время в формате ЧЧ:ММ')
-  const [hours, minutes] = value.split(':').map(Number)
-  if (hours > 23 || minutes > 59) throw new Error('Укажите корректное время')
-}
-
-function patternFromTime(timeOfDay: string) {
-  validateTimeOfDay(timeOfDay)
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  return `0 ${minutes} ${hours} * * *`
-}
-
-function getNextRunAt(timeOfDay: string, enabled: boolean): string | null {
+function getNextRunAt(schedule: AutomationSchedule, enabled: boolean): string | null {
   if (!enabled) return null
-  validateTimeOfDay(timeOfDay)
-  return getNextMoscowRunAt(timeOfDay).toISOString()
+  return getNextAutomationRunAt(schedule).toISOString()
 }
 
-function schedulerId(kind = AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT) {
+function schedulerPrefix(kind: AutomationWorkflowKind = AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT) {
   return `automation:${kind}`
+}
+
+function schedulerId(idSuffix: string, kind: AutomationWorkflowKind = AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT) {
+  return `${schedulerPrefix(kind)}:${idSuffix}`
 }
 
 function defaultSheetName(accountName: string) {
@@ -81,11 +154,37 @@ function defaultSheetName(accountName: string) {
   return `WB ${accountName}`.slice(0, 100)
 }
 
-function buildScheduledJobData(workflowId: string): AutomationJobData {
+function defaultFbsCabinetLabel(accountName: string) {
+  const normalized = accountName.toLowerCase()
+  if (normalized.includes('galioni')) return 'Снигирева / WB Galioni'
+  if (normalized.includes('nimba')) return 'Гребнев / WB Nimba'
+  return accountName.slice(0, 100)
+}
+
+function defaultFbsTechnicalKey(account: { id: string; name: string }) {
+  const normalized = account.name.toLowerCase()
+  if (normalized.includes('galioni')) return 'galioni'
+  if (normalized.includes('nimba')) return 'nimba'
+  return `account-${account.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toLowerCase()}`
+}
+
+function defaultFbsAccountEnabled(accountName: string) {
+  const normalized = accountName.toLowerCase()
+  return normalized.includes('galioni') || normalized.includes('nimba')
+}
+
+function buildScheduledJobData(
+  workflowId: string,
+  scheduledTime: string,
+  schedule: AutomationSchedule,
+  kind: AutomationWorkflowKind = AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
+): AutomationJobData {
   return {
-    kind: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
+    kind,
     source: 'scheduled',
     workflowId,
+    scheduledTime,
+    scheduleFingerprint: automationScheduleFingerprint(schedule),
   }
 }
 
@@ -129,7 +228,7 @@ export async function ensureMorningWbReportWorkflow() {
   return workflow
 }
 
-export async function getMorningWbReportWorkflow(): Promise<AutomationWorkflowRow> {
+export async function getMorningWbReportWorkflow(): Promise<MorningWbReportWorkflowRow> {
   const workflow = await ensureMorningWbReportWorkflow()
 
   const [accounts, mappings] = await Promise.all([
@@ -156,27 +255,115 @@ export async function getMorningWbReportWorkflow(): Promise<AutomationWorkflowRo
     }
   })
 
+  const config = parseMorningConfig(workflow.config, workflow.timeOfDay)
   return {
     id: workflow.id,
     kind: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
     enabled: workflow.enabled,
     timeOfDay: workflow.timeOfDay,
+    schedule: config.schedule,
     timezone: workflow.timezone,
-    config: parseMorningConfig(workflow.config),
+    config,
     lastAppliedAt: workflow.lastAppliedAt?.toISOString() ?? null,
-    nextRunAt: getNextRunAt(workflow.timeOfDay, workflow.enabled),
+    nextRunAt: getNextRunAt(config.schedule, workflow.enabled),
     accounts: workflowAccounts,
+  }
+}
+
+export async function ensureFbsMovementSheetWorkflow() {
+  let workflow = await prisma.automationWorkflowSetting.upsert({
+    where: { kind: FBS_MOVEMENT_SHEET_PRISMA_KIND },
+    create: {
+      kind: FBS_MOVEMENT_SHEET_PRISMA_KIND,
+      enabled: false,
+      timeOfDay: FBS_DEFAULT_TIME_OF_DAY,
+      timezone: TIMEZONE,
+      config: defaultFbsConfig() as unknown as Prisma.InputJsonValue,
+    },
+    update: {},
+  })
+  const accounts = await prisma.wbAccount.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
+  let configChanged = !(
+    workflow.config && typeof workflow.config === 'object' && !Array.isArray(workflow.config) &&
+    'productAliases' in workflow.config && 'wbStockSheetName' in workflow.config
+  )
+  for (const account of accounts) {
+    if (!config.accountKeys[account.id]) {
+      config.accountKeys[account.id] = defaultFbsTechnicalKey(account)
+      configChanged = true
+    }
+    await prisma.automationWorkflowAccount.upsert({
+      where: { workflowId_wbAccountId: { workflowId: workflow.id, wbAccountId: account.id } },
+      create: {
+        workflowId: workflow.id,
+        wbAccountId: account.id,
+        enabled: defaultFbsAccountEnabled(account.name),
+        sheetName: defaultFbsCabinetLabel(account.name),
+      },
+      update: {},
+    })
+  }
+  if (configChanged) {
+    workflow = await prisma.automationWorkflowSetting.update({
+      where: { id: workflow.id },
+      data: { config: config as unknown as Prisma.InputJsonValue },
+    })
+  }
+  return workflow
+}
+
+export async function getFbsMovementSheetWorkflow(): Promise<FbsMovementSheetWorkflowRow> {
+  const workflow = await ensureFbsMovementSheetWorkflow()
+  const [accounts, mappings] = await Promise.all([
+    prisma.wbAccount.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, sellerName: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.automationWorkflowAccount.findMany({ where: { workflowId: workflow.id } }),
+  ])
+  const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
+  const mappingsByAccount = new Map(mappings.map((mapping) => [mapping.wbAccountId, mapping]))
+  return {
+    id: workflow.id,
+    kind: AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET,
+    enabled: workflow.enabled,
+    timeOfDay: workflow.timeOfDay,
+    schedule: config.schedule,
+    timezone: workflow.timezone,
+    config,
+    lastAppliedAt: workflow.lastAppliedAt?.toISOString() ?? null,
+    nextRunAt: getNextRunAt(config.schedule, workflow.enabled),
+    accounts: accounts.map((account) => {
+      const mapping = mappingsByAccount.get(account.id)
+      return {
+        id: mapping?.id ?? null,
+        wbAccountId: account.id,
+        wbAccountName: account.name,
+        sellerName: account.sellerName,
+        enabled: mapping?.enabled ?? defaultFbsAccountEnabled(account.name),
+        sheetName: mapping?.sheetName ?? defaultFbsCabinetLabel(account.name),
+        technicalKey: config.accountKeys[account.id] ?? defaultFbsTechnicalKey(account),
+      }
+    }),
   }
 }
 
 export async function updateMorningWbReportWorkflow(
   input: UpdateMorningWbReportWorkflowInput,
 ): Promise<AutomationWorkflowRow> {
-  validateTimeOfDay(input.timeOfDay)
+  const schedule = validateAutomationSchedule(input.schedule)
+  const timeOfDay = primaryAutomationTime(schedule)
   const spreadsheetId = extractSpreadsheetId(input.spreadsheetUrl)
   const config: MorningWbReportConfig = {
     spreadsheetId,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    schedule,
   }
 
   const activeAccounts = await prisma.wbAccount.findMany({
@@ -190,13 +377,13 @@ export async function updateMorningWbReportWorkflow(
     create: {
       kind: MORNING_WB_REPORT_PRISMA_KIND,
       enabled: input.enabled,
-      timeOfDay: input.timeOfDay,
+      timeOfDay,
       timezone: TIMEZONE,
       config: config as unknown as Prisma.InputJsonValue,
     },
     update: {
       enabled: input.enabled,
-      timeOfDay: input.timeOfDay,
+      timeOfDay,
       timezone: TIMEZONE,
       config: config as unknown as Prisma.InputJsonValue,
     },
@@ -229,27 +416,118 @@ export async function updateMorningWbReportWorkflow(
   return getMorningWbReportWorkflow()
 }
 
+export async function updateFbsMovementSheetWorkflow(
+  input: UpdateFbsMovementSheetWorkflowInput,
+): Promise<FbsMovementSheetWorkflowRow> {
+  const existingWorkflow = await ensureFbsMovementSheetWorkflow()
+  const existingConfig = parseFbsConfig(existingWorkflow.config, existingWorkflow.timeOfDay)
+  const schedule = validateAutomationSchedule(input.schedule)
+  const timeOfDay = primaryAutomationTime(schedule)
+  const spreadsheetId = extractSpreadsheetId(input.spreadsheetUrl)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error('Укажите дату начала в формате ГГГГ-ММ-ДД')
+  const tabs = [
+    input.operationsSheetName,
+    input.controlSheetName,
+    input.summarySheetName,
+    input.referenceSheetName,
+    input.wbStockSheetName,
+  ].map((value) => value.trim())
+  if (tabs.some((value) => !value)) throw new Error('Укажите все вкладки Google Sheet')
+
+  const activeAccounts = await prisma.wbAccount.findMany({
+    where: { isActive: true },
+    select: { id: true },
+  })
+  const activeAccountIds = new Set(activeAccounts.map((account) => account.id))
+  const accountKeys: Record<string, string> = {}
+  const enabledKeys = new Set<string>()
+  for (const account of input.accounts) {
+    if (!activeAccountIds.has(account.wbAccountId)) continue
+    const technicalKey = validateFbsAccountTechnicalKey(account.technicalKey)
+    if (account.enabled && enabledKeys.has(technicalKey)) throw new Error(`Технический ключ ${technicalKey} повторяется`)
+    if (account.enabled) enabledKeys.add(technicalKey)
+    if (!account.cabinetLabel.trim()) throw new Error('Укажите название кабинета для таблицы')
+    accountKeys[account.wbAccountId] = technicalKey
+  }
+  if (input.enabled && enabledKeys.size === 0) throw new Error('Выберите хотя бы один кабинет')
+
+  const config: FbsMovementSheetConfig = {
+    spreadsheetId,
+    spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    operationsSheetName: tabs[0],
+    controlSheetName: tabs[1],
+    summarySheetName: tabs[2],
+    referenceSheetName: tabs[3],
+    wbStockSheetName: tabs[4],
+    startDate: input.startDate,
+    accountKeys,
+    productAliases: existingConfig.productAliases,
+    schedule,
+  }
+  const workflow = await prisma.automationWorkflowSetting.upsert({
+    where: { kind: FBS_MOVEMENT_SHEET_PRISMA_KIND },
+    create: {
+      kind: FBS_MOVEMENT_SHEET_PRISMA_KIND,
+      enabled: input.enabled,
+      timeOfDay,
+      timezone: TIMEZONE,
+      config: config as unknown as Prisma.InputJsonValue,
+    },
+    update: {
+      enabled: input.enabled,
+      timeOfDay,
+      timezone: TIMEZONE,
+      config: config as unknown as Prisma.InputJsonValue,
+    },
+  })
+  for (const account of input.accounts) {
+    if (!activeAccountIds.has(account.wbAccountId)) continue
+    await prisma.automationWorkflowAccount.upsert({
+      where: { workflowId_wbAccountId: { workflowId: workflow.id, wbAccountId: account.wbAccountId } },
+      create: {
+        workflowId: workflow.id,
+        wbAccountId: account.wbAccountId,
+        enabled: account.enabled,
+        sheetName: account.cabinetLabel.trim(),
+      },
+      update: { enabled: account.enabled, sheetName: account.cabinetLabel.trim() },
+    })
+  }
+  await applyFbsMovementSheetSchedule(workflow.id)
+  return getFbsMovementSheetWorkflow()
+}
+
 export async function applyMorningWbReportSchedule(workflowId?: string): Promise<AutomationWorkflowRow> {
   const workflow = workflowId
     ? await prisma.automationWorkflowSetting.findUniqueOrThrow({ where: { id: workflowId } })
     : await ensureMorningWbReportWorkflow()
 
   const queue = await getAutomationQueue()
-  if (!workflow.enabled) {
-    await queue.removeJobScheduler(schedulerId()).catch(() => false)
-  } else {
-    await queue.upsertJobScheduler(
-      schedulerId(),
-      {
-        pattern: patternFromTime(workflow.timeOfDay),
-        tz: workflow.timezone,
-      },
-      {
-        name: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
-        data: buildScheduledJobData(workflow.id),
-        opts: DEFAULT_AUTOMATION_JOB_OPTIONS,
-      },
-    )
+  const prefix = schedulerPrefix()
+  const existingSchedulers = await queue.getJobSchedulers(0, -1, true)
+  for (const scheduler of existingSchedulers) {
+    if (scheduler.key === prefix || scheduler.key.startsWith(`${prefix}:`)) {
+      await queue.removeJobScheduler(scheduler.key).catch(() => false)
+    }
+  }
+
+  const config = parseMorningConfig(workflow.config, workflow.timeOfDay)
+  if (workflow.enabled) {
+    const rules = buildAutomationScheduleRules(config.schedule)
+    for (const rule of rules) {
+      await queue.upsertJobScheduler(
+        schedulerId(rule.idSuffix),
+        {
+          pattern: rule.pattern,
+          tz: workflow.timezone,
+        },
+        {
+          name: AUTOMATION_WORKFLOW_KINDS.MORNING_WB_REPORT,
+          data: buildScheduledJobData(workflow.id, rule.scheduledTime, config.schedule),
+          opts: DEFAULT_AUTOMATION_JOB_OPTIONS,
+        },
+      )
+    }
   }
 
   await prisma.automationWorkflowSetting.update({
@@ -260,8 +538,66 @@ export async function applyMorningWbReportSchedule(workflowId?: string): Promise
   return getMorningWbReportWorkflow()
 }
 
+export async function applyFbsMovementSheetSchedule(workflowId?: string): Promise<FbsMovementSheetWorkflowRow> {
+  const workflow = workflowId
+    ? await prisma.automationWorkflowSetting.findUniqueOrThrow({ where: { id: workflowId } })
+    : await ensureFbsMovementSheetWorkflow()
+  const queue = await getAutomationQueue()
+  const kind = AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET
+  const prefix = schedulerPrefix(kind)
+  const existingSchedulers = await queue.getJobSchedulers(0, -1, true)
+  for (const scheduler of existingSchedulers) {
+    if (scheduler.key === prefix || scheduler.key.startsWith(`${prefix}:`)) {
+      await queue.removeJobScheduler(scheduler.key).catch(() => false)
+    }
+  }
+  const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
+  if (workflow.enabled) {
+    for (const rule of buildAutomationScheduleRules(config.schedule)) {
+      await queue.upsertJobScheduler(
+        schedulerId(rule.idSuffix, kind),
+        { pattern: rule.pattern, tz: workflow.timezone },
+        {
+          name: kind,
+          data: buildScheduledJobData(workflow.id, rule.scheduledTime, config.schedule, kind),
+          opts: DEFAULT_AUTOMATION_JOB_OPTIONS,
+        },
+      )
+    }
+  }
+  await prisma.automationWorkflowSetting.update({
+    where: { id: workflow.id },
+    data: { lastAppliedAt: new Date() },
+  })
+  return getFbsMovementSheetWorkflow()
+}
+
+export async function getAutomationCatalog(): Promise<AutomationCatalogItem[]> {
+  const workflows: AutomationWorkflowRow[] = await Promise.all([
+    getMorningWbReportWorkflow(),
+    getFbsMovementSheetWorkflow(),
+  ])
+  return workflows.map((workflow) => {
+    const definition = getAutomationDefinition(workflow.kind)
+    return {
+      kind: workflow.kind,
+      name: definition.name,
+      description: definition.description,
+      enabled: workflow.enabled,
+      timezone: workflow.timezone,
+      scheduleSummary: formatAutomationSchedule(workflow.schedule),
+      nextRunAt: workflow.nextRunAt,
+      lastAppliedAt: workflow.lastAppliedAt,
+    }
+  })
+}
+
 export async function applyAllAutomationSchedules() {
-  const workflow = await ensureMorningWbReportWorkflow()
-  await applyMorningWbReportSchedule(workflow.id)
-  return { workflows: 1, scheduled: workflow.enabled ? 1 : 0 }
+  const [morning, fbs] = await Promise.all([
+    ensureMorningWbReportWorkflow(),
+    ensureFbsMovementSheetWorkflow(),
+  ])
+  await applyMorningWbReportSchedule(morning.id)
+  await applyFbsMovementSheetSchedule(fbs.id)
+  return { workflows: 2, scheduled: Number(morning.enabled) + Number(fbs.enabled) }
 }

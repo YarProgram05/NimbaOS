@@ -82,3 +82,33 @@ export async function clearSheetValues(spreadsheetId: string, ranges: string[]) 
     requestBody: { ranges },
   })
 }
+
+export async function copySheetRowPresentation(params: {
+  spreadsheetId: string
+  sheetId: number
+  sourceRowNumber: number
+  startRowNumber: number
+  endRowNumber: number
+}) {
+  if (params.endRowNumber < params.startRowNumber) return
+  const sheets = await getGoogleSheetsClient()
+  const source = {
+    sheetId: params.sheetId,
+    startRowIndex: params.sourceRowNumber - 1,
+    endRowIndex: params.sourceRowNumber,
+  }
+  const destination = {
+    sheetId: params.sheetId,
+    startRowIndex: params.startRowNumber - 1,
+    endRowIndex: params.endRowNumber,
+  }
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: params.spreadsheetId,
+    requestBody: {
+      requests: [
+        { copyPaste: { source, destination, pasteType: 'PASTE_FORMAT', pasteOrientation: 'NORMAL' } },
+        { copyPaste: { source, destination, pasteType: 'PASTE_DATA_VALIDATION', pasteOrientation: 'NORMAL' } },
+      ],
+    },
+  })
+}

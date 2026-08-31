@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test": "tsx --test src/lib/fbs/*.test.ts",
+    "test": "tsx --test src/lib/fbs/*.test.ts src/lib/automations/*.test.ts",
     "worker:sync": "tsx --env-file=.env scripts/sync-worker.ts",
     "sync:schedule": "tsx --env-file=.env scripts/schedule-sync.ts",
     "worker:automation": "tsx --env-file=.env scripts/automation-worker.ts",

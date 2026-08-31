@@ -51,6 +51,7 @@ enum FeedbackWriteActionStatus {
 
 enum AutomationWorkflowKind {
   MORNING_WB_REPORT
+  FBS_MOVEMENT_SHEET
 }
 
 enum AutomationRunStatus {

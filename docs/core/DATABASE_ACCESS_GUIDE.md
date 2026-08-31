@@ -68,7 +68,7 @@ Persisted aggregate tables, materialized views and DB views were not found. Curr
 ## FBS Access
 
 - Read the `/fbs` workspace through `getFbsWorkspaceData`; do not join all FBS event/movement tables in page components.
-- Current sellable stock is `onHand - reserved` from `fbs_assortment_items`. `wbStock` is only a reconciliation value.
+- Inside NimbaOS inventory operations, local available stock remains `onHand - reserved` from `fbs_assortment_items`; `wbStock` is the read-only WB-confirmed sellable snapshot. In the external FBS accounting Sheet specifically, columns named `Остаток WB` intentionally use `wbStock`, while the separately shown physical balance comes from the movement ledger.
 - For an inventory audit, read `fbs_inventory_movements` by `itemId` and `occurredAt`; each row stores both deltas and resulting balances.
 - For order/KIZ investigations, start from `fbs_orders`, then bounded `fbs_order_events`, `kiz_units`, `kiz_events` and `kiz_compliance_tasks`.
 - Never select or print `encryptedCode`/`kizEncrypted` in analytics. Use `maskedCode`, `kizMasked` or `codeHash`.

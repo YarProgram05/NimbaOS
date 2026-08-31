@@ -32,6 +32,22 @@
 
 ## Done Recently
 
+- ID: TASK-FBS-MOVEMENT-SHEET-WORKFLOW
+  Status: Done locally
+  Priority: High
+  Description: Implemented the second automation end to end: workflow kind and migration, catalog/detail UI, queue processor, DB-first event projection, retry-safe Google Sheet upsert, pre-handoff cancellations, explicit accepted returns, daily reconciliation and readback. Added canonical tuple alias `nimba:297175085:452136209 → туника леопард/пятна`.
+  Next step: Deploy code and migration through the normal production procedure and smoke-test the production worker. The local workflow is enabled/applied at 23:30 MSK; production scheduling was not changed.
+  Related files: `src/lib/services/fbs-movement-sheet-workflow.ts`, `src/lib/automations/fbs-sheet.ts`, `src/app/(dashboard)/automations/[kind]/`, `prisma/migrations/20260901120000_fbs_movement_sheet_automation/`.
+  Risks: Do not enable before the production migration and worker deployment. Unknown product tuples fail visibly instead of guessing; accepted returns require an explicit inventory movement.
+
+- ID: TASK-AUTOMATIONS-CATALOG-FLEXIBLE-SCHEDULES
+  Status: Done
+  Priority: High
+  Description: Replaced the single-workflow `/automations` settings page with a catalog and separate detail route. Added readable workflow metadata, a flexible schedule editor (multiple exact times, daily intervals, weekdays, every N weeks, month days), backward-compatible JSON persistence, BullMQ multi-scheduler registration, and automation-name display/filter/sort in the complete run history.
+  Next step: Deploy normally before changing any production schedule.
+  Related files: `src/app/(dashboard)/automations/`, `src/lib/automations/catalog.ts`, `src/lib/automations/schedule.ts`, `src/lib/automations/workflows.ts`, `src/lib/queue/automation-processor.ts`.
+  Risks: Saving an enabled workflow reapplies its BullMQ schedulers. Every-N-weeks uses weekly cron registration plus an application-side anchor-week gate; production behavior should be smoke-checked after deployment without duplicating live schedules.
+
 - ID: BUG-031-LOCAL-NEXT-DEV-CSS-404
   Status: Done
   Priority: Medium
@@ -287,6 +303,14 @@
   Next step: Refresh `/automations`; a `13:28` workflow should display `Следующий запуск` at `13:28` MSK.
   Related files: `src/lib/time/moscow.ts`, `src/lib/automations/workflows.ts`, `src/lib/sync/schedules.ts`, `src/lib/queue/automation-processor.ts`, `src/lib/queue/sync-processor.ts`, `src/app/(dashboard)/automations/automations-client.tsx`, `src/app/(dashboard)/sync/sync-client.tsx`.
   Risks: None known; scheduling itself already used `Europe/Moscow`.
+
+- ID: TASK-FBS-SHEET-WB-STOCK
+  Status: Done locally, Pending production rollout
+  Priority: High
+  Description: `Остаток WB` now comes from the fresh read-only FBS stock snapshot, not from the movement ledger. The workflow upserts 53 stable tuple rows, verifies Summary per product/account, and reports missing local replenishments as warnings rather than failures.
+  Next step: Review the 11 current replenishment warnings, deploy the committed migration/code when approved, then explicitly apply/enable the production workflow and automation worker/scheduler. Local scheduling is already enabled/applied.
+  Related files: `src/lib/services/fbs-movement-sheet-workflow.ts`, `src/lib/automations/fbs-sheet.ts`, `src/lib/automations/fbs-sheet.test.ts`, `src/lib/automations/runs.ts`.
+  Risks: The stock snapshot must be no older than 30 minutes; unmapped positive WB tuples remain a hard error because silently assigning stock to the wrong physical product would corrupt the Summary.
 
 - ID: TASK-MORNING-WB-LIVE-RUN-FIXES
   Status: Done
