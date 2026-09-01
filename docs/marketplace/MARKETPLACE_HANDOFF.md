@@ -1,5 +1,9 @@
 # Marketplace Handoff
 
+2026-09-02 follow-up audit through 2026-09-01: all 62 active FBS order/assortment tuples reconcile with the live Sheet; zero mismatches and zero unresolved mappings. Every active tuple found for the six known `туника ↔ парео` physical-product identities is explicitly pinned in code and local workflow config: black leaf, leopard/spots, blue waves, green wave, blue cotton and light green.
+
+2026-09-02 mapping correction: Nimba tuple `412122105:591014919` is `синий шифон квадраты` (`vendorCode: парео квадр/синий шиф`), not `парео синий шиф`. Three live FBS order rows and one WB-stock row were corrected. The similar product remains valid for its own distinct tuples. A full audit through 2026-08-31 checked 62 order/stock tuples with zero remaining mismatches or unresolved mappings.
+
 ## Current Marketplace Objective
 
 Использовать NimbaOS как базу для регулярной аналитики WB: продажи, остатки, реклама, карточки, отзывы, план/факт и рекомендации владельцу.

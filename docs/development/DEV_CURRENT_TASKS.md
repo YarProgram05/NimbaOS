@@ -32,6 +32,14 @@
 
 ## Done Recently
 
+- ID: BUG-036-FBS-SHEET-WRONG-PRODUCT-ALIAS
+  Status: Done locally and live Sheet corrected
+  Priority: High
+  Description: Corrected Nimba tuple `412122105:591014919` from `парео синий шиф` to canonical `синий шифон квадраты` in three order rows and one WB-stock row. Added an explicit tuple alias and a reusable DB/Sheet mapping audit; all 62 distinct tuples through 2026-09-01 reconcile without errors. Every active tuple found for the six known `туника ↔ парео` physical-product identities is now explicitly pinned.
+  Next step: Include the code in the normal deployment before relying on the production automation worker; use `npm run audit:fbs-sheet-mappings -- <date>` after adding or changing aliases.
+  Related files: `src/lib/automations/workflows.ts`, `src/lib/automations/fbs-sheet.ts`, `src/lib/services/fbs-movement-sheet-workflow.ts`, `scripts/audit-fbs-sheet-product-mappings.ts`.
+  Risks: Do not replace other `парео синий шиф` rows: they belong to different stable tuples and are valid.
+
 - ID: TASK-MOBILE-RESPONSIVE-OVERHAUL
   Status: Done locally
   Priority: High
@@ -91,7 +99,7 @@
 - ID: TASK-FBS-MOVEMENT-SHEET-WORKFLOW
   Status: Done locally
   Priority: High
-  Description: Implemented the second automation end to end: workflow kind and migration, catalog/detail UI, queue processor, DB-first event projection, retry-safe Google Sheet upsert, pre-handoff cancellations, explicit accepted returns, daily reconciliation and readback. Owner-confirmed duplicate listings map by stable tuple: `nimba:297175085:452136209 → туника леопард/пятна` and `nimba:232092449:366203604 → туника синие волны`.
+  Description: Implemented the second automation end to end: workflow kind and migration, catalog/detail UI, queue processor, DB-first event projection, retry-safe Google Sheet upsert, pre-handoff cancellations, explicit accepted returns, daily reconciliation and readback. Stable exceptions include `nimba:297175085:452136209 → туника леопард/пятна`, `nimba:232092449:366203604 → туника синие волны` and `nimba:412122105:591014919 → синий шифон квадраты`.
   Next step: Deploy code and migration through the normal production procedure and smoke-test the production worker. The local workflow is enabled/applied at 23:30 MSK; production scheduling was not changed.
   Related files: `src/lib/services/fbs-movement-sheet-workflow.ts`, `src/lib/automations/fbs-sheet.ts`, `src/app/(dashboard)/automations/[kind]/`, `prisma/migrations/20260901120000_fbs_movement_sheet_automation/`.
   Risks: Do not enable before the production migration and worker deployment. Unknown product tuples fail visibly instead of guessing; accepted returns require an explicit inventory movement.

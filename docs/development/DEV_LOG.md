@@ -1,5 +1,14 @@
 # Development Log
 
+## 2026-09-02 - FBS Sheet product mapping correction and audit
+
+- Diagnosed the wrong FBS Sheet name for order `5630396936`: local DB identity is `nimba:412122105:591014919`, vendor code `парео квадр/синий шиф`, while the Sheet had inherited `парео синий шиф` from the same previously poisoned tuple.
+- Added the canonical alias `синий шифон квадраты` to code and local workflow config; made explicit aliases a separate highest-priority input to event and WB-stock resolution.
+- Corrected live cells `Операции!B6`, `B9`, `B22` and `Остатки WB!A24` only. Validation, formats, order IDs, quantities, stock, `nmId`, `chrtId` and stable keys were preserved.
+- Added `scripts/audit-fbs-sheet-product-mappings.ts` and npm command `audit:fbs-sheet-mappings`. Audit through 2026-08-31 checked 62 distinct active order/stock tuples with zero mismatches and zero errors.
+- Verification: connector readback passed; `npm test` passed 61 tests; `npm run type-check` passed. No WB API/write, sync, production deploy or schedule change.
+- Follow-up first pinned the Galioni counterparts of the leopard and blue-wave category merges, then expanded explicit coverage after the owner's clarification to every active tuple found for six known `туника ↔ парео` identities: black leaf, leopard/spots, blue waves, green wave, blue cotton and light green. The aliases are stored in code and the local workflow config rather than depending on prior Sheet rows. Re-audit through 2026-09-01 remained clean; all 62 tests and type-check pass.
+
 ## 2026-09-01 - Production Google Sheet inspection credential injection
 
 Diagnosed the owner-reported production failure of the automation settings action `Проверить подключение` after deployment of commit `c57f120`. Safe remote checks proved the mini-PC identity, deployed commit, running production services and HTTP 200. A presence-only check showed `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` available to `automation-worker` but missing from `app`; no credential content was read or printed.

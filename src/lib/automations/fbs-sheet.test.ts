@@ -9,6 +9,7 @@ import {
   planFbsSheetUpsert,
   planFbsWbStockUpsert,
   reconcileFbsDay,
+  resolveFbsProductName,
   sheetSerialDate,
   sheetSerialDateTime,
   type FbsSheetExistingRow,
@@ -143,6 +144,52 @@ test('duplicate blue-stripe listing is mapped to the canonical blue-waves tunic'
     acceptedReturns: [],
   })
   assert.equal(events[0].productName, 'туника синие волны')
+})
+
+test('explicit tuple alias overrides a previously poisoned sheet mapping', () => {
+  const tuple = fbsProductTupleKey('nimba', 412122105, 591014919)
+  const events = buildFbsDesiredEvents({
+    account,
+    productNames: new Map([[tuple, 'парео синий шиф']]),
+    productAliases: new Map([[tuple, 'синий шифон квадраты']]),
+    allowedProductNames: ['парео синий шиф', 'синий шифон квадраты'],
+    orders: [order({
+      nmId: 412122105,
+      chrtId: 591014919,
+      vendorCode: 'парео квадр/синий шиф',
+    })],
+    acceptedReturns: [],
+  })
+  assert.equal(events[0].productName, 'синий шифон квадраты')
+})
+
+test('known cross-category product identities are pinned by tuple', () => {
+  const aliases = new Map([
+    [fbsProductTupleKey('nimba', 297175085, 452136209), 'туника леопард/пятна'],
+    [fbsProductTupleKey('galioni', 270774246, 418587463), 'туника леопард/пятна'],
+    [fbsProductTupleKey('nimba', 232092449, 366203604), 'туника синие волны'],
+    [fbsProductTupleKey('galioni', 219179076, 348718974), 'туника синие волны'],
+    [fbsProductTupleKey('nimba', 272548220, 420779646), 'туника черный лист'],
+    [fbsProductTupleKey('nimba', 297175260, 452136411), 'туника черный лист'],
+    [fbsProductTupleKey('galioni', 270773541, 418586502), 'туника черный лист'],
+    [fbsProductTupleKey('nimba', 232092330, 366203451), 'туника зеленая волна'],
+    [fbsProductTupleKey('galioni', 242654871, 380939756), 'туника зеленая волна'],
+    [fbsProductTupleKey('galioni', 219179130, 348719037), 'туника светло зеленая'],
+    [fbsProductTupleKey('nimba', 169028676, 408742887), 'парео хлопок голубой'],
+    [fbsProductTupleKey('galioni', 169042141, 280894171), 'парео хлопок голубой'],
+  ])
+  for (const [tuple, expected] of Array.from(aliases.entries())) {
+    const [accountKey, nmId, chrtId] = tuple.split(':')
+    assert.equal(resolveFbsProductName({
+      productNames: new Map(),
+      productAliases: aliases,
+      accountKey,
+      nmId: Number(nmId),
+      chrtId: Number(chrtId),
+      vendorCode: 'другое название WB',
+      allowedProductNames: Array.from(new Set(Array.from(aliases.values()))),
+    }), expected)
+  }
 })
 
 test('load timestamp is written as Moscow wall time for a Moscow-timezone sheet', () => {

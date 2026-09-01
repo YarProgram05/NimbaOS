@@ -35,10 +35,28 @@
 
 ## Done Recently
 
+- ID: MKT-FBS-KNOWN-MERGES-RECHECK-2026-09-02
+  Status: Done
+  Priority: High
+  Description: Re-ran the mapping audit through 2026-09-01: 62 distinct active tuples, zero mismatches and zero unresolved mappings. Explicitly pinned every active tuple found for the six known `туника ↔ парео` physical-product identities: black leaf, leopard/spots, blue waves, green wave, blue cotton and light green.
+  Next step: Treat future category duplicates as separate products until the owner explicitly confirms a physical-product merge and a stable tuple alias is added.
+  Related reports/metrics: FBS orders, active assortment, WB stock snapshot, product aliases, account + `nmId` + `chrtId`.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: Similar text alone is not sufficient evidence for a merge.
+
+- ID: MKT-FBS-SHEET-PRODUCT-MAPPING-AUDIT-2026-09-02
+  Status: Done
+  Priority: High
+  Description: Corrected three Nimba FBS orders and one WB-stock row for tuple `412122105:591014919` from `парео синий шиф` to `синий шифон квадраты`. Audited all active order/stock identities from 2026-08-10 through 2026-08-31: 62 distinct tuples, zero remaining mismatches or mapping errors.
+  Next step: Keep the distinct true `парео синий шиф` tuples unchanged; run the mapping audit whenever a new alias is introduced.
+  Related reports/metrics: FBS orders, WB stock snapshot, account + `nmId` + `chrtId`, vendor code, stable Sheet key.
+  Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.
+  Risks: Display-name similarity is not product identity; only stable tuples and approved aliases may merge products.
+
 - ID: MKT-FBS-SHEET-DAILY-WORKFLOW
   Status: Done locally; disabled
   Priority: High
-  Description: Implemented and verified the DB-first daily FBS lifecycle workflow. Initial live load through 2026-08-31 wrote 250 missing events and corrected 5 existing rows; retry verification found 255 unchanged events and no writes. Owner-confirmed duplicate listings map by stable tuple: `парео леопард/пятна → туника леопард/пятна` and `парео синяя полоска → туника синие волны`.
+  Description: Implemented and verified the DB-first daily FBS lifecycle workflow. Initial live load through 2026-08-31 wrote 250 missing events and corrected 5 existing rows; retry verification found 255 unchanged events and no writes. Stable mappings include `парео леопард/пятна → туника леопард/пятна`, `парео синяя полоска → туника синие волны` and `парео квадр/синий шиф → синий шифон квадраты` for their exact technical tuples.
   Next step: Deploy code/migration normally and explicitly enable the production schedule after worker smoke-testing.
   Related reports/metrics: 251 orders, 3 pre-handoff cancellations, 1 accepted return, 0 failed accounts, 0 retry inserts/updates.
   Related cabinets: `WB Nimba (WB_1)`, `WB Galioni (WB_2)`.

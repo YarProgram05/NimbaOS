@@ -295,14 +295,17 @@ export function buildFbsProductNameMap(rows: FbsSheetExistingRow[]): Map<string,
 
 export function resolveFbsProductName(params: {
   productNames: Map<string, string>
+  productAliases?: Map<string, string>
   accountKey: string
   nmId: number
   chrtId: number
   vendorCode?: string | null
   allowedProductNames?: string[]
 }) {
-  const value = params.productNames.get(fbsProductTupleKey(params.accountKey, params.nmId, params.chrtId))
-  if (value) return value
+  const tupleKey = fbsProductTupleKey(params.accountKey, params.nmId, params.chrtId)
+  const alias = params.productAliases?.get(tupleKey)
+  if (alias) return alias
+  const value = params.productNames.get(tupleKey)
 
   const vendorCode = params.vendorCode?.trim() ?? ''
   const normalizedVendor = normalizeProductName(vendorCode)
@@ -321,6 +324,7 @@ export function resolveFbsProductName(params: {
       )
       if (shortenedExact.length === 1) return shortenedExact[0]
     }
+    if (value) return value
     const vendorTokens = productMatchTokens(normalizedVendor)
     const scored = params.allowedProductNames.map((name) => {
       const nameTokens = productMatchTokens(normalizeProductName(name))
@@ -342,6 +346,7 @@ export function resolveFbsProductName(params: {
       )
     }
   }
+  if (value) return value
   const vendor = vendorCode ? ` (${vendorCode})` : ''
   throw new Error(
     `Нет названия товара в таблице для ${params.accountKey}, nmId ${params.nmId}, chrtId ${params.chrtId}${vendor}`,
@@ -372,6 +377,7 @@ export function buildFbsDesiredEvents(params: {
   orders: FbsSheetOrderRecord[]
   acceptedReturns: FbsSheetAcceptedReturnRecord[]
   productNames: Map<string, string>
+  productAliases?: Map<string, string>
   allowedProductNames?: string[]
 }): FbsSheetDesiredEvent[] {
   const accountKey = validateFbsAccountTechnicalKey(params.account.technicalKey)
@@ -384,6 +390,7 @@ export function buildFbsDesiredEvents(params: {
     try {
       productName = resolveFbsProductName({
         productNames: params.productNames,
+        productAliases: params.productAliases,
         accountKey,
         nmId: order.nmId,
         chrtId: order.chrtId,
@@ -428,6 +435,7 @@ export function buildFbsDesiredEvents(params: {
     try {
       productName = resolveFbsProductName({
         productNames: params.productNames,
+        productAliases: params.productAliases,
         accountKey,
         nmId: movement.nmId,
         chrtId: movement.chrtId,
@@ -471,6 +479,7 @@ export function buildFbsWbStockSnapshots(params: {
   account: FbsSheetAccountIdentity
   stocks: FbsWbStockRecord[]
   productNames: Map<string, string>
+  productAliases?: Map<string, string>
   allowedProductNames?: string[]
 }): FbsWbStockSnapshot[] {
   const accountKey = validateFbsAccountTechnicalKey(params.account.technicalKey)
@@ -488,6 +497,7 @@ export function buildFbsWbStockSnapshots(params: {
         cabinetLabel: params.account.cabinetLabel,
         productName: resolveFbsProductName({
           productNames: params.productNames,
+          productAliases: params.productAliases,
           accountKey,
           nmId: stock.nmId,
           chrtId: stock.chrtId,

@@ -13,6 +13,7 @@
     "sync:schedule": "tsx --env-file=.env scripts/schedule-sync.ts",
     "worker:automation": "tsx --env-file=.env scripts/automation-worker.ts",
     "automation:schedule": "tsx --env-file=.env scripts/schedule-automations.ts",
+    "audit:fbs-sheet-mappings": "tsx --env-file=.env scripts/audit-fbs-sheet-product-mappings.ts",
     "backfill:fbs": "tsx --env-file=.env scripts/backfill-fbs-2026-07-20-2026-07-30.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

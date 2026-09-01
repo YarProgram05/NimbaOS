@@ -1,5 +1,21 @@
 # Marketplace Analysis Log
 
+## 2026-09-02 - Known FBS physical-product merges rechecked
+
+Re-ran the DB/Google-Sheet mapping audit through 2026-09-01. It checked 62 distinct active order and assortment tuples and returned zero mismatches and zero unresolved mappings.
+
+The owner clarified that all known `туника ↔ парео` category duplicates represent one physical product. The explicit tuple aliases now cover six canonical identities: `туника черный лист` (three listings), `туника леопард/пятна` (two), `туника синие волны` (two), `туника зеленая волна` (two), `парео хлопок голубой` (two, including Nimba `Туника хлопок голубой`) and `туника светло зеленая` (Galioni `Парео зеленое/вискоз`). These aliases are pinned in code and the local workflow config for every active tuple found in the audit, rather than relying on names retained in old Sheet rows.
+
+Other configured aliases are technical normalization of a WB vendor code into an existing workbook label. The corrected squares tuple `nimba:412122105:591014919 → синий шифон квадраты` remains explicitly separate from `парео синий шиф`.
+
+## 2026-09-02 - FBS product mapping correction and complete tuple audit
+
+WB order `5630396936` was verified in the local DB as Nimba tuple `412122105:591014919` with vendor code `парео квадр/синий шиф`. The live workbook incorrectly showed `парео синий шиф` because that similar display name had already been retained for the tuple. The correct workbook reference product is `синий шифон квадраты`.
+
+Corrected `Операции` rows 6, 9 and 22 (orders `5630396936`, `5625109856`, `5611318349`) and `Остатки WB` row 24. Quantities, stock, statuses, dates, order IDs, `nmId`, `chrtId`, stable keys, validation and formatting were preserved. Other `парео синий шиф` rows were not changed because they belong to different product tuples.
+
+The post-fix audit covered every active order and assortment tuple from 2026-08-10 through 2026-08-31: 62 distinct tuples, zero mismatches and zero unresolved mappings. The known intended merges (`туника леопард/пятна`, `туника синие волны`) remain intact. No WB API/write, sync, production deployment or schedule change was performed.
+
 ## 2026-09-01 - Blue-stripe duplicate listing correction
 
 The owner confirmed that `парео синяя полоска` and `туника синие волны` are one physical product listed under different WB categories. Stable tuple `nimba:232092449:366203604` now resolves to canonical `туника синие волны`, alongside the existing Galioni tuple `219179076:348718974`. The accidental separate reference value was cleared, while the Nimba WB-stock row kept its original technical key, identifiers and quantity 10.

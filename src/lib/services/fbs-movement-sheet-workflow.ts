@@ -239,6 +239,7 @@ async function assertFbsDataFreshness(wbAccountId: string, targetDate: string) {
 async function loadAccountWbStock(params: {
   account: FbsSheetAccountIdentity
   productNames: Map<string, string>
+  productAliases: Map<string, string>
   allowedProductNames: string[]
   existingStockKeys: Set<string>
   now: Date
@@ -275,6 +276,7 @@ async function loadAccountWbStock(params: {
   return buildFbsWbStockSnapshots({
     account: params.account,
     productNames: params.productNames,
+    productAliases: params.productAliases,
     allowedProductNames: params.allowedProductNames,
     stocks: relevant.map((item) => ({
       ...item,
@@ -291,6 +293,7 @@ async function loadAccountData(params: {
   startDate: string
   targetDate: string
   productNames: Map<string, string>
+  productAliases: Map<string, string>
   allowedProductNames: string[]
   existingStockKeys: Set<string>
   now: Date
@@ -336,6 +339,7 @@ async function loadAccountData(params: {
     events = buildFbsDesiredEvents({
       account,
       productNames: params.productNames,
+      productAliases: params.productAliases,
       allowedProductNames: params.allowedProductNames,
       orders: orders.map((order) => ({
         ...order,
@@ -355,6 +359,7 @@ async function loadAccountData(params: {
     stockSnapshots = await loadAccountWbStock({
       account,
       productNames: params.productNames,
+      productAliases: params.productAliases,
       allowedProductNames: params.allowedProductNames,
       existingStockKeys: params.existingStockKeys,
       now: params.now,
@@ -636,6 +641,7 @@ export async function runFbsMovementSheetWorkflow(
   const productNames = buildFbsProductNameMap(existingRows)
   mergeWbStockProductNames(productNames, existingWbStockRows)
   const allowedProductNames = referenceProductValues.map((row) => normalize(row[0])).filter(Boolean)
+  const productAliases = new Map<string, string>()
   for (const [tuple, productName] of Object.entries(config.productAliases ?? {})) {
     if (!allowedProductNames.includes(productName)) {
       throw new Error(`Сопоставление ${tuple} указывает на отсутствующий товар «${productName}»`)
@@ -644,7 +650,7 @@ export async function runFbsMovementSheetWorkflow(
     if (parts.length !== 3 || !Number.isInteger(Number(parts[1])) || !Number.isInteger(Number(parts[2]))) {
       throw new Error(`Некорректный ключ сопоставления товара: ${tuple}`)
     }
-    productNames.set(fbsProductTupleKey(parts[0], Number(parts[1]), Number(parts[2])), productName)
+    productAliases.set(fbsProductTupleKey(parts[0], Number(parts[1]), Number(parts[2])), productName)
   }
   const keys = accountKeyMap(config)
   const existingStockKeys = new Set(existingWbStockRows.map((row) => normalize(row.values[8])).filter(Boolean))
@@ -665,6 +671,7 @@ export async function runFbsMovementSheetWorkflow(
         startDate: config.startDate,
         targetDate,
         productNames,
+        productAliases,
         allowedProductNames,
         existingStockKeys,
         now: loadedAt,

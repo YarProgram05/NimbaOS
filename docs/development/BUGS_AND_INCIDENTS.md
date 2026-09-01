@@ -1,5 +1,31 @@
 # Bugs And Incidents
 
+## BUG-036: FBS Sheet reused a similar but different product name
+
+Status:
+- Fixed in code, local workflow config and live Google Sheet on 2026-09-02; pending normal code deployment.
+
+Symptoms:
+- WB order `5630396936` was actually `парео квадр/синий шиф`, but `Операции` displayed `парео синий шиф`.
+- Two earlier orders for the same technical tuple and the WB-stock row carried the same wrong display name.
+
+Root cause:
+- Product identity is joined by account + `nmId` + `chrtId`. Tuple `nimba:412122105:591014919` had already been stored under the similar product `парео синий шиф`; later rows reused that tuple mapping even though local `fbs_orders.vendorCode` was `парео квадр/синий шиф`.
+
+Fix:
+- Added the explicit canonical alias `nimba:412122105:591014919 → синий шифон квадраты` in code and local workflow config.
+- Passed explicit aliases separately and with highest priority to order, return and WB-stock name resolution.
+- Corrected only `Операции!B6`, `B9`, `B22` and `Остатки WB!A24`; other `парео синий шиф` rows have different tuples and remain valid.
+- Added a reusable mapping audit across local DB orders/assortment and the live Sheet.
+
+Verification:
+- `npm run audit:fbs-sheet-mappings -- 2026-08-31` checked 62 distinct tuples for 2026-08-10 through 2026-08-31 with zero mismatches/errors.
+- Connector readback confirmed all four corrected cells, preserved dropdown validation and unchanged technical identifiers.
+- `npm test` passed 61 tests and `npm run type-check` passed.
+
+Related files:
+- `src/lib/automations/workflows.ts`, `src/lib/automations/fbs-sheet.ts`, `src/lib/services/fbs-movement-sheet-workflow.ts`, `scripts/audit-fbs-sheet-product-mappings.ts`, `package.json`
+
 ## BUG-035: Phone layouts clipped navigation, data and primary actions
 
 Status:

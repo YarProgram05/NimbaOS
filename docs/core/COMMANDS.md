@@ -45,6 +45,7 @@
 
 ## Debug Scripts
 
+- `npm run audit:fbs-sheet-mappings -- YYYY-MM-DD` — read-only comparison of local FBS orders/assortment, approved aliases and current Google Sheet product identities through the target Moscow date; exits non-zero on mismatch or unresolved mapping.
 - `npx tsx scripts/debug-report.ts` — DB-only сверка financial report formulas.
 - `npx tsx scripts/debug-advertising.ts` — live WB advert API reads; запускать только по явному запросу.
 
