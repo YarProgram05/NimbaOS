@@ -190,8 +190,8 @@ export function ReviewsClient({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <section className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-visible xl:overflow-hidden">
+      <section className="grid shrink-0 grid-cols-2 gap-3 xl:grid-cols-5">
         <FeedbackMetric label="Средняя оценка" value={formatOptionalRating(data.summary.averageRating)} icon="star" />
         <FeedbackMetric label="Новых отзывов" value={formatNumber(data.summary.reviewsNew)} />
         <FeedbackMetric label="Негативных" value={formatNumber(data.summary.negativeReviews)} tone="bad" />
@@ -301,6 +301,13 @@ export function ReviewsClient({
             Вопросы
           </Button>
         </div>
+
+        <MobileSortControl
+          tab={currentTab}
+          sortBy={currentSortBy}
+          sortDir={currentSortDir}
+          onSort={toggleSort}
+        />
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
@@ -352,7 +359,7 @@ export function ReviewsClient({
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
             Запустите синхронизацию отзывов и вопросов. Модуль только читает данные WB и не отправляет ответы покупателям.
           </p>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button onClick={() => handleSync('reviews')} disabled={syncing} variant="outline">
               <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
               Синхронизировать отзывы
@@ -364,9 +371,20 @@ export function ReviewsClient({
           </div>
         </section>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
-          {currentTab === 'reviews'
-            ? (
+        <div className="min-h-0 rounded-md border bg-card xl:flex-1 xl:overflow-auto">
+          {currentTab === 'reviews' ? (
+            <>
+              <div className="space-y-3 p-3 md:hidden">
+                <ReviewsMobileCards
+                  rows={data.reviews}
+                  selectedIds={selectedReviewIds}
+                  allCurrentPageSelected={allCurrentPageSelected}
+                  onToggleSelected={toggleReviewSelection}
+                  onToggleCurrentPage={toggleCurrentPageSelection}
+                  onAnswer={setAnswerTarget}
+                />
+              </div>
+              <div className="hidden md:block">
                 <ReviewsTable
                   rows={data.reviews}
                   currentSortBy={currentSortBy}
@@ -377,13 +395,23 @@ export function ReviewsClient({
                   onToggleCurrentPage={toggleCurrentPageSelection}
                   onAnswer={setAnswerTarget}
                 />
-              )
-            : <QuestionsTable rows={data.questions} currentSortBy={currentSortBy} onSort={toggleSort} onAnswer={setAnswerTarget} />}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-3 p-3 md:hidden">
+                <QuestionsMobileCards rows={data.questions} onAnswer={setAnswerTarget} />
+              </div>
+              <div className="hidden md:block">
+                <QuestionsTable rows={data.questions} currentSortBy={currentSortBy} onSort={toggleSort} onAnswer={setAnswerTarget} />
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {totalPages > 1 && (
-        <div className="flex shrink-0 items-center justify-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -442,6 +470,209 @@ export function ReviewsClient({
         }}
       />
     </div>
+  )
+}
+
+const MOBILE_SORT_OPTIONS: Array<{ value: FeedbackSortBy; label: string }> = [
+  { value: 'createdDate', label: 'По дате' },
+  { value: 'rating', label: 'По оценке' },
+  { value: 'nmId', label: 'По артикулу WB' },
+  { value: 'vendorCode', label: 'По артикулу продавца' },
+  { value: 'productName', label: 'По товару' },
+  { value: 'isAnswered', label: 'По статусу ответа' },
+  { value: 'wasViewed', label: 'По просмотру' },
+]
+
+function MobileSortControl({
+  tab,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  tab: FeedbackTab
+  sortBy: FeedbackSortBy
+  sortDir: FeedbackSortDir
+  onSort: (sortBy: FeedbackSortBy) => void
+}) {
+  const options = MOBILE_SORT_OPTIONS.filter((option) => {
+    if (option.value === 'rating') return tab === 'reviews'
+    if (option.value === 'wasViewed') return tab === 'questions'
+    return true
+  })
+  const visibleOptions = options.some((option) => option.value === sortBy)
+    ? options
+    : [{ value: sortBy, label: 'Текущая сортировка' }, ...options]
+
+  return (
+    <div className="flex w-full gap-2 md:hidden">
+      <Select value={sortBy} onValueChange={(value) => onSort(value as FeedbackSortBy)}>
+        <SelectTrigger className="min-w-0 flex-1" aria-label="Поле сортировки">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {visibleOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button type="button" variant="outline" className="shrink-0" onClick={() => onSort(sortBy)}>
+        <ArrowUpDown className="h-4 w-4" /> {sortDir === 'asc' ? 'Возр.' : 'Убыв.'}
+      </Button>
+    </div>
+  )
+}
+
+function ReviewsMobileCards({
+  rows,
+  selectedIds,
+  allCurrentPageSelected,
+  onToggleSelected,
+  onToggleCurrentPage,
+  onAnswer,
+}: {
+  rows: PaginatedFeedback['reviews']
+  selectedIds: Set<string>
+  allCurrentPageSelected: boolean
+  onToggleSelected: (id: string, checked: boolean) => void
+  onToggleCurrentPage: (checked: boolean) => void
+  onAnswer: (row: PaginatedFeedback['reviews'][number]) => void
+}) {
+  const [expandedCell, setExpandedCell] = useState<string | null>(null)
+
+  if (rows.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">Нет строк под выбранные фильтры</p>
+  }
+
+  return (
+    <>
+      <label className="flex min-h-11 items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+        <input
+          type="checkbox"
+          className="h-5 w-5 shrink-0"
+          checked={allCurrentPageSelected}
+          onChange={(event) => onToggleCurrentPage(event.target.checked)}
+        />
+        Выбрать все неотвеченные отзывы на странице
+      </label>
+      {rows.map((row) => (
+        <article key={row.id} className="space-y-3 rounded-lg border bg-background p-3 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <label className="flex min-h-11 min-w-0 items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="h-5 w-5 shrink-0"
+                checked={selectedIds.has(row.id)}
+                disabled={row.isAnswered}
+                onChange={(event) => onToggleSelected(row.id, event.target.checked)}
+              />
+              <span className="min-w-0 text-muted-foreground">{formatDateTime(row.createdDate)}</span>
+            </label>
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <Rating value={row.rating ?? 0} />
+              <AnswerBadge answered={row.isAnswered} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+            <span className="text-muted-foreground">WB</span>
+            <WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} />
+            <span className="text-muted-foreground">Артикул</span>
+            <span className="break-words font-medium">{row.vendorCode ?? '—'}</span>
+            <span className="text-muted-foreground">Товар</span>
+            <span className="break-words">{row.productName ?? row.brandName ?? '—'}</span>
+          </div>
+
+          <div className="rounded-md bg-muted/30 p-3 text-sm">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Отзыв</p>
+            <ExpandableText
+              value={row.text || 'Без текста'}
+              expanded={expandedCell === `${row.id}:text`}
+              onToggle={() => setExpandedCell((current) => current === `${row.id}:text` ? null : `${row.id}:text`)}
+            />
+            {row.pros && <p className="mt-2 break-words text-xs text-muted-foreground"><b>Плюсы:</b> {row.pros}</p>}
+            {row.cons && <p className="mt-1 break-words text-xs text-muted-foreground"><b>Минусы:</b> {row.cons}</p>}
+          </div>
+
+          {row.answerText && (
+            <div className="rounded-md border p-3 text-sm">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ответ</p>
+              <ExpandableText
+                value={row.answerText}
+                expanded={expandedCell === `${row.id}:answer`}
+                onToggle={() => setExpandedCell((current) => current === `${row.id}:answer` ? null : `${row.id}:answer`)}
+              />
+            </div>
+          )}
+
+          <div className="[&_button]:w-full">
+            <AnswerButton answered={row.isAnswered} editable={row.answerEditable} onClick={() => onAnswer(row)} />
+          </div>
+        </article>
+      ))}
+    </>
+  )
+}
+
+function QuestionsMobileCards({
+  rows,
+  onAnswer,
+}: {
+  rows: PaginatedFeedback['questions']
+  onAnswer: (row: PaginatedFeedback['questions'][number]) => void
+}) {
+  const [expandedCell, setExpandedCell] = useState<string | null>(null)
+
+  if (rows.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">Нет строк под выбранные фильтры</p>
+  }
+
+  return (
+    <>
+      {rows.map((row) => (
+        <article key={row.id} className="space-y-3 rounded-lg border bg-background p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm text-muted-foreground">{formatDateTime(row.createdDate)}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{row.wasViewed ? 'Просмотрен' : 'Не просмотрен'}</span>
+              <AnswerBadge answered={row.isAnswered} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+            <span className="text-muted-foreground">WB</span>
+            <WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} />
+            <span className="text-muted-foreground">Артикул</span>
+            <span className="break-words font-medium">{row.vendorCode ?? '—'}</span>
+            <span className="text-muted-foreground">Товар</span>
+            <span className="break-words">{row.productName ?? row.brandName ?? '—'}</span>
+          </div>
+
+          <div className="rounded-md bg-muted/30 p-3 text-sm">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вопрос</p>
+            <ExpandableText
+              value={row.text}
+              expanded={expandedCell === `${row.id}:text`}
+              onToggle={() => setExpandedCell((current) => current === `${row.id}:text` ? null : `${row.id}:text`)}
+            />
+          </div>
+
+          {row.answerText && (
+            <div className="rounded-md border p-3 text-sm">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ответ</p>
+              <ExpandableText
+                value={row.answerText}
+                expanded={expandedCell === `${row.id}:answer`}
+                onToggle={() => setExpandedCell((current) => current === `${row.id}:answer` ? null : `${row.id}:answer`)}
+              />
+            </div>
+          )}
+
+          <div className="[&_button]:w-full">
+            <AnswerButton answered={row.isAnswered} editable={row.answerEditable} onClick={() => onAnswer(row)} />
+          </div>
+        </article>
+      ))}
+    </>
   )
 }
 

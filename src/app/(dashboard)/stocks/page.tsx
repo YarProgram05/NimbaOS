@@ -89,7 +89,7 @@ export default async function StocksPage({ searchParams }: StocksPageProps) {
   })
 
   return (
-    <div className="dashboard-page h-full min-h-0 overflow-hidden">
+    <div className="dashboard-page h-auto min-h-0 overflow-visible lg:h-full lg:overflow-hidden">
       <div className="shrink-0">
         <p className="metric-label">Склад</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">Остатки WB</h1>

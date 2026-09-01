@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronsUpDown, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ export function VendorCombobox({
 }: VendorComboboxProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = vendorCodes.filter(
     (v) =>
@@ -46,28 +47,38 @@ export function VendorCombobox({
           disabled={disabled}
           className="w-full justify-between font-normal"
         >
-          <span className={value ? 'text-foreground' : 'text-muted-foreground'}>
+          <span className={`min-w-0 truncate ${value ? 'text-foreground' : 'text-muted-foreground'}`}>
             {value || placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="flex w-[--radix-popover-trigger-width] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0"
         align="start"
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        collisionPadding={8}
+        style={{
+          maxHeight:
+            'min(calc(100dvh - 1rem), var(--radix-popover-content-available-height))',
+        }}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            window.requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }))
+          }
+        }}
       >
-        <div className="p-2 border-b">
+        <div className="shrink-0 border-b p-2">
           <Input
+            ref={searchInputRef}
             placeholder="Поиск артикула..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8"
-            autoFocus
+            className="h-11 text-base lg:h-8 lg:text-sm"
           />
         </div>
         <div
-          className="max-h-60 overflow-y-auto overscroll-contain"
+          className="max-h-60 min-h-0 flex-1 overflow-y-auto overscroll-contain"
           onWheel={(e) => e.stopPropagation()}
         >
           {filtered.length === 0 ? (
@@ -77,7 +88,7 @@ export function VendorCombobox({
               <button
                 key={v.vendorCode}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2"
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
                 onClick={() => {
                   onChange(v.vendorCode)
                   setSearch('')

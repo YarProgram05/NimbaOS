@@ -32,6 +32,14 @@
 
 ## Done Recently
 
+- ID: TASK-MOBILE-RESPONSIVE-OVERHAUL
+  Status: Done locally
+  Priority: High
+  Description: Completed an application-wide phone adaptation. The dashboard shell now uses `dvh`, a scrollable mobile drawer and `lg` desktop boundaries; shared dialogs, sheets, tabs, inputs, selects, tables and date ranges fit short touch viewports. Table-heavy workflows use mobile cards with sorting and nearby actions across cards, reports, stocks, reviews/questions, sync, automations, references, sales plans, FBS, settings and admin users. Touch targets, long text, popovers and portrait/landscape behavior were hardened without replacing the existing desktop tables.
+  Next step: Include the changes in the normal owner-confirmed deployment, then perform a short read-only smoke test on one physical iOS or Android phone. No production rollout is part of this local task.
+  Related files: `src/components/layout/`, `src/components/ui/`, `src/components/date-range-picker.tsx`, `src/components/mobile-sort-controls.tsx`, `src/components/run-history-table.tsx`, `src/app/(dashboard)/`.
+  Risks: Mobile and desktop card/table variants are CSS-hidden rather than conditionally mounted; selecting a 100-row history page can therefore do extra client hydration on a weak phone, although the visible mobile UI remains bounded and functional.
+
 - ID: TASK-GOOGLE-SHEETS-APP-CREDENTIAL
   Status: Done locally, Pending rollout
   Priority: High

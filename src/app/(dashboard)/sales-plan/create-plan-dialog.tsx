@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
@@ -28,6 +28,7 @@ interface CreatePlanDialogProps {
 
 export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlanDialogProps) {
   const router = useRouter()
+  const dialogContentRef = useRef<HTMLDivElement>(null)
   const [isPending, startTransition] = useTransition()
 
   const [name, setName] = useState('')
@@ -82,7 +83,16 @@ export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent
+        ref={dialogContentRef}
+        className="sm:max-w-[520px]"
+        onOpenAutoFocus={(event) => {
+          if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            event.preventDefault()
+            window.requestAnimationFrame(() => dialogContentRef.current?.focus({ preventScroll: true }))
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Создать план продаж</DialogTitle>
           <DialogDescription>
@@ -98,7 +108,7 @@ export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlan
               placeholder="Например: Март 2026"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
+              className="text-base lg:text-sm"
             />
           </div>
 
@@ -110,12 +120,17 @@ export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlan
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
+              className="text-base lg:text-sm"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Label className="shrink-0">Период</Label>
-            <DateRangePicker value={dateRange} onChange={setDateRange} className="min-w-[250px]" />
+          <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-5">
+            <Label>Период</Label>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              className="w-full min-w-0 sm:w-auto sm:min-w-[250px]"
+            />
           </div>
 
           <div className="space-y-2">
@@ -129,7 +144,7 @@ export function CreatePlanDialog({ open, onOpenChange, wbAccountId }: CreatePlan
               placeholder="0"
               value={drrPercent}
               onChange={(e) => setDrrPercent(e.target.value)}
-              className="w-32"
+              className="w-32 text-base lg:text-sm"
             />
           </div>
 

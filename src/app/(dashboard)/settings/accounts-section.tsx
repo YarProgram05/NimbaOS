@@ -78,7 +78,7 @@ function TaxRateCell({ account, isReadOnly }: TaxRateCellProps) {
 
   if (editing) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Input
           ref={inputRef}
           value={value}
@@ -87,27 +87,44 @@ function TaxRateCell({ account, isReadOnly }: TaxRateCellProps) {
             if (e.key === 'Enter') save()
             if (e.key === 'Escape') cancel()
           }}
-          className="h-7 w-20 text-sm px-2"
+          className="h-11 w-20 px-2 text-base lg:h-7 lg:text-sm"
           disabled={saving}
         />
         <span className="text-sm">%</span>
-        <button onClick={save} disabled={saving} className="text-green-600 hover:text-green-700">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={save}
+          disabled={saving}
+          className="h-11 w-11 text-green-600 hover:text-green-700 md:h-8 md:w-8"
+          aria-label="Сохранить налоговую ставку"
+        >
           <Check className="h-3.5 w-3.5" />
-        </button>
-        <button onClick={cancel} className="text-muted-foreground hover:text-foreground">
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={cancel}
+          className="h-11 w-11 text-muted-foreground hover:text-foreground md:h-8 md:w-8"
+          aria-label="Отменить изменение налоговой ставки"
+        >
           <X className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
     <button
+      type="button"
       onClick={startEdit}
-      className="flex items-center gap-1 group text-sm hover:text-foreground"
+      className="group flex min-h-11 items-center gap-2 rounded-md px-2 text-sm hover:bg-muted hover:text-foreground md:min-h-0 md:px-0 md:hover:bg-transparent"
+      aria-label={`Изменить налоговую ставку, сейчас ${value}%`}
     >
       <span>{value}%</span>
-      <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+      <Pencil className="h-4 w-4 opacity-60 transition-opacity md:h-3 md:w-3 md:opacity-0 md:group-hover:opacity-60" />
     </button>
   )
 }
@@ -117,9 +134,16 @@ interface AccountRowProps {
   onDeactivated: () => void
   isReadOnly?: boolean
   canEditApiKey?: boolean
+  variant?: 'table' | 'card'
 }
 
-function AccountRow({ account, onDeactivated, isReadOnly, canEditApiKey }: AccountRowProps) {
+function AccountRow({
+  account,
+  onDeactivated,
+  isReadOnly,
+  canEditApiKey,
+  variant = 'table',
+}: AccountRowProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [keyOpen, setKeyOpen] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -177,55 +201,107 @@ function AccountRow({ account, onDeactivated, isReadOnly, canEditApiKey }: Accou
 
   return (
     <>
-      <TableRow>
-        <TableCell className="font-medium">{account.name}</TableCell>
-        <TableCell>
-          {account.sellerName ? (
-            <div className="flex flex-col">
-              <span className="text-sm">{account.sellerName}</span>
-              {account.sellerId && (
-                <span className="text-xs text-muted-foreground">{account.sellerId}</span>
+      {variant === 'card' ? (
+        <article className="rounded-lg border bg-card p-4 shadow-sm">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">{account.name}</h3>
+              {account.sellerName ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  <p className="break-words">{account.sellerName}</p>
+                  {account.sellerId && <p className="break-all">{account.sellerId}</p>}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">Продавец не указан</p>
               )}
             </div>
-          ) : (
-            <span className="text-muted-foreground text-sm">—</span>
+            <Badge variant="secondary" className="shrink-0">Активен</Badge>
+          </div>
+
+          <div className="mt-4 rounded-md border bg-secondary/25 p-3">
+            <p className="text-xs text-muted-foreground">Налоговая ставка</p>
+            <div className="mt-1">
+              <TaxRateCell account={account} isReadOnly={isReadOnly} />
+            </div>
+          </div>
+
+          {(canEditApiKey || !isReadOnly) && (
+            <div className={`mt-4 grid gap-2 ${canEditApiKey && !isReadOnly ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+              {canEditApiKey && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => setKeyOpen(true)}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  API-ключ
+                </Button>
+              )}
+              {!isReadOnly && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 text-destructive hover:text-destructive"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Деактивировать
+                </Button>
+              )}
+            </div>
           )}
-        </TableCell>
-        <TableCell>
-          <Badge variant="secondary">Активен</Badge>
-        </TableCell>
-        <TableCell>
-          <TaxRateCell account={account} isReadOnly={isReadOnly} />
-        </TableCell>
-        <TableCell>
-          {canEditApiKey ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1"
-              onClick={() => setKeyOpen(true)}
-            >
-              <KeyRound className="h-4 w-4" />
-              API
-            </Button>
-          ) : (
-            <span className="text-sm text-muted-foreground">вЂ”</span>
-          )}
-        </TableCell>
-        <TableCell className="text-right">
-          {!isReadOnly && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={() => setConfirmOpen(true)}
-              title="Деактивировать"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </TableCell>
-      </TableRow>
+        </article>
+      ) : (
+        <TableRow>
+          <TableCell className="font-medium">{account.name}</TableCell>
+          <TableCell>
+            {account.sellerName ? (
+              <div className="flex flex-col">
+                <span className="text-sm">{account.sellerName}</span>
+                {account.sellerId && (
+                  <span className="text-xs text-muted-foreground">{account.sellerId}</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
+            )}
+          </TableCell>
+          <TableCell>
+            <Badge variant="secondary">Активен</Badge>
+          </TableCell>
+          <TableCell>
+            <TaxRateCell account={account} isReadOnly={isReadOnly} />
+          </TableCell>
+          <TableCell>
+            {canEditApiKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-11 gap-1 md:h-8"
+                onClick={() => setKeyOpen(true)}
+              >
+                <KeyRound className="h-4 w-4" />
+                API
+              </Button>
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            )}
+          </TableCell>
+          <TableCell className="text-right">
+            {!isReadOnly && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
+                onClick={() => setConfirmOpen(true)}
+                title="Деактивировать"
+                aria-label={`Деактивировать кабинет ${account.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -236,7 +312,7 @@ function AccountRow({ account, onDeactivated, isReadOnly, canEditApiKey }: Accou
             Кабинет «{account.name}» будет скрыт. Все связанные данные (карточки, отчёты)
             сохранятся.
           </p>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 [&_button]:w-full sm:[&_button]:w-auto">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Отмена
             </Button>
@@ -261,21 +337,21 @@ function AccountRow({ account, onDeactivated, isReadOnly, canEditApiKey }: Accou
                   onChange={(e) => setApiKey(e.target.value)}
                   type={showKey ? 'text' : 'password'}
                   placeholder="eyJ..."
-                  className="pr-10"
+                  className="pr-12"
                   disabled={savingKey}
                 />
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
+                  className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
+                  aria-label={showKey ? 'Скрыть API-ключ' : 'Показать API-ключ'}
                 >
                   {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
               {apiError && <p className="text-sm text-destructive">{apiError}</p>}
             </div>
-            <DialogFooter className="gap-2">
+            <DialogFooter className="gap-2 [&_button]:w-full sm:[&_button]:w-auto">
               <Button variant="outline" onClick={() => handleKeyOpenChange(false)} disabled={savingKey}>
                 Отмена
               </Button>
@@ -306,7 +382,7 @@ export function AccountsSection({ accounts, isReadOnly, canEditApiKey }: Account
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div>
             <CardTitle>Кабинеты WB</CardTitle>
             <CardDescription className="mt-1">
@@ -325,29 +401,45 @@ export function AccountsSection({ accounts, isReadOnly, canEditApiKey }: Account
             </p>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Название</TableHead>
-                <TableHead>Продавец</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Налоговая ставка</TableHead>
-                <TableHead>API</TableHead>
-                <TableHead className="text-right">Действия</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            <div className="grid gap-3 p-4 lg:hidden">
               {accounts.map((account) => (
                 <AccountRow
-                  key={account.id}
+                  key={`mobile-${account.id}`}
                   account={account}
                   onDeactivated={refresh}
                   isReadOnly={isReadOnly}
                   canEditApiKey={canEditApiKey}
+                  variant="card"
                 />
               ))}
-            </TableBody>
-          </Table>
+            </div>
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Продавец</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Налоговая ставка</TableHead>
+                    <TableHead>API</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accounts.map((account) => (
+                    <AccountRow
+                      key={account.id}
+                      account={account}
+                      onDeactivated={refresh}
+                      isReadOnly={isReadOnly}
+                      canEditApiKey={canEditApiKey}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

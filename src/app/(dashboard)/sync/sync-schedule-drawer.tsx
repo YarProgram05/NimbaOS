@@ -111,7 +111,7 @@ export function SyncScheduleDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-2xl">
-        <SheetHeader className="border-b px-6 py-5 pr-12">
+        <SheetHeader className="border-b px-4 py-5 pr-12 sm:pl-6 sm:pr-14">
           <div className="flex flex-wrap items-center gap-2">
             <SheetTitle>{definition.title}</SheetTitle>
             <Badge variant={draft.enabled ? 'default' : 'secondary'}>
@@ -121,7 +121,7 @@ export function SyncScheduleDrawer({
           <SheetDescription>{definition.description}</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
             <div>
               <label htmlFor="sync-schedule-enabled" className="text-sm font-medium">Автоматический запуск</label>
@@ -129,14 +129,20 @@ export function SyncScheduleDrawer({
                 Сохранение сразу заменит расписание этой задачи в очереди.
               </p>
             </div>
-            <input
-              id="sync-schedule-enabled"
-              type="checkbox"
-              checked={draft.enabled}
-              disabled={disabled}
-              onChange={(event) => onChange({ ...draft, enabled: event.target.checked })}
-              className="mt-0.5 h-5 w-5"
-            />
+            <label
+              htmlFor="sync-schedule-enabled"
+              className="flex h-11 w-11 shrink-0 cursor-pointer items-start justify-end"
+            >
+              <input
+                id="sync-schedule-enabled"
+                type="checkbox"
+                checked={draft.enabled}
+                disabled={disabled}
+                onChange={(event) => onChange({ ...draft, enabled: event.target.checked })}
+                className="mt-0.5 h-5 w-5"
+              />
+              <span className="sr-only">Переключить автоматический запуск</span>
+            </label>
           </div>
 
           <FlexibleScheduleEditor
@@ -201,12 +207,18 @@ export function SyncScheduleDrawer({
             </div>
           )}
 
-          <Button type="button" variant="ghost" onClick={resetRecommended} disabled={disabled}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
+            onClick={resetRecommended}
+            disabled={disabled}
+          >
             <RotateCcw className="mr-2 h-4 w-4" /> Вернуть рекомендуемые настройки
           </Button>
         </div>
 
-        <SheetFooter className="gap-2 border-t bg-background px-6 py-4">
+        <SheetFooter className="gap-2 border-t bg-background px-4 py-4 sm:px-6 [&_button]:w-full sm:[&_button]:w-auto">
           <SheetClose asChild>
             <Button type="button" variant="outline" disabled={saving}>Отмена</Button>
           </SheetClose>

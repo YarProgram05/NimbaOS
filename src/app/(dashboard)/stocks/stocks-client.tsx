@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { WbArticleLink } from '@/components/wb-article-link'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import { syncStocksAction } from '@/lib/actions/stocks'
 import { TOTAL_STOCK_WAREHOUSE_VALUE, type PaginatedStocks, type StockRisk, type StockSummaryItem } from '@/types/stocks'
 
@@ -46,6 +47,16 @@ const RISK_LABELS: Record<StockRisk | 'all', string> = {
   ok: 'В норме',
   no_sales: 'Нет продаж',
 }
+const STOCK_SORT_OPTIONS = [
+  { value: 'vendorCode', label: 'Артикул' },
+  { value: 'nmId', label: 'WB' },
+  { value: 'brand', label: 'Бренд' },
+  { value: 'category', label: 'Категория' },
+  { value: 'quantity', label: 'Остаток' },
+  { value: 'stockValue', label: 'Стоимость' },
+  { value: 'turnoverDays', label: 'Оборачиваемость' },
+  { value: 'risk', label: 'Риск' },
+] as const
 
 export function StocksClient({
   data,
@@ -122,8 +133,8 @@ export function StocksClient({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <section className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-visible lg:overflow-hidden">
+      <section className="grid shrink-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-5">
         <StockMetric label="Всего на складе" value={formatNumber(data.totalUnits)} />
         <StockMetric label="Стоимость" value={formatRub(data.stockValue)} />
         <StockMetric label="Нет остатка" value={formatNumber(data.outOfStockCount)} tone="bad" />
@@ -222,7 +233,51 @@ export function StocksClient({
           </Button>
         </section>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
+        <>
+          <MobileSortControls
+            value={currentSortBy}
+            direction={currentSortDir === 'desc' ? 'desc' : 'asc'}
+            options={STOCK_SORT_OPTIONS}
+            onFieldChange={toggleSort}
+            onDirectionToggle={() => toggleSort(currentSortBy)}
+            className="lg:hidden"
+          />
+          <div className="grid gap-2 lg:hidden">
+            {data.rows.map((row) => {
+              const key = `${row.nmId}-${row.warehouseName}`
+              const children = row.sizeRows ?? []
+              const isExpanded = expandedRows.has(key)
+
+              return (
+                <div key={key} className="space-y-2">
+                  <MobileStockCard
+                    row={row}
+                    canExpand={children.length > 0}
+                    isExpanded={isExpanded}
+                    onToggle={() => toggleExpanded(key)}
+                  />
+                  {isExpanded && children.length > 0 && (
+                    <div className="ml-3 grid gap-2 border-l pl-2">
+                      {children.map((child) => (
+                        <MobileStockCard
+                          key={`${key}-${child.sizeLabel ?? child.vendorCode}`}
+                          row={child}
+                          isChild
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {data.rows.length === 0 && (
+              <div className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">
+                Нет строк под выбранные фильтры
+              </div>
+            )}
+          </div>
+
+          <div className="hidden min-h-0 flex-1 overflow-auto rounded-md border bg-card lg:block">
           <table className="min-w-[1250px] w-full">
             <thead className="sticky top-0 z-20 border-b bg-muted">
               <tr>
@@ -272,23 +327,26 @@ export function StocksClient({
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {totalPages > 1 && (
-        <div className="flex shrink-0 items-center justify-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
           <Button
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={currentPage <= 1}
             onClick={() => router.push(buildUrl({ page: currentPage - 1 }))}
           >
             Назад
           </Button>
-          <span className="text-sm text-muted-foreground">Страница {currentPage} из {totalPages}</span>
+          <span className="order-first w-full text-center text-sm text-muted-foreground sm:order-none sm:w-auto">Страница {currentPage} из {totalPages}</span>
           <Button
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={currentPage >= totalPages}
             onClick={() => router.push(buildUrl({ page: currentPage + 1 }))}
           >
@@ -309,6 +367,69 @@ function StockMetric({ label, value, tone = 'neutral' }: { label: string; value:
         <Icon className="h-4 w-4 text-primary" />
       </div>
       <p className="mt-2 text-xl font-semibold tracking-tight">{value}</p>
+    </div>
+  )
+}
+
+function MobileStockCard({
+  row,
+  canExpand = false,
+  isExpanded = false,
+  isChild = false,
+  onToggle,
+}: {
+  row: StockSummaryItem
+  canExpand?: boolean
+  isExpanded?: boolean
+  isChild?: boolean
+  onToggle?: () => void
+}) {
+  return (
+    <article className={`rounded-md border p-3 shadow-sm ${isChild ? 'bg-muted/25' : 'bg-card'}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words text-sm font-semibold">{row.vendorCode}</p>
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">
+            {[row.brand, row.category].filter(Boolean).join(' · ') || 'Без категории'}
+          </p>
+        </div>
+        <div className="shrink-0 text-sm font-medium">
+          <WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} />
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+        <span className="min-w-0 break-words text-muted-foreground">{row.warehouseName}</span>
+        <RiskBadge risk={row.risk} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MobileStockMetric label="Остаток" value={formatNumber(row.quantity)} />
+        <MobileStockMetric label="В пути" value={formatNumber(row.inWayToClient + row.inWayFromClient)} />
+        <MobileStockMetric label="Стоимость" value={formatRub(row.stockValue)} />
+        <MobileStockMetric label="Оборачиваемость" value={formatTurnover(row.turnoverDays)} />
+      </div>
+
+      {canExpand && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {isExpanded ? 'Скрыть размеры' : 'Показать размеры'}
+        </button>
+      )}
+    </article>
+  )
+}
+
+function MobileStockMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border bg-secondary/25 px-2.5 py-2">
+      <p className="break-words text-[11px] leading-tight text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold tabular-nums">{value}</p>
     </div>
   )
 }
@@ -336,13 +457,13 @@ function StockRow({
             <button
               type="button"
               onClick={() => onToggle?.(rowKey)}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md hover:bg-muted md:h-5 md:w-5 md:rounded-sm"
               title={isExpanded ? 'Скрыть размеры' : 'Показать размеры'}
             >
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </button>
           ) : (
-            <span className="h-5 w-5 shrink-0" />
+            <span className="h-10 w-10 shrink-0 md:h-5 md:w-5" />
           )}
           <span>{row.vendorCode}</span>
         </span>
@@ -469,7 +590,7 @@ function RiskBadge({ risk }: { risk: StockRisk }) {
           ? 'border-blue-600/40 bg-blue-50 text-blue-700'
           : 'border-border bg-secondary text-secondary-foreground'
 
-  return <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${className}`}>{RISK_LABELS[risk]}</span>
+  return <span className={`whitespace-nowrap rounded-md border px-2 py-1 text-xs font-semibold ${className}`}>{RISK_LABELS[risk]}</span>
 }
 
 function formatNumber(value: number): string {

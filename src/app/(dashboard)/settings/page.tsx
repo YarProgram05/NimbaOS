@@ -40,9 +40,9 @@ export default async function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList>
-          <TabsTrigger value="profile">Профиль</TabsTrigger>
-          <TabsTrigger value="accounts">Кабинеты WB</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-grid sm:w-auto">
+          <TabsTrigger className="min-h-11 sm:min-h-0" value="profile">Профиль</TabsTrigger>
+          <TabsTrigger className="min-h-11 sm:min-h-0" value="accounts">Кабинеты WB</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-4">

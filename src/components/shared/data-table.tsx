@@ -41,7 +41,10 @@ export function DataTable<TData, TValue>({
   })
 
   return (
-    <div className="h-full min-h-0 overflow-hidden rounded-md border bg-card">
+    <div className="h-auto min-h-0 overflow-hidden rounded-md border bg-card md:h-full">
+      <p className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground md:hidden">
+        Проведите по таблице влево или вправо, чтобы увидеть все столбцы.
+      </p>
       <Table className="min-w-[720px]">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (

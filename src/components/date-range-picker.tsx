@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   format,
   startOfWeek,
@@ -60,6 +60,15 @@ const PRESETS: { label: string; getRange: () => DateRange }[] = [
 export function DateRangePicker({ value, onChange, className, disabled = false }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [tempRange, setTempRange] = useState<DateRange | undefined>(value)
+  const [isMobile, setIsMobile] = useState(true)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsMobile(!media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   const label =
     value.from && value.to
@@ -81,67 +90,86 @@ export function DateRangePicker({ value, onChange, className, disabled = false }
   return (
     <Popover open={open} onOpenChange={handleOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className={cn('min-w-60 justify-start gap-2', className)} disabled={disabled}>
+        <Button
+          variant="outline"
+          className={cn('w-full min-w-0 justify-start gap-2 sm:w-auto sm:min-w-60', className)}
+          disabled={disabled}
+        >
           <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span>{label}</span>
+          <span className="min-w-0 truncate">{label}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="z-[200] max-h-[calc(100vh-5rem)] w-[min(calc(100vw-1rem),920px)] overflow-auto p-0 sm:w-auto"
-        align="start"
+        className="z-[200] flex w-[min(calc(100vw-1rem),920px)] flex-col overflow-hidden p-0 md:w-auto"
+        align={isMobile ? 'center' : 'start'}
         side="bottom"
         sideOffset={8}
-        collisionPadding={12}
+        collisionPadding={8}
+        style={{ maxHeight: 'min(calc(100dvh - 1rem), var(--radix-popover-content-available-height))' }}
       >
-        <div className="flex min-w-max">
-          {/* Quick presets sidebar */}
-          <div className="flex flex-col gap-0.5 border-r p-3 min-w-[165px]">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-2">
-              Быстрый выбор
-            </p>
-            {PRESETS.map((preset) => {
-              const range = preset.getRange()
-              const isActive =
-                tempRange?.from?.toDateString() === range.from?.toDateString() &&
-                tempRange?.to?.toDateString() === range.to?.toDateString()
-              return (
-                <button
-                  key={preset.label}
-                  onClick={() => setTempRange(preset.getRange())}
-                  disabled={disabled}
-                  className={cn(
-                    'text-sm text-left px-3 py-2 rounded-md hover:bg-accent transition-colors cursor-pointer',
-                    isActive && 'bg-accent font-medium',
-                  )}
-                >
-                  {preset.label}
-                </button>
-              )
-            })}
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex w-full min-w-0 flex-col md:min-w-max md:flex-row">
+            {/* Quick presets sidebar */}
+            <div className="min-w-0 border-b p-3 md:flex md:min-w-[165px] md:flex-col md:gap-0.5 md:border-b-0 md:border-r">
+              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Быстрый выбор
+              </p>
+              <div className="flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain pb-1 md:contents">
+                {PRESETS.map((preset) => {
+                  const range = preset.getRange()
+                  const isActive =
+                    tempRange?.from?.toDateString() === range.from?.toDateString() &&
+                    tempRange?.to?.toDateString() === range.to?.toDateString()
+                  return (
+                    <button
+                      key={preset.label}
+                      onClick={() => setTempRange(preset.getRange())}
+                      disabled={disabled}
+                      className={cn(
+                        'min-h-11 shrink-0 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent md:min-h-0 md:w-full md:shrink',
+                        isActive && 'bg-accent font-medium',
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
-          {/* Calendar + Apply */}
-          <div className="flex flex-col">
-            <DayPicker
-              mode="range"
-              selected={tempRange}
-              onSelect={setTempRange}
-              locale={ru}
-              numberOfMonths={2}
-              defaultMonth={subMonths(new Date(), 1)}
-              weekStartsOn={1}
-              className="p-3"
-            />
-
-            <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={disabled}>
-                Отмена
-              </Button>
-              <Button size="sm" onClick={handleApply} disabled={disabled || !tempRange?.from}>
-                Применить
-              </Button>
+            <div className="min-w-0 overflow-x-auto">
+              <DayPicker
+                mode="range"
+                selected={tempRange}
+                onSelect={setTempRange}
+                locale={ru}
+                numberOfMonths={isMobile ? 1 : 2}
+                defaultMonth={isMobile ? new Date() : subMonths(new Date(), 1)}
+                weekStartsOn={1}
+                className="mx-auto p-2 sm:p-3"
+              />
             </div>
           </div>
+        </div>
+
+        <div className="grid shrink-0 grid-cols-2 items-center gap-2 border-t bg-popover px-3 py-3 sm:flex sm:justify-end sm:px-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={() => setOpen(false)}
+            disabled={disabled}
+          >
+            Отмена
+          </Button>
+          <Button
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={handleApply}
+            disabled={disabled || !tempRange?.from}
+          >
+            Применить
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

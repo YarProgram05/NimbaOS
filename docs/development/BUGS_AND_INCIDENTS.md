@@ -1,5 +1,38 @@
 # Bugs And Incidents
 
+## BUG-035: Phone layouts clipped navigation, data and primary actions
+
+Status:
+- Fixed locally on 2026-09-01; pending normal deployment.
+
+Symptoms:
+- The mobile navigation drawer was taller than the viewport, lower links were unreachable and the close action was hard to see.
+- The two-month date picker exposed only part of the calendar and hid its apply action on a short phone.
+- Fixed-height report, stock and review workspaces trapped vertical scrolling; report sticky columns could occupy the whole screen.
+- Product price editing, WB account actions, run-history sorting and critical FBS actions lived at the far edge of desktop-only tables.
+- Wide tables, small controls, long identifiers and popover forms were uncomfortable or clipped in portrait and landscape phone layouts.
+
+Root cause:
+- Desktop `h-full`/`overflow-hidden` workspaces and `md` table breakpoints activated too early for landscape phones.
+- Several workflows had no mobile presentation, so essential actions depended on horizontal table scrolling.
+- Shared overlays and touch controls did not consistently account for `dvh`, safe areas, available Radix height or 44 px touch targets.
+
+Resolution:
+- Reworked the shared shell, drawer, header, overlays, tabs, controls, table touch behavior and date picker for phone viewports.
+- Kept natural page scrolling and card views below `lg`; retained full desktop tables at `lg+`.
+- Added mobile cards and sorting to the major data workflows, with price, sticker, marking, supply, answer, account and history actions next to their entity.
+- Added viewport-safe popovers, mobile input typography, expandable long run results and landscape-safe schedule/tab layouts.
+
+Verification:
+- Authenticated Codex in-app-browser QA covered 340 px portrait, 638/744/897 px landscape and breakpoint widths, plus 1531 px desktop regression checks.
+- Verified dashboard navigation, reports, stocks, cards/price editor, reviews, references, advertising/detail, FBS, sync/schedule drawer, automations/detail, settings, admin users, sales-plan dialog and all analytics routes with no document-level horizontal overflow or console errors.
+- `npm run type-check`, `npm run lint`, all 60 tests and `git diff --check` pass. The two lint warnings are the pre-existing `<img>` warnings.
+
+Prevention:
+- New table-heavy screens must provide a phone card/action path and preserve sorting/filtering when the desktop table is hidden.
+- Validate both portrait and landscape phones, short viewport height, overlay actions and the `lg` transition; never hide overflow merely to suppress a scrollbar.
+- Do not run `next build` beside `next dev` in the same checkout; follow `BUG-031` before browser QA.
+
 ## BUG-034: Google Sheet connection check could not authenticate in production app
 
 Status:

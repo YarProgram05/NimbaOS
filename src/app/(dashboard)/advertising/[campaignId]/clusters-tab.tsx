@@ -199,7 +199,7 @@ export function ClustersTab({ campaignId }: ClustersTabProps) {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="border-b bg-muted/40">
                 <tr>
                   <th

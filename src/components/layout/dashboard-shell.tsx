@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Sidebar } from './sidebar'
@@ -13,6 +13,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+
+  useEffect(() => {
+    setIsMobileOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => {
+      if (media.matches) setIsMobileOpen(false)
+    }
+    closeOnDesktop()
+    media.addEventListener('change', closeOnDesktop)
+    return () => media.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   if (status === 'loading') {
     return (
@@ -35,7 +49,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AccountProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
         <Sidebar
           isCollapsed={isCollapsed}
           onCollapse={() => setIsCollapsed((v) => !v)}
@@ -52,7 +66,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <main
             className={
               isFixedHeightPage
-                ? 'min-h-0 flex-1 overflow-hidden overscroll-contain p-2 sm:p-3'
+                ? 'min-h-0 flex-1 overflow-auto overscroll-contain p-2 sm:p-3 lg:overflow-hidden'
                 : 'min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5 lg:p-6'
             }
           >

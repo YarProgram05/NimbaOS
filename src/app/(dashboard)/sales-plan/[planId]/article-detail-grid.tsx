@@ -25,7 +25,62 @@ export function ArticleDetailGrid({ article }: ArticleDetailGridProps) {
   const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="overflow-x-auto border rounded-md bg-muted/20">
+    <>
+      <div className="space-y-2 md:hidden">
+        {METRIC_ROWS.map((row) => {
+          const planMonth = row.summaryPlanMonth?.(summary) ?? null
+          const factMonth = row.summaryFactMonth?.(summary) ?? null
+          const planDay = row.summaryPlanDay?.(summary) ?? null
+          const factDay = row.summaryFactDay?.(summary) ?? null
+          const hasPlanComparison = planMonth !== null && factMonth !== null
+
+          return (
+            <details key={row.key} className="group rounded-md border bg-background">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium marker:content-none">
+                <span>{row.label}</span>
+                <span className={`shrink-0 tabular-nums ${
+                  hasPlanComparison
+                    ? Number(factMonth) >= Number(planMonth)
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                    : 'text-muted-foreground'
+                }`}>
+                  {formatMetricValue(factMonth, row.formatter)}
+                </span>
+              </summary>
+              <div className="space-y-3 border-t p-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <MobileSummaryValue label="План / месяц" value={formatMetricValue(planMonth, row.formatter)} />
+                  <MobileSummaryValue label="Факт / месяц" value={formatMetricValue(factMonth, row.formatter)} />
+                  <MobileSummaryValue label="План / день" value={formatMetricValue(planDay, row.formatter)} />
+                  <MobileSummaryValue label="Факт / день" value={formatMetricValue(factDay, row.formatter)} />
+                </div>
+                {dates.length > 0 && (
+                  <div className="max-h-56 overflow-y-auto rounded-md border">
+                    {dates.map((date) => {
+                      const metrics = metricsMap.get(date)
+                      const value = metrics ? row.accessor(metrics) : null
+                      return (
+                        <div
+                          key={date}
+                          className={`flex min-h-10 items-center justify-between gap-3 border-b px-3 py-2 text-xs last:border-b-0 ${
+                            date === today ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
+                          }`}
+                        >
+                          <span className="text-muted-foreground">{format(new Date(date), 'dd.MM', { locale: ru })}</span>
+                          <span className="font-medium tabular-nums">{formatMetricValue(value, row.formatter)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </details>
+          )
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-md border bg-muted/20 md:block">
       <table className="text-sm border-collapse w-max min-w-full">
         <thead>
           <tr className="border-b bg-muted/40">
@@ -132,6 +187,16 @@ export function ArticleDetailGrid({ article }: ArticleDetailGridProps) {
           })}
         </tbody>
       </table>
+      </div>
+    </>
+  )
+}
+
+function MobileSummaryValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-muted/30 p-2">
+      <p className="text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-semibold tabular-nums text-foreground">{value}</p>
     </div>
   )
 }

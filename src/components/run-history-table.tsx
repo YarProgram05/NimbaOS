@@ -14,7 +14,7 @@ import { TableCell, TableHead } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { RunHistoryPageSize, RunHistorySortDirection } from '@/types/run-history'
 
-export const RUN_HISTORY_TABLE_CLASS_NAME = 'w-full table-fixed [&_th]:overflow-hidden [&_th]:px-2 [&_th]:text-[10px] [&_th]:tracking-normal [&_th]:[overflow-wrap:anywhere]'
+export const RUN_HISTORY_TABLE_CLASS_NAME = 'min-w-[1120px] w-full table-fixed [&_th]:overflow-hidden [&_th]:px-2 [&_th]:text-[10px] [&_th]:tracking-normal [&_th]:[overflow-wrap:anywhere]'
 
 export function RunHistoryColumnLayout({ widths }: { widths: readonly number[] }) {
   return (
@@ -97,6 +97,63 @@ export function RunHistorySortableHead<TSortKey extends string>({
   )
 }
 
+export function RunHistoryMobileCard({
+  title,
+  status,
+  children,
+  actions,
+}: {
+  title: ReactNode
+  status?: ReactNode
+  children: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <article className="rounded-md border bg-card p-3 shadow-sm">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <h3 className="min-w-0 flex-1 break-words text-sm font-semibold leading-5">{title}</h3>
+        {status && <div className="shrink-0">{status}</div>}
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">{children}</dl>
+      {actions && <div className="mt-3 border-t pt-3">{actions}</div>}
+    </article>
+  )
+}
+
+export function RunHistoryMobileField({
+  label,
+  children,
+  fullWidth = false,
+  expandable = false,
+  valueClassName,
+}: {
+  label: string
+  children: ReactNode
+  fullWidth?: boolean
+  expandable?: boolean
+  valueClassName?: string
+}) {
+  return (
+    <div className={cn('min-w-0', fullWidth && 'col-span-2')}>
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</dt>
+      <dd className={cn('mt-0.5 min-w-0 break-words leading-5 text-foreground', valueClassName)}>
+        {expandable ? (
+          <details className="group min-w-0">
+            <summary className="min-w-0 cursor-pointer list-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <span className="line-clamp-2 whitespace-pre-wrap break-words group-open:hidden">{children}</span>
+              <span className="mt-1 block text-xs font-medium text-muted-foreground group-open:hidden">
+                Показать полностью
+              </span>
+              <span className="hidden text-xs font-medium text-muted-foreground group-open:block">Свернуть</span>
+            </summary>
+            <div className="mt-2 whitespace-pre-wrap break-words">{children}</div>
+          </details>
+        ) : children}
+      </dd>
+    </div>
+  )
+}
+
 export function RunHistoryPager({
   total,
   page,
@@ -117,14 +174,14 @@ export function RunHistoryPager({
   const to = Math.min(page * pageSize, total)
 
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+    <div className="mt-3 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
       <span>{loading ? 'Загрузка…' : `Показано ${from}–${to} из ${total}`}</span>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:flex-wrap">
         <Select
           value={String(pageSize)}
           onValueChange={(value) => onPageSizeChange(Number(value) as RunHistoryPageSize)}
         >
-          <SelectTrigger className="h-8 w-28">
+          <SelectTrigger className="col-span-3 h-11 w-full sm:h-8 sm:w-28">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -141,7 +198,7 @@ export function RunHistoryPager({
         >
           Назад
         </Button>
-        <span>{page} / {pageCount}</span>
+        <span className="whitespace-nowrap text-center">{page} / {pageCount}</span>
         <Button
           size="sm"
           variant="outline"

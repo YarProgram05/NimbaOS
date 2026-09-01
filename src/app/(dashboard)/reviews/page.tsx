@@ -110,7 +110,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   ])
 
   return (
-    <div className="dashboard-page h-full min-h-0 overflow-hidden">
+    <div className="dashboard-page h-auto min-h-full overflow-visible xl:h-full xl:min-h-0 xl:overflow-hidden">
       <div className="shrink-0">
         <p className="metric-label">Клиентская обратная связь</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">Отзывы и вопросы WB</h1>

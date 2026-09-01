@@ -143,7 +143,7 @@ export function FlexibleScheduleEditor({
       {schedule.cadence === 'monthly' && (
         <div>
           <label className="mb-2 block text-sm font-medium">Дни месяца</label>
-          <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-10">
+          <div className="grid w-full max-w-[32rem] grid-cols-[repeat(auto-fit,minmax(2.75rem,1fr))] gap-2">
             {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
               <Button
                 key={day}
@@ -153,7 +153,7 @@ export function FlexibleScheduleEditor({
                 disabled={disabled}
                 onClick={() => toggleMonthDay(day)}
                 aria-pressed={schedule.monthDays.includes(day)}
-                className="h-8 min-w-8 px-2"
+                className="h-11 min-h-11 w-full min-w-11 px-0"
               >
                 {day}
               </Button>

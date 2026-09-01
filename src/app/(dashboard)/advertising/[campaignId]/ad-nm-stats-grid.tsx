@@ -47,7 +47,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Metric label="Затраты" value={formatMoney(totals.spend)} />
         <Metric label="Корзины" value={formatNumber(totals.cartAdds)} />
         <Metric label="Рекламные заказы" value={formatNumber(totals.adOrders)} />
@@ -58,7 +58,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
         <table className="w-max min-w-full border-collapse text-sm">
           <thead>
             <tr className="border-b bg-muted/40">
-              <th className="sticky left-0 z-20 min-w-[240px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur">
+              <th className="min-w-[160px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur sm:sticky sm:left-0 sm:z-20 sm:min-w-[240px]">
                 Артикул
               </th>
               <Head>Затраты</Head>
@@ -82,7 +82,7 @@ export function AdNmStatsGrid({ rows }: AdNmStatsGridProps) {
           <tbody>
             {rows.map((row) => (
               <tr key={`${row.nmId}-${row.vendorCode ?? 'base'}`} className="border-b last:border-b-0 hover:bg-muted/20">
-                <td className="sticky left-0 z-10 border-r bg-background/95 px-3 py-2 backdrop-blur">
+                <td className="border-r bg-background/95 px-3 py-2 backdrop-blur sm:sticky sm:left-0 sm:z-10">
                   <div className="flex min-w-0 items-center gap-2">
                     {row.photoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element

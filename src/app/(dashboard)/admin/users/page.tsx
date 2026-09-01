@@ -47,7 +47,7 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Пользователи</h1>
           <p className="mt-1 text-muted-foreground">
@@ -57,7 +57,38 @@ export default async function AdminUsersPage() {
         <InviteDialog />
       </div>
 
-      <div className="rounded-md border">
+      <div className="space-y-3 md:hidden">
+        {users.map((user) => {
+          const roleConf = ROLE_CONFIG[user.role] ?? { label: user.role, variant: 'outline' as const }
+          return (
+            <article key={user.id} className="rounded-lg border bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-medium">{user.name}</h2>
+                  <p className="break-all text-sm text-muted-foreground">{user.email}</p>
+                </div>
+                <UserRowActions
+                  userId={user.id}
+                  currentRole={user.role as UserRole}
+                  isActive={user.isActive}
+                  isSelf={user.id === session!.user.id}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant={roleConf.variant}>{roleConf.label}</Badge>
+                <Badge variant={user.isActive ? 'default' : 'secondary'}>
+                  {user.isActive ? 'Активен' : 'Неактивен'}
+                </Badge>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Создан: {dateFormatter.format(user.createdAt)}
+              </p>
+            </article>
+          )
+        })}
+      </div>
+
+      <div className="hidden rounded-md border md:block">
         <Table>
           <TableHeader>
             <TableRow>

@@ -144,7 +144,23 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
           </TooltipContent>
 
           {/* ── Click popover: edit panel ───────────────────────────────────── */}
-          <PopoverContent side="left" className="w-64 p-4 space-y-3">
+          <PopoverContent
+            side="bottom"
+            align="end"
+            sideOffset={8}
+            collisionPadding={8}
+            sticky="always"
+            className="flex w-64 max-w-[calc(100vw-1rem)] flex-col gap-3 overflow-y-auto overscroll-contain p-4"
+            style={{
+              maxHeight:
+                'min(calc(100dvh - 1rem), var(--radix-popover-content-available-height))',
+            }}
+            onOpenAutoFocus={(event) => {
+              if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                event.preventDefault()
+              }
+            }}
+          >
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-medium text-muted-foreground">Базовая цена</Label>
@@ -163,7 +179,7 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
                 min={1}
                 value={basePriceInput}
                 onChange={(e) => setBasePriceInput(e.target.value)}
-                className="h-8 text-sm"
+                className="h-11 text-base lg:h-8 lg:text-sm"
               />
             </div>
 
@@ -175,7 +191,7 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
                 max={95}
                 value={discountInput}
                 onChange={(e) => setDiscountInput(e.target.value)}
-                className="h-8 text-sm"
+                className="h-11 text-base lg:h-8 lg:text-sm"
               />
             </div>
 
@@ -201,7 +217,7 @@ export function PriceCell({ row, wbAccountId, lastSyncAt }: PriceCellProps) {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="w-full h-8 text-sm"
+              className="h-11 w-full text-base lg:h-8 lg:text-sm"
             >
               {saving ? 'Сохранение...' : 'Изменить'}
             </Button>

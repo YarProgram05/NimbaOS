@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DateRangePicker } from '@/components/date-range-picker'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -114,6 +115,35 @@ const WB_KIZ_VALIDATION_LABELS: Record<string, string> = {
   ORDER_CONFLICT: 'КИЗ в другом заказе',
   STATE_CONFLICT: 'Конфликт состояния',
 }
+
+const ORDER_SORT_OPTIONS = [
+  { value: 'externalOrderId', label: 'Заказ WB' },
+  { value: 'createdAtWb', label: 'Создан' },
+  { value: 'vendorCode', label: 'Артикул' },
+  { value: 'warehouseName', label: 'Склад' },
+  { value: 'status', label: 'Статусы' },
+  { value: 'kizCode', label: 'КИЗ' },
+  { value: 'metadata', label: 'Метаданные WB' },
+] as const
+
+const ASSORTMENT_SORT_OPTIONS = [
+  { value: 'warehouseName', label: 'Склад' },
+  { value: 'vendorCode', label: 'Артикул' },
+  { value: 'chrtId', label: 'chrtId' },
+  { value: 'onHand', label: 'Физически на складе' },
+  { value: 'reserved', label: 'Резерв заказов' },
+  { value: 'available', label: 'Доступно локально' },
+  { value: 'wbStock', label: 'Остаток WB' },
+  { value: 'marking', label: 'Маркировка' },
+] as const
+
+const SUPPLY_SORT_OPTIONS = [
+  { value: 'name', label: 'Поставка' },
+  { value: 'warehouseName', label: 'Склад' },
+  { value: 'orderCount', label: 'Заказов' },
+  { value: 'isB2b', label: 'B2B' },
+  { value: 'done', label: 'Статус' },
+] as const
 
 const TASK_LABELS: Record<string, string> = {
   COMMISSIONING: 'Ввод в оборот',
@@ -433,9 +463,9 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
             Остатки NimbaOS, заказы WB, КИЗы и ручная очередь Честного знака.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Select value={data.account.id} onValueChange={switchAccount}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-full sm:w-56">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -446,6 +476,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
           </Select>
           <Button
             variant="outline"
+            className="flex-1 sm:flex-none"
             disabled={!data.permissions.canOperate || pending || Boolean(syncingKind)}
             onClick={() =>
               runSync(SYNC_JOB_KINDS.FBS_OPERATIONAL, 'Заказы FBS')
@@ -456,6 +487,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
           </Button>
           <Button
             variant="outline"
+            className="flex-1 sm:flex-none"
             disabled={!data.permissions.canOperate || pending || Boolean(syncingKind)}
             onClick={() =>
               runSync(SYNC_JOB_KINDS.FBS_STOCKS_CURRENT, 'Остатки FBS')
@@ -482,7 +514,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
       </p>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
-        <TabsList className="flex h-auto flex-wrap justify-start">
+        <TabsList className="flex h-auto flex-wrap justify-start sm:h-auto">
           <TabsTrigger value="overview">Сводка</TabsTrigger>
           <TabsTrigger value="orders">Заказы</TabsTrigger>
           <TabsTrigger value="warehouse">Свой склад</TabsTrigger>
@@ -494,7 +526,11 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
         {!['overview', 'warehouse'].includes(activeTab) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border bg-card p-3">
             <span className="text-xs font-medium text-muted-foreground">Период истории:</span>
-            <DateRangePicker value={historyRange} onChange={setHistoryRange} />
+            <DateRangePicker
+              value={historyRange}
+              onChange={setHistoryRange}
+              className="w-full min-w-0 sm:w-auto"
+            />
             {(historyRange.from || historyRange.to) && (
               <Button variant="ghost" size="sm" onClick={() => setHistoryRange({ from: undefined, to: undefined })}>
                 Вся история
@@ -525,7 +561,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                     <p className="font-medium">{warehouse.name}</p>
                     <p className="text-xs text-muted-foreground">WB ID {warehouse.externalId}</p>
                   </div>
-                  <div className="text-right text-sm tabular-nums">
+                  <div className="w-full text-left text-sm tabular-nums sm:w-auto sm:text-right">
                     <p>Локально доступно: <b>{warehouse.available}</b> · Остаток WB: <b>{warehouse.wbStock}</b></p>
                     <Badge variant={warehouse.writeEnabled ? 'destructive' : 'secondary'}>
                       {warehouse.writeEnabled ? 'Операции в WB разрешены' : 'WB только чтение'}
@@ -646,7 +682,54 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               </SelectContent>
             </Select>
           </FilterBar>
-          <DataTable>
+          <MobileSortControls
+            value={orderSort.key}
+            direction={orderSort.direction}
+            options={ORDER_SORT_OPTIONS}
+            onFieldChange={(key) => setOrderSort(nextSort(orderSort, key))}
+            onDirectionToggle={() => setOrderSort(nextSort(orderSort, orderSort.key))}
+            className="lg:hidden"
+          />
+          <div className="grid gap-3 lg:hidden">
+            {orderHistory.rows.map((order) => (
+              <article key={order.id} className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-all text-sm font-semibold">Заказ {order.externalOrderId}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatDate(order.createdAtWb)}</p>
+                  </div>
+                  <Badge variant={order.metadataReady ? 'secondary' : 'destructive'}>
+                    {order.metadataLabel}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <MobileField label="Артикул" value={order.vendorCode ?? order.barcode} />
+                  <MobileField label="Склад" value={order.warehouseName ?? '—'} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <Badge variant="outline">Продавец: {getFbsSupplierStatusLabel(order.supplierStatus)}</Badge>
+                  <Badge variant="secondary">WB: {getFbsWbStatusLabel(order.wbStatus)}</Badge>
+                  {order.kizCode ? (
+                    <Badge variant="outline" className="max-w-full break-all font-mono">КИЗ: {order.kizCode}</Badge>
+                  ) : order.requiresKiz ? (
+                    <Badge variant="destructive">Нужен КИЗ</Badge>
+                  ) : null}
+                </div>
+                <Button
+                  className="mt-3 w-full"
+                  variant="outline"
+                  disabled={!data.permissions.canOperate || pending}
+                  onClick={() => downloadSticker(order.id)}
+                >
+                  <Barcode className="mr-2 h-4 w-4" /> Скачать стикер PNG
+                </Button>
+              </article>
+            ))}
+            {!orderHistory.rows.length && (
+              <MobileEmpty text={data.rowCounts.orders ? 'Заказы по фильтру не найдены.' : 'Заказы FBS ещё не синхронизированы.'} />
+            )}
+          </div>
+          <DataTable className="hidden lg:block">
             <TableHeader>
               <TableRow>
                 <SortableHead label="Заказ WB" sortKey="externalOrderId" sort={orderSort} onSort={setOrderSort} />
@@ -787,7 +870,60 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               </SelectContent>
             </Select>
           </FilterBar>
-          <DataTable>
+          <MobileSortControls
+            value={assortmentSort.key}
+            direction={assortmentSort.direction}
+            options={ASSORTMENT_SORT_OPTIONS}
+            onFieldChange={(key) => setAssortmentSort(nextSort(assortmentSort, key))}
+            onDirectionToggle={() => setAssortmentSort(nextSort(assortmentSort, assortmentSort.key))}
+            className="lg:hidden"
+          />
+          <div className="grid gap-3 lg:hidden">
+            {assortmentView.rows.map((item) => (
+              <article key={item.id} className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold">{item.vendorCode ?? item.barcode}</p>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{item.warehouseName}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">chrtId {item.chrtId}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <MobileField label="Физически" value={formatNumber(item.onHand)} />
+                  <MobileField label="Резерв" value={formatNumber(item.reserved)} />
+                  <MobileField label="Доступно" value={formatNumber(item.available)} emphasized />
+                  <MobileField
+                    label="Остаток WB"
+                    value={formatNumber(item.wbStock)}
+                    warning={item.available !== item.wbStock}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-auto min-h-11 w-full whitespace-normal"
+                  disabled={!data.permissions.canOperate || pending}
+                  onClick={() =>
+                    run(
+                      () => configureFbsAssortmentAction({
+                        wbAccountId: data.account.id,
+                        assortmentItemId: item.id,
+                        requiresKiz: !item.requiresKiz,
+                        markingGtin: item.markingGtin,
+                      }),
+                      item.requiresKiz ? 'Признак маркировки снят' : 'Признак маркировки установлен',
+                    )
+                  }
+                >
+                  {item.requiresKiz ? `Маркировка: КИЗ${item.markingGtin ? ` · ${item.markingGtin}` : ''}` : 'Маркировка не требуется'}
+                </Button>
+              </article>
+            ))}
+            {!filteredAssortment.length && (
+              <MobileEmpty text={data.assortment.length ? 'Товары по фильтру не найдены.' : 'FBS-артикулы появятся после загрузки заказов.'} />
+            )}
+          </div>
+          <DataTable className="hidden lg:block">
             <TableHeader>
               <TableRow>
                 <SortableHead label="Склад" sortKey="warehouseName" sort={assortmentSort} onSort={setAssortmentSort} />
@@ -813,7 +949,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                     <button
                       type="button"
                       disabled={!data.permissions.canOperate || pending}
-                      className="text-left"
+                      className="min-h-11 rounded-md text-left md:min-h-0"
                       onClick={() =>
                         run(
                           () => configureFbsAssortmentAction({
@@ -853,10 +989,11 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                     <p className="font-medium">{warehouse.name}</p>
                     <p className="text-xs text-muted-foreground">NimbaOS {warehouse.available} · WB {warehouse.wbStock}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                     {data.permissions.canEnableWbWrites && (
                       <Button
                         variant="outline"
+                        className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                         disabled={pending}
                         onClick={() => {
                           if (!window.confirm(`${warehouse.writeEnabled ? 'Запретить' : 'Разрешить'} операции в WB для этого склада? Само переключение остатки не отправляет.`)) return
@@ -874,6 +1011,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                       </Button>
                     )}
                     <Button
+                      className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                       disabled={!warehouse.writeEnabled || !data.permissions.canOperate || pending}
                       onClick={() => {
                         if (!window.confirm(`Передать в WB локальный доступный остаток: ${warehouse.available} ед.? Это заменит текущее количество WB для ассортимента склада.`)) return
@@ -953,9 +1091,10 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                 </Button>
                 <div className="border-t pt-3">
                   <Label>Физический возврат</Label>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <Input value={returnKizCode} onChange={(event) => setReturnKizCode(event.target.value)} placeholder="Отсканируйте возвратный КИЗ" />
                     <Button
+                      className="w-full sm:w-auto"
                       disabled={!returnKizCode || !data.permissions.canOperate || pending}
                       onClick={() =>
                         run(
@@ -967,7 +1106,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                       Принять
                     </Button>
                   </div>
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <Select value={quarantineKizId} onValueChange={setQuarantineKizId}>
                       <SelectTrigger><SelectValue placeholder="КИЗ после осмотра" /></SelectTrigger>
                       <SelectContent>
@@ -978,6 +1117,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                     </Select>
                     <Button
                       variant="outline"
+                      className="w-full sm:w-auto"
                       disabled={!quarantineKizId || !data.permissions.canOperate || pending}
                       onClick={() =>
                         run(
@@ -1131,8 +1271,9 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <Button
+                  className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                   disabled={!data.permissions.canOperate || pending}
                   onClick={() => exportCompliance('WITHDRAWAL', 'Выгружено КИЗов на вывод')}
                 >
@@ -1140,6 +1281,7 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
                 </Button>
                 <Button
                   variant="outline"
+                  className="h-auto min-h-11 w-full whitespace-normal sm:w-auto"
                   disabled={!data.permissions.canOperate || pending}
                   onClick={() =>
                     exportCompliance(
@@ -1324,7 +1466,51 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               </SelectContent>
             </Select>
           </FilterBar>
-          <DataTable>
+          <MobileSortControls
+            value={supplySort.key}
+            direction={supplySort.direction}
+            options={SUPPLY_SORT_OPTIONS}
+            onFieldChange={(key) => setSupplySort(nextSort(supplySort, key))}
+            onDirectionToggle={() => setSupplySort(nextSort(supplySort, supplySort.key))}
+            className="lg:hidden"
+          />
+          <div className="grid gap-3 lg:hidden">
+            {supplyHistory.rows.map((supply) => (
+              <article key={supply.id} className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold">{supply.name ?? supply.externalId}</p>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{supply.warehouseName ?? 'Склад не указан'}</p>
+                  </div>
+                  <Badge variant={supply.done ? 'secondary' : 'outline'}>{supply.done ? 'Закрыта' : 'Открыта'}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <MobileField label="Заказов" value={formatNumber(supply.orderCount)} />
+                  <MobileField label="Тип" value={supply.isB2b ? 'B2B' : 'Обычная'} />
+                </div>
+                {!supply.done && (
+                  <Button
+                    className="mt-3 w-full"
+                    variant="destructive"
+                    disabled={!data.permissions.canOperate || pending}
+                    onClick={() => {
+                      if (!window.confirm('Закрыть поставку в WB? Действие нельзя отменить.')) return
+                      run(
+                        () => closeFbsSupplyInWbAction({ wbAccountId: data.account.id, supplyId: supply.id }),
+                        'Поставка закрыта',
+                      )
+                    }}
+                  >
+                    Закрыть поставку
+                  </Button>
+                )}
+              </article>
+            ))}
+            {!supplyHistory.rows.length && (
+              <MobileEmpty text={data.rowCounts.supplies ? 'Поставки по фильтру не найдены.' : 'Поставки ещё не синхронизированы.'} />
+            )}
+          </div>
+          <DataTable className="hidden lg:block">
             <TableHeader>
               <TableRow>
                 <SortableHead label="Поставка" sortKey="name" sort={supplySort} onSort={setSupplySort} />
@@ -1385,12 +1571,13 @@ export function FbsClient({ data, accounts, dateFrom, dateTo }: FbsClientProps) 
               <div className="mb-4 flex flex-wrap gap-2">
                 <DateRangePicker
                   value={analyticsRange}
+                  className="w-full min-w-0 sm:w-auto"
                   onChange={(range) => {
                     if (range.from) setAnalyticsFrom(formatDateValue(range.from))
                     if (range.to) setAnalyticsTo(formatDateValue(range.to))
                   }}
                 />
-                <Button variant="outline" onClick={applyPeriod}>Применить</Button>
+                <Button className="w-full sm:w-auto" variant="outline" onClick={applyPeriod}>Применить</Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <Metric label="Заказы FBS" value={formatNumber(data.metrics.fbsOrders)} />
@@ -1619,7 +1806,7 @@ function SortableHead({
     <TableHead aria-sort={sort.key === sortKey ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
       <button
         type="button"
-        className="inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-foreground"
+        className="inline-flex min-h-11 items-center gap-1 whitespace-nowrap font-medium hover:text-foreground md:min-h-0"
         onClick={() => onSort(nextSort(sort, sortKey))}
       >
         {label}
@@ -1737,8 +1924,37 @@ function Exception({ label, value }: { label: string; value: number }) {
   )
 }
 
-function DataTable({ children }: { children: React.ReactNode }) {
-  return <div className="overflow-x-auto rounded-md border bg-card"><Table className="min-w-[900px]">{children}</Table></div>
+function DataTable({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={`overflow-x-auto rounded-md border bg-card ${className ?? ''}`}><Table className="min-w-[900px]">{children}</Table></div>
+}
+
+function MobileField({
+  label,
+  value,
+  emphasized = false,
+  warning = false,
+}: {
+  label: string
+  value: React.ReactNode
+  emphasized?: boolean
+  warning?: boolean
+}) {
+  return (
+    <div className="min-w-0 rounded-md border bg-secondary/25 px-2.5 py-2">
+      <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
+      <div className={`mt-1 break-words text-sm tabular-nums ${emphasized ? 'font-semibold' : ''} ${warning ? 'text-destructive' : ''}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function MobileEmpty({ text }: { text: string }) {
+  return (
+    <div className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  )
 }
 
 type SortDirection = 'asc' | 'desc'
@@ -1807,6 +2023,7 @@ function CatalogCandidateSelect({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const selected = items.find((item) => item.productSizeId === value)
   const normalizedSearch = search.trim().toLowerCase()
   const filtered = normalizedSearch
@@ -1848,21 +2065,29 @@ function CatalogCandidateSelect({
       <PopoverContent
         align="start"
         collisionPadding={12}
-        className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] p-0"
-        onOpenAutoFocus={(event) => event.preventDefault()}
+        className="flex w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden p-0"
+        style={{
+          maxHeight:
+            'min(calc(100dvh - 1rem), var(--radix-popover-content-available-height))',
+        }}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            window.requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }))
+          }
+        }}
       >
-        <div className="border-b p-2">
+        <div className="shrink-0 border-b p-2">
           <Input
+            ref={searchInputRef}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Поиск по артикулу, размеру, barcode или chrtId"
-            className="h-9"
-            autoFocus
+            className="h-11 text-base lg:h-9 lg:text-sm"
           />
         </div>
         <div
-          className="overflow-y-auto overscroll-contain p-1"
-          style={{ maxHeight: 'min(20rem, 60vh)' }}
+          className="max-h-80 min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
           onWheel={(event) => event.stopPropagation()}
         >
           {filtered.length ? (
@@ -1870,7 +2095,7 @@ function CatalogCandidateSelect({
               <button
                 key={item.productSizeId}
                 type="button"
-                className="flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                className="flex min-h-11 w-full items-start gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
                 onClick={() => {
                   onChange(item.productSizeId)
                   setOpen(false)

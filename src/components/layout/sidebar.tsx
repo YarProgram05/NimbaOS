@@ -66,20 +66,23 @@ function NavLink({
   isActive,
   isCollapsed,
   accountId,
+  onNavigate,
 }: {
   item: NavItem
   isActive: boolean
   isCollapsed: boolean
   accountId?: string | null
+  onNavigate?: () => void
 }) {
   const Icon = item.icon
   const href = accountId ? `${item.href}?account=${accountId}` : item.href
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       title={isCollapsed ? item.label : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+        'flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors lg:min-h-0',
         'text-sidebar-foreground/78 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
         isActive && 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm',
         isCollapsed && 'justify-center px-2'
@@ -94,9 +97,11 @@ function NavLink({
 function NavContent({
   userRole,
   isCollapsed = false,
+  onNavigate,
 }: {
   userRole: UserRole
   isCollapsed?: boolean
+  onNavigate?: () => void
 }) {
   const pathname = usePathname()
   const { selectedId } = useAccount()
@@ -112,6 +117,7 @@ function NavContent({
           isActive={pathname.startsWith(item.href)}
           isCollapsed={isCollapsed}
           accountId={selectedId}
+          onNavigate={onNavigate}
         />
       ))}
     </nav>
@@ -133,7 +139,7 @@ export function Sidebar({
       {/* Desktop Sidebar */}
       <aside
         className={cn(
-          'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out md:flex',
+          'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out lg:flex',
           isCollapsed ? 'w-16' : 'w-64'
         )}
       >
@@ -205,7 +211,10 @@ export function Sidebar({
 
       {/* Mobile Sheet */}
       <Sheet open={isMobileOpen} onOpenChange={onMobileClose}>
-        <SheetContent side="left" className="w-64 border-sidebar-border bg-sidebar p-0">
+        <SheetContent
+          side="left"
+          className="flex h-dvh w-[min(85vw,18rem)] flex-col border-sidebar-border bg-sidebar p-0 [&>button]:text-sidebar-foreground"
+        >
           <SheetTitle className="sr-only">Навигация</SheetTitle>
           <div className="flex h-14 items-center border-b border-sidebar-border px-4">
             <Link
@@ -219,12 +228,12 @@ export function Sidebar({
               <span className="text-sm font-semibold text-sidebar-foreground">NimbaOS</span>
             </Link>
           </div>
-          <div className="px-3 py-3">
-            <AccountSelector />
+          <div className="shrink-0 px-3 py-3">
+            <AccountSelector onNavigate={onMobileClose} />
           </div>
           <Separator className="bg-sidebar-border" />
-          <div className="py-3">
-            <NavContent userRole={userRole} />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <NavContent userRole={userRole} onNavigate={onMobileClose} />
           </div>
         </SheetContent>
       </Sheet>

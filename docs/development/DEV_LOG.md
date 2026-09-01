@@ -823,3 +823,21 @@ Converted the downloaded portable AnyDesk client into an installed Windows servi
 - CI run `33449872826` passed tests, type-check and lint but failed `next build` while prerendering `/automations`: the GitHub runner has no PostgreSQL service, so the page-level Prisma calls returned `ECONNREFUSED`.
 - Marked both `/automations` and `/automations/[kind]` as `force-dynamic`; database-backed automation pages are now rendered only per request and are not executed during static generation.
 - Fix commit `aa645e7` was pushed to `main`; follow-up GitHub Actions CI run `33450459678` completed successfully in 2m 49s.
+
+## 2026-09-01 — Full mobile responsive overhaul
+
+### Summary
+Completed an app-wide phone adaptation while preserving the existing laptop/desktop interface. The shared dashboard shell, mobile navigation, header, overlays, form controls, tabs, tables and date picker now handle narrow and short touch viewports. Desktop-only table workflows gained phone cards, mobile sorting and nearby actions across products, reports, stocks, reviews/questions, references, sales plans, FBS, histories, settings and user administration.
+
+### Browser verification
+Used only the authenticated Codex in-app browser. Verified 340 px portrait; 638, 744 and 897 px landscape/breakpoint layouts; and a 1531 px desktop regression viewport. Covered the drawer and route-close behavior, date picker and nested dialog calendar, product price popover, reports/stocks cards and desktop tables, review cards, references, advertising campaign detail, FBS order/assortment/supply cards, sync schedule drawer, automation settings, WB accounts, admin invite dialog and every analytics route. Document horizontal overflow stayed zero and the browser console stayed clean.
+
+### Verification
+- `npm run type-check` — passed.
+- `npm run lint` — passed with the two pre-existing `no-img-element` warnings.
+- `npm test` — 60/60 passed.
+- `git diff --check` — passed; only Windows LF-to-CRLF notices.
+- Production build intentionally skipped because the local `next dev` server was active and `BUG-031` forbids sharing `.next` between concurrent dev/build processes.
+
+### Safety and follow-up
+No form was saved, no delete/sync/run button was invoked, and no database, WB API write, worker, schedule or production operation was performed. Deploy through the normal owner-confirmed path, then perform a brief read-only smoke test on a physical phone. CSS-hidden mobile/desktop variants may add extra hydration when a 100-row history page is selected on a weak device; this is non-blocking and can be optimized later with hydration-safe conditional rendering.

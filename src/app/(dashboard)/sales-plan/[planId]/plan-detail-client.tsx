@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useTransition, useRef, useCallback } from 'react'
+import { Fragment, useState, useEffect, useMemo, useTransition, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -325,7 +325,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       <Button
         variant="ghost"
         size="sm"
-        className="gap-1.5 -ml-2"
+        className="min-h-11 gap-1.5 -ml-2 sm:min-h-9"
         onClick={() => router.push(`/sales-plan?account=${accountParam}`)}
       >
         <ArrowLeft className="h-4 w-4" />
@@ -340,7 +340,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
               <Input
                 value={headerName}
                 onChange={(e) => setHeaderName(e.target.value)}
-                className="h-9 w-64 text-lg font-bold"
+                className="h-11 w-full text-lg font-bold sm:h-9 sm:w-64"
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveHeader()}
               />
@@ -353,23 +353,31 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                   max="100"
                   value={headerDrr}
                   onChange={(e) => setHeaderDrr(e.target.value)}
-                  className="h-9 w-20"
+                  className="h-11 w-24 sm:h-9 sm:w-20"
                   onKeyDown={(e) => e.key === 'Enter' && handleSaveHeader()}
                 />
                 <span className="text-sm text-muted-foreground">%</span>
               </div>
-              <Button size="sm" onClick={handleSaveHeader} disabled={isSavingHeader}>
+              <Button size="sm" className="min-h-11 sm:min-h-8" onClick={handleSaveHeader} disabled={isSavingHeader}>
                 {isSavingHeader ? 'Сохранение...' : 'Сохранить'}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => { setEditingHeader(false); setHeaderName(plan.name); setHeaderDrr(plan.drrPercent) }}>
+              <Button size="sm" className="min-h-11 sm:min-h-8" variant="ghost" onClick={() => { setEditingHeader(false); setHeaderName(plan.name); setHeaderDrr(plan.drrPercent) }}>
                 Отмена
               </Button>
             </div>
           ) : (
             <>
               <h1
-                className="text-2xl font-bold tracking-tight cursor-pointer hover:text-foreground/80"
+                className="cursor-pointer text-2xl font-bold tracking-tight hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setEditingHeader(true)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    setEditingHeader(true)
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 title="Нажмите для редактирования"
               >
                 {plan.name}
@@ -388,7 +396,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
       <div className="flex flex-wrap items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2" disabled={isAddingFromStock}>
+            <Button variant="outline" className="min-h-11 gap-2" disabled={isAddingFromStock}>
               <Plus className="h-4 w-4" />
               Добавить артикулы
               <ChevronDown className="h-3.5 w-3.5 opacity-50" />
@@ -409,7 +417,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
         {/* Sync data dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="default" className="gap-2" disabled={isSyncing || plan.items.length === 0}>
+            <Button variant="default" className="min-h-11 gap-2" disabled={isSyncing || plan.items.length === 0}>
               {isSyncing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -436,7 +444,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
             size="sm"
             onClick={handleLoadMetrics}
             disabled={isLoadingMetrics}
-            className="gap-2"
+            className="min-h-11 gap-2 sm:min-h-8"
           >
             {isLoadingMetrics ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -452,7 +460,7 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
             size="sm"
             onClick={handleExportXlsx}
             disabled={isExporting}
-            className="gap-2"
+            className="min-h-11 gap-2 sm:min-h-8"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -498,7 +506,186 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
           </Button>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <>
+          <div className="space-y-3 md:hidden">
+            <div className="flex items-end gap-2 rounded-md border bg-muted/20 p-3">
+              <label className="min-w-0 flex-1 space-y-1 text-xs font-medium text-muted-foreground">
+                Сортировать
+                <select
+                  value={sortCol ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value as SortCol | ''
+                    setSortCol(value || null)
+                    setSortDir('asc')
+                  }}
+                  className="block h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="">По умолчанию</option>
+                  <option value="vendorCode">Артикул поставщика</option>
+                  <option value="nmId">Артикул WB</option>
+                  <option value="category">Категория</option>
+                  <option value="plannedQty">План, шт.</option>
+                  <option value="price">Цена</option>
+                  <option value="salesCount">Продажи, шт.</option>
+                  <option value="buyoutPercent">Выкуп, %</option>
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                disabled={!sortCol}
+                onClick={() => setSortDir((current) => current === 'asc' ? 'desc' : 'asc')}
+                aria-label={sortDir === 'asc' ? 'Сортировать по убыванию' : 'Сортировать по возрастанию'}
+              >
+                {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+              </Button>
+            </div>
+
+            {sortedItems.map((item) => {
+              const vals = editValues[item.id] ?? { plannedQty: String(item.plannedQty), price: item.price, buyoutPercent: item.buyoutPercent }
+              const isDirty = dirty.has(item.id)
+              const isSaving = saving.has(item.id)
+              const isExpanded = expandedItems.has(item.id)
+              const articleData = metricsData ? getArticleData(item.nmId) : []
+              const factMonth = articleData.reduce((sum, article) => sum + article.summary.factMonth, 0)
+              const completionPct = item.plannedQty > 0 ? Math.round((factMonth / item.plannedQty) * 100) : 0
+
+              return (
+                <article key={item.id} className="space-y-3 rounded-lg border bg-card p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{item.vendorCode}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.category ?? 'Категория не указана'}</p>
+                    </div>
+                    <WbArticleLink nmId={item.nmId} photoUrl={item.photoUrl} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      План, шт.
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={vals.plannedQty}
+                        onChange={(event) => handleFieldChange(item.id, 'plannedQty', event.target.value, item)}
+                        onKeyDown={(event) => event.key === 'Enter' && isDirty && void handleSaveItem(item)}
+                        className="h-11 w-full text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Цена, ₽
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step={0.01}
+                        value={vals.price}
+                        onChange={(event) => handleFieldChange(item.id, 'price', event.target.value, item)}
+                        onKeyDown={(event) => event.key === 'Enter' && isDirty && void handleSaveItem(item)}
+                        className="h-11 w-full text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Выкуп, %
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={vals.buyoutPercent}
+                        onChange={(event) => handleFieldChange(item.id, 'buyoutPercent', event.target.value, item)}
+                        onKeyDown={(event) => event.key === 'Enter' && isDirty && void handleSaveItem(item)}
+                        className="h-11 w-full text-foreground"
+                      />
+                    </label>
+                    <div className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Продажи, шт.
+                      <div className="flex h-11 items-center rounded-md border bg-muted/20 px-3 text-sm tabular-nums text-foreground">
+                        {item.salesCount ?? '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {metricsData && (
+                    <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/30 p-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Факт</p>
+                        <p className="font-semibold tabular-nums">{factMonth} шт.</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Выполнение</p>
+                        <p className={`font-semibold tabular-nums ${
+                          completionPct >= 100
+                            ? 'text-green-600 dark:text-green-400'
+                            : completionPct >= 50
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {item.plannedQty > 0 ? `${completionPct}%` : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      className="min-h-11 flex-1 gap-2"
+                      disabled={!isDirty || isSaving}
+                      onClick={() => void handleSaveItem(item)}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                      {isDirty ? 'Сохранить' : 'Сохранено'}
+                    </Button>
+                    {metricsData && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 flex-1 gap-2"
+                        disabled={articleData.length === 0}
+                        onClick={() => toggleExpand(item.id)}
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        Детали
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => void handleRemoveItem(item.id)}
+                      aria-label={`Удалить артикул ${item.vendorCode}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {isExpanded && articleData.length > 0 && (
+                    <div className="space-y-3 border-t pt-3">
+                      {articleData.map((article) => (
+                        <div key={`${article.nmId}-${article.vendorCode}`} className="space-y-2">
+                          <p className="text-sm font-semibold">{article.vendorCode}</p>
+                          <ArticleDetailGrid article={article} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-md border md:block">
           <table className="min-w-[980px] w-full">
             <thead className="bg-muted/50 border-b">
               <tr>
@@ -549,9 +736,8 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                 const completionPct = planMonth > 0 ? Math.round((factMonth / planMonth) * 100) : 0
 
                 return (
-                  <>
+                  <Fragment key={item.id}>
                     <tr
-                      key={item.id}
                       className={`border-t hover:bg-muted/30 ${metricsData ? 'cursor-pointer' : ''}`}
                       onClick={metricsData ? () => toggleExpand(item.id) : undefined}
                     >
@@ -670,12 +856,13 @@ export function PlanDetailClient({ plan: initialPlan, accountParam }: PlanDetail
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 )
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       <AddArticleDialog

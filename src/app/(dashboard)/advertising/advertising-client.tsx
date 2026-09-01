@@ -276,6 +276,9 @@ export function AdvertisingClient({
                   key={campaign.id}
                   className="cursor-pointer"
                   onClick={() => handleRowClick(campaign.id)}
+                  onKeyDown={(event) => event.key === 'Enter' && handleRowClick(campaign.id)}
+                  role="link"
+                  tabIndex={0}
                 >
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -309,7 +312,7 @@ export function AdvertisingClient({
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4" />
             <span>
-              Клик по строке открывает детальную страницу кампании.
+              Нажмите строку, чтобы открыть детальную страницу кампании.
             </span>
           </div>
         </div>

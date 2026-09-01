@@ -69,17 +69,17 @@ export function ReplyTemplateTab({ groups, wbAccountId, onMutate }: ReplyTemplat
       <div className="rounded-md border bg-card">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <p className="text-sm font-semibold">Группы</p>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setGroupDialog({ mode: 'create' })}>
+          <Button size="icon" variant="ghost" className="h-11 w-11 md:h-8 md:w-8" onClick={() => setGroupDialog({ mode: 'create' })} aria-label="Добавить группу">
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <div className="max-h-[560px] overflow-auto p-2">
+        <div className="max-h-64 overflow-auto p-2 lg:max-h-[560px]">
           {groups.map((group) => (
             <button
               key={group.id}
               type="button"
               onClick={() => setSelectedGroupId(group.id)}
-              className={`mb-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+              className={`mb-1 flex min-h-11 w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
                 selectedGroup?.id === group.id ? 'bg-muted font-semibold' : ''
               }`}
             >
@@ -96,20 +96,20 @@ export function ReplyTemplateTab({ groups, wbAccountId, onMutate }: ReplyTemplat
             <p className="text-sm font-semibold">{selectedGroup?.name ?? 'Группа не выбрана'}</p>
             <p className="text-xs text-muted-foreground">Шаблоны подставляются в поле ответа на отзывах и вопросах.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {selectedGroup && (
               <>
-                <Button size="sm" variant="outline" onClick={() => setGroupDialog({ mode: 'edit', group: selectedGroup })}>
+                <Button size="sm" variant="outline" className="min-h-11 flex-1 sm:min-h-0 sm:flex-none" onClick={() => setGroupDialog({ mode: 'edit', group: selectedGroup })}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Группа
                 </Button>
                 {!selectedGroup.isDefault && (
-                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteGroup(selectedGroup)}>
+                  <Button size="sm" variant="outline" className="min-h-11 flex-1 text-destructive hover:text-destructive sm:min-h-0 sm:flex-none" onClick={() => setDeleteGroup(selectedGroup)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Группа
                   </Button>
                 )}
-                <Button size="sm" onClick={() => setTemplateDialog({ mode: 'create' })}>
+                <Button size="sm" className="min-h-11 flex-1 sm:min-h-0 sm:flex-none" onClick={() => setTemplateDialog({ mode: 'create' })}>
                   <Plus className="mr-2 h-4 w-4" />
                   Шаблон
                 </Button>
@@ -127,10 +127,10 @@ export function ReplyTemplateTab({ groups, wbAccountId, onMutate }: ReplyTemplat
               </div>
               <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{template.text}</p>
               <div className="flex gap-1">
-                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setTemplateDialog({ mode: 'edit', template })}>
+                <Button size="icon" variant="ghost" className="h-11 w-11 md:h-8 md:w-8" onClick={() => setTemplateDialog({ mode: 'edit', template })} aria-label={`Редактировать шаблон ${template.title}`}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteTemplateTarget(template)}>
+                <Button size="icon" variant="ghost" className="h-11 w-11 text-destructive hover:text-destructive md:h-8 md:w-8" onClick={() => setDeleteTemplateTarget(template)} aria-label={`Удалить шаблон ${template.title}`}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>

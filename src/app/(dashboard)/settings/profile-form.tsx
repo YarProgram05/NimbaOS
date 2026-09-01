@@ -48,7 +48,7 @@ export function ProfileForm({ defaultName, email }: ProfileFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 max-w-sm">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex max-w-sm flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="profile-name">Имя</Label>
         <Input id="profile-name" {...register('name')} />
@@ -60,7 +60,7 @@ export function ProfileForm({ defaultName, email }: ProfileFormProps) {
         <Label htmlFor="profile-email">Email</Label>
         <Input id="profile-email" value={email} readOnly disabled />
       </div>
-      <Button type="submit" disabled={saving} className="w-fit">
+      <Button type="submit" disabled={saving} className="w-full sm:w-fit">
         {saving ? 'Сохранение...' : 'Сохранить'}
       </Button>
     </form>

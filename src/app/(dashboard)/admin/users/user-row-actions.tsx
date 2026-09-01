@@ -65,7 +65,7 @@ export function UserRowActions({ userId, currentRole, isActive, isSelf }: Props)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" disabled={loading}>
+        <Button className="h-11 w-11 md:h-10 md:w-10" variant="ghost" size="icon" disabled={loading}>
           <MoreHorizontal className="h-4 w-4" />
           <span className="sr-only">Действия</span>
         </Button>

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { upsertCostPrice, exportCostPriceTemplate, bulkUpsertCostPrices } from '@/lib/actions/references'
 import { WbArticleLink } from '@/components/wb-article-link'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import type { CostPriceItem } from '@/types/references'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -21,6 +22,14 @@ interface CostPriceTabProps {
 type SortCol = 'vendorCode' | 'nmId' | 'category' | 'costPrice' | 'updatedAt'
 
 const PAGE_SIZE = 100
+const COST_SORT_OPTIONS = [
+  { value: '__none__', label: 'Без сортировки' },
+  { value: 'vendorCode', label: 'Артикул продавца' },
+  { value: 'nmId', label: 'Артикул ВБ' },
+  { value: 'category', label: 'Категория' },
+  { value: 'costPrice', label: 'Себестоимость' },
+  { value: 'updatedAt', label: 'Дата' },
+] as const
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -206,25 +215,26 @@ export function CostPriceTab({ items, wbAccountId, onMutate }: CostPriceTabProps
           placeholder="Артикул продавца..."
           value={searchVendor}
           onChange={(e) => setSearchVendor(e.target.value)}
-          className="h-9 w-56"
+          className="h-10 w-full sm:h-9 sm:w-56"
         />
         <Input
           placeholder="Артикул ВБ..."
           value={searchNmId}
           onChange={(e) => setSearchNmId(e.target.value)}
-          className="h-9 w-40"
+          className="h-10 w-full sm:h-9 sm:w-40"
         />
-        <div className="flex-1" />
-        <span className="text-muted-foreground">
+        <div className="hidden flex-1 sm:block" />
+        <span className="w-full text-sm text-muted-foreground sm:w-auto">
           Всего:{' '}
           <span className="font-medium text-foreground">{filteredSorted.length}</span>
           {filteredSorted.length !== items.length && ` из ${items.length}`}
         </span>
-        <Button variant="outline" onClick={handleExportTemplate} disabled={exporting}>
+        <Button className="w-full sm:w-auto" variant="outline" onClick={handleExportTemplate} disabled={exporting}>
           <Download className="h-4 w-4 mr-1" />
           {exporting ? 'Подготовка...' : 'Скачать шаблон'}
         </Button>
         <Button
+          className="w-full sm:w-auto"
           variant="outline"
           disabled={importing}
           onClick={() => importRef.current?.click()}
@@ -241,9 +251,82 @@ export function CostPriceTab({ items, wbAccountId, onMutate }: CostPriceTabProps
         />
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border overflow-hidden">
-        <table className="w-full">
+      <MobileSortControls
+        value={sortCol ?? '__none__'}
+        direction={sortDir}
+        options={COST_SORT_OPTIONS}
+        onFieldChange={(value) => {
+          if (value === '__none__') {
+            setSortCol(null)
+            return
+          }
+          handleSort(value as SortCol)
+        }}
+        onDirectionToggle={() => {
+          if (sortCol) handleSort(sortCol)
+        }}
+        directionDisabled={!sortCol}
+        className="lg:hidden"
+      />
+
+      {/* Mobile cards */}
+      <div className="space-y-3 lg:hidden">
+        {pagedItems.length === 0 && (
+          <div className="rounded-md border px-4 py-10 text-center text-muted-foreground">
+            {items.length === 0 ? 'Нет товаров в кабинете' : 'Ничего не найдено'}
+          </div>
+        )}
+        {pagedItems.map((item) => {
+          const isDirty = dirty.has(item.vendorCode)
+          const isSaving = saving.has(item.vendorCode)
+          return (
+            <article key={item.vendorCode} className="space-y-3 rounded-lg border bg-card p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words font-medium">{item.vendorCode}</p>
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground">{item.category ?? 'Категория не указана'}</p>
+                </div>
+                {item.nmId ? <WbArticleLink nmId={item.nmId} photoUrl={item.photoUrl} /> : <span>—</span>}
+              </div>
+              <div>
+                <label htmlFor={`mobile-cost-${item.vendorCode}`} className="mb-1 block text-sm font-medium">Себестоимость</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={`mobile-cost-${item.vendorCode}`}
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={editValues[item.vendorCode] ?? ''}
+                    onChange={(event) => handleEdit(item.vendorCode, event.target.value, item.costPrice)}
+                    onKeyDown={(event) => event.key === 'Enter' && isDirty && handleSave(item)}
+                    placeholder="0.00"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    disabled={isSaving || !isDirty}
+                    onClick={() => isDirty && !isSaving && handleSave(item)}
+                    aria-label={`Сохранить себестоимость ${item.vendorCode}`}
+                    className="h-11 w-11 shrink-0"
+                  >
+                    {isSaving
+                      ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      : <Check className="h-5 w-5" />}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Обновлено: {item.updatedAt ? format(new Date(item.updatedAt), 'dd.MM.yyyy') : '—'}
+              </p>
+            </article>
+          )
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto rounded-md border lg:block">
+        <table className="min-w-[720px] w-full">
           <thead className="bg-muted/50 border-b">
             <tr>
               <th
@@ -354,7 +437,7 @@ export function CostPriceTab({ items, wbAccountId, onMutate }: CostPriceTabProps
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
           <Button
             variant="outline"
             disabled={page <= 1}

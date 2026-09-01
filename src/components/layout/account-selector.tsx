@@ -12,7 +12,11 @@ import {
 } from '@/components/ui/select'
 import { useAccount } from '@/components/providers/account-context'
 
-export function AccountSelector() {
+interface AccountSelectorProps {
+  onNavigate?: () => void
+}
+
+export function AccountSelector({ onNavigate }: AccountSelectorProps = {}) {
   const { accounts, selectedId, selectAccount } = useAccount()
   const router = useRouter()
   const pathname = usePathname()
@@ -27,6 +31,7 @@ export function AccountSelector() {
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
+    onNavigate?.()
   }
 
   if (accounts === null) {
@@ -41,7 +46,8 @@ export function AccountSelector() {
     return (
       <Link
         href="/settings"
-        className="flex items-center justify-center rounded-md border border-dashed border-sidebar-border px-3 py-2 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        onClick={onNavigate}
+        className="flex min-h-11 items-center justify-center rounded-md border border-dashed border-sidebar-border px-3 py-2 text-xs text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
       >
         + Добавить кабинет
       </Link>
@@ -58,10 +64,12 @@ export function AccountSelector() {
       <SelectContent>
         {accounts.map((account) => (
           <SelectItem key={account.id} value={account.id}>
-            <span className="font-medium">{account.name}</span>
-            {account.sellerName && (
-              <span className="ml-1 text-muted-foreground text-xs">· {account.sellerName}</span>
-            )}
+            <span className="flex min-w-0 max-w-full items-baseline gap-1">
+              <span className="min-w-0 truncate font-medium">{account.name}</span>
+              {account.sellerName && (
+                <span className="min-w-0 truncate text-xs text-muted-foreground">· {account.sellerName}</span>
+              )}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

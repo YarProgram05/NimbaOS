@@ -70,7 +70,7 @@ export function AddAccountDialog({ onSuccess }: AddAccountDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" />
           Добавить кабинет
         </Button>
@@ -99,14 +99,14 @@ export function AddAccountDialog({ onSuccess }: AddAccountDialogProps) {
                 id="api-key"
                 type={showKey ? 'text' : 'password'}
                 placeholder="eyJ..."
-                className="pr-10"
+                className="pr-12"
                 {...register('apiKey')}
               />
               <button
                 type="button"
                 onClick={() => setShowKey((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
+                className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
+                aria-label={showKey ? 'Скрыть API-ключ' : 'Показать API-ключ'}
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -135,7 +135,7 @@ export function AddAccountDialog({ onSuccess }: AddAccountDialogProps) {
             )}
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_button]:w-full sm:[&_button]:w-auto">
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Отмена
             </Button>

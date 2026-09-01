@@ -18,7 +18,7 @@ export function AdStatsGrid({ daily, totals }: AdStatsGridProps) {
       <table className="w-max min-w-full border-collapse text-sm">
         <thead>
           <tr className="border-b bg-muted/40">
-            <th className="sticky left-0 z-20 min-w-[160px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur">
+            <th className="min-w-[120px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur sm:sticky sm:left-0 sm:z-20 sm:min-w-[160px]">
               Метрика
             </th>
             {daily.map((item) => (
@@ -31,7 +31,7 @@ export function AdStatsGrid({ daily, totals }: AdStatsGridProps) {
                 {format(new Date(item.date), 'dd.MM', { locale: ru })}
               </th>
             ))}
-            <th className="sticky right-0 z-20 min-w-[96px] border-l bg-muted/80 px-3 py-2 text-center font-medium backdrop-blur">
+            <th className="min-w-[96px] border-l bg-muted/80 px-3 py-2 text-center font-medium backdrop-blur sm:sticky sm:right-0 sm:z-20">
               Итого
             </th>
           </tr>
@@ -39,7 +39,7 @@ export function AdStatsGrid({ daily, totals }: AdStatsGridProps) {
         <tbody>
           {AD_METRIC_ROWS.map((row) => (
             <tr key={row.key} className="border-b last:border-b-0 hover:bg-muted/20">
-              <td className="sticky left-0 z-10 border-r bg-background/95 px-3 py-1.5 font-medium whitespace-nowrap backdrop-blur">
+              <td className="border-r bg-background/95 px-3 py-1.5 font-medium whitespace-nowrap backdrop-blur sm:sticky sm:left-0 sm:z-10">
                 {row.label}
               </td>
               {daily.map((item) => (
@@ -52,7 +52,7 @@ export function AdStatsGrid({ daily, totals }: AdStatsGridProps) {
                   {formatAdMetricValue(row.accessor(item), row.formatter)}
                 </td>
               ))}
-              <td className="sticky right-0 z-10 border-l bg-background/95 px-3 py-1.5 text-center font-medium tabular-nums whitespace-nowrap backdrop-blur">
+              <td className="border-l bg-background/95 px-3 py-1.5 text-center font-medium tabular-nums whitespace-nowrap backdrop-blur sm:sticky sm:right-0 sm:z-10">
                 {formatAdMetricValue(row.totalAccessor(totals), row.formatter)}
               </td>
             </tr>

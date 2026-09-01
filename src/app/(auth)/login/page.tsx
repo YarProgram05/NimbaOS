@@ -48,12 +48,12 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Вход</CardTitle>
+    <Card className="min-w-0 w-full max-w-sm">
+      <CardHeader className="p-4 text-center sm:p-5">
+        <CardTitle className="text-xl sm:text-2xl">Вход</CardTitle>
         <CardDescription>NimbaOS</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 pt-0 sm:p-5 sm:pt-0">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
@@ -62,10 +62,13 @@ export default function LoginPage() {
               type="email"
               placeholder="admin@example.com"
               autoComplete="email"
+              autoCapitalize="none"
+              inputMode="email"
+              spellCheck={false}
               {...register('email')}
             />
             {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
+              <p className="break-words text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
 
@@ -79,12 +82,12 @@ export default function LoginPage() {
               {...register('password')}
             />
             {errors.password && (
-              <p className="text-sm text-destructive">{errors.password.message}</p>
+              <p className="break-words text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
 
           {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p className="break-words rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
             </p>
           )}

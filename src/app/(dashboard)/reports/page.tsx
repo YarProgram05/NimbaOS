@@ -75,7 +75,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-auto min-h-0 flex-col lg:h-full">
       <ReportsClient
         initialData={initialData}
         wbAccountId={wbAccountId}

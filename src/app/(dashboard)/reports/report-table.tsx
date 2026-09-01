@@ -11,8 +11,10 @@ import {
   type SortingState,
   type ColumnOrderState,
   type ExpandedState,
+  type Cell,
 } from '@tanstack/react-table'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import { saveReportColumnOrder } from '@/lib/actions/reports'
 import type { ReportRow } from '@/types/reports'
 import { reportColumns } from './columns'
@@ -36,6 +38,15 @@ interface ReportTableProps {
 }
 
 const FROZEN_COUNT = 3 // nmId, subjectName, vendorCode
+const MOBILE_PRIMARY_METRICS = new Set([
+  'orderedRub',
+  'sale',
+  'operatingProfit',
+  'marginality',
+  'boughtWithReturns',
+  'drr',
+])
+const IDENTITY_COLUMNS = new Set(['nmId', 'subjectName', 'vendorCode', 'brandName'])
 
 export function ReportTable({ rows, summary, columnVisibility, groupBy, initialColumnOrder }: ReportTableProps) {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -76,6 +87,16 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
   })
 
   const visibleLeafColumns = table.getVisibleLeafColumns()
+  const mobileSort = sorting[0]
+  const mobileSortOptions = [
+    { value: '__none__', label: 'Без сортировки' },
+    ...visibleLeafColumns
+      .filter((column) => column.getCanSort())
+      .map((column) => ({
+        value: column.id,
+        label: typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id,
+      })),
+  ]
 
   // Cumulative left offsets for frozen columns
   const frozenOffsets: number[] = []
@@ -111,10 +132,82 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
   }
 
   return (
-    <div
-      className="h-full min-h-0 rounded-md border bg-card"
-      style={{ overflowX: 'auto', overflowY: 'auto' }}
-    >
+    <>
+      <div className="grid gap-3 pb-2 lg:hidden">
+        <MobileSortControls
+          value={mobileSort?.id ?? '__none__'}
+          direction={mobileSort?.desc ? 'desc' : 'asc'}
+          options={mobileSortOptions}
+          onFieldChange={(value) => {
+            setSorting(value === '__none__' ? [] : [{ id: value, desc: false }])
+          }}
+          onDirectionToggle={() => {
+            if (mobileSort) setSorting([{ id: mobileSort.id, desc: !mobileSort.desc }])
+          }}
+          directionDisabled={!mobileSort}
+        />
+        <MobileReportSummary summary={summary} />
+        {table.getRowModel().rows.length === 0 && (
+          <div className="rounded-md border bg-card p-6 text-center text-sm text-muted-foreground">
+            Нет данных за выбранный период
+          </div>
+        )}
+        {table.getRowModel().rows.map((row) => {
+          const isGroupRow = Boolean(groupBy && row.original.nmId === -1)
+          const identityCells = row.getVisibleCells().filter((cell) => IDENTITY_COLUMNS.has(cell.column.id))
+          const metricCells = row.getVisibleCells().filter((cell) => !IDENTITY_COLUMNS.has(cell.column.id))
+          const primaryCells = metricCells.filter((cell) => MOBILE_PRIMARY_METRICS.has(cell.column.id))
+          const remainingCells = metricCells.filter((cell) => !MOBILE_PRIMARY_METRICS.has(cell.column.id))
+          const nmCell = identityCells.find((cell) => cell.column.id === 'nmId')
+
+          return (
+            <article
+              key={row.id}
+              className={isGroupRow ? 'rounded-md border bg-secondary p-3' : 'rounded-md border bg-card p-3 shadow-sm'}
+            >
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold">
+                    {row.original.vendorCode || row.original.subjectName || (isGroupRow ? 'Группа' : `WB ${row.original.nmId}`)}
+                  </p>
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground">
+                    {[row.original.subjectName, row.original.brandName].filter(Boolean).join(' · ') || 'Без категории'}
+                  </p>
+                </div>
+                {!isGroupRow && nmCell && (
+                  <div className="shrink-0 text-sm font-medium">
+                    {flexRender(nmCell.column.columnDef.cell, nmCell.getContext())}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {primaryCells.map((cell) => (
+                  <MobileMetricCell key={cell.id} cell={cell} />
+                ))}
+              </div>
+
+              {remainingCells.length > 0 && (
+                <details className="mt-3 rounded-md border bg-secondary/25">
+                  <summary className="flex min-h-11 cursor-pointer select-none items-center px-3 py-2 text-sm font-medium">
+                    Все показатели
+                  </summary>
+                  <div className="grid grid-cols-2 gap-2 border-t p-2">
+                    {remainingCells.map((cell) => (
+                      <MobileMetricCell key={cell.id} cell={cell} />
+                    ))}
+                  </div>
+                </details>
+              )}
+            </article>
+          )
+        })}
+      </div>
+
+      <div
+        className="hidden h-full min-h-0 rounded-md border bg-card lg:block"
+        style={{ overflowX: 'auto', overflowY: 'auto' }}
+      >
       {/* border-separate + border-spacing-0 required for sticky columns */}
       <table
         className="text-sm"
@@ -319,6 +412,53 @@ export function ReportTable({ rows, summary, columnVisibility, groupBy, initialC
           </tfoot>
         )}
       </table>
+      </div>
+    </>
+  )
+}
+
+function MobileMetricCell({ cell }: { cell: Cell<ReportRow, unknown> }) {
+  const header = cell.column.columnDef.header
+  const label = typeof header === 'string' ? header : cell.column.id
+
+  return (
+    <div className="min-w-0 rounded-md border bg-background/75 px-2.5 py-2">
+      <p className="break-words text-[11px] leading-tight text-muted-foreground">{label}</p>
+      <div className="mt-1 break-words text-sm font-semibold tabular-nums">
+        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+      </div>
     </div>
   )
+}
+
+function MobileReportSummary({ summary }: { summary: ReportRow }) {
+  const metrics = [
+    ['Продажа', formatMobileRub(summary.sale)],
+    ['Операционная прибыль', formatMobileRub(summary.operatingProfit)],
+    ['К перечислению', formatMobileRub(summary.toTransfer)],
+    ['Выкупы', Number(summary.boughtWithReturns ?? 0).toLocaleString('ru-RU')],
+  ]
+
+  return (
+    <section className="rounded-md border bg-secondary p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">Итого по отчёту</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {metrics.map(([label, value]) => (
+          <div key={label} className="min-w-0 rounded-md border bg-card px-2.5 py-2">
+            <p className="break-words text-[11px] leading-tight text-muted-foreground">{label}</p>
+            <p className="mt-1 break-words text-sm font-semibold tabular-nums">{value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function formatMobileRub(value: string | number | null | undefined): string {
+  const parsed = Number(value ?? 0)
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(parsed) ? parsed : 0)
 }

@@ -299,7 +299,7 @@ export function CampaignDetailClient({
       </Card>
 
       <Tabs defaultValue="stats" className="space-y-4">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="stats">Статистика</TabsTrigger>
           <TabsTrigger value="clusters">Кластеры</TabsTrigger>
           <TabsTrigger value="breakdown">Разбивка</TabsTrigger>

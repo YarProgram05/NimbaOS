@@ -211,7 +211,7 @@ export function ReportsClient({
   const visibleArticles = filteredRows.length
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
+    <div className="flex h-auto min-h-0 flex-1 flex-col gap-2 lg:h-full">
       <div className="old-money-panel relative z-40 shrink-0 rounded-md p-2">
         <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
@@ -353,7 +353,7 @@ export function ReportsClient({
       )}
 
       {data ? (
-        <div className="relative min-h-0 flex-1">
+        <div className="relative min-h-0 md:flex-1">
           <ReportTable
             rows={displayRows}
             summary={tableSummary}

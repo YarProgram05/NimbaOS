@@ -96,51 +96,60 @@ export function SalesPlanClient({ initialPlans, wbAccountId }: SalesPlanClientPr
           {plans.map((plan) => (
             <Card
               key={plan.id}
-              className="group relative cursor-pointer transition-colors hover:bg-secondary/60"
-              onClick={() => handleCardClick(plan.id)}
+              className="group relative transition-colors hover:bg-secondary/60"
             >
               <button
+                type="button"
                 onClick={(e) => handleDeleteClick(e, plan)}
-                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                onKeyDown={(event) => event.stopPropagation()}
+                className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:right-3 sm:top-3 sm:h-9 sm:w-9 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                 title="Удалить план"
+                aria-label={`Удалить план «${plan.name}»`}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold leading-tight pr-8">
-                  {plan.name}
-                </CardTitle>
-                {plan.description && (
-                  <CardDescription className="line-clamp-2">
-                    {plan.description}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <CalendarDays className="h-4 w-4 shrink-0" />
-                  <span>
-                    {formatDate(plan.dateFrom)} — {formatDate(plan.dateTo)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Percent className="h-4 w-4 shrink-0" />
-                    <span>ДРР {plan.drrPercent}%</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Package className="h-4 w-4 shrink-0" />
+              <button
+                type="button"
+                className="block w-full cursor-pointer rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => handleCardClick(plan.id)}
+                aria-label={`Открыть план «${plan.name}»`}
+              >
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold leading-tight pr-8">
+                    {plan.name}
+                  </CardTitle>
+                  {plan.description && (
+                    <CardDescription className="line-clamp-2">
+                      {plan.description}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarDays className="h-4 w-4 shrink-0" />
                     <span>
-                      {plan.itemCount}{' '}
-                      {plan.itemCount === 1
-                        ? 'артикул'
-                        : plan.itemCount >= 2 && plan.itemCount <= 4
-                          ? 'артикула'
-                          : 'артикулов'}
+                      {formatDate(plan.dateFrom)} — {formatDate(plan.dateTo)}
                     </span>
                   </div>
-                </div>
-              </CardContent>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Percent className="h-4 w-4 shrink-0" />
+                      <span>ДРР {plan.drrPercent}%</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Package className="h-4 w-4 shrink-0" />
+                      <span>
+                        {plan.itemCount}{' '}
+                        {plan.itemCount === 1
+                          ? 'артикул'
+                          : plan.itemCount >= 2 && plan.itemCount <= 4
+                            ? 'артикула'
+                            : 'артикулов'}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </button>
             </Card>
           ))}
         </div>

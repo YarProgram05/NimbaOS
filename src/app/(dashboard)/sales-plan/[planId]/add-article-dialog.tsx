@@ -104,7 +104,7 @@ export function AddArticleDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[560px] max-h-[80vh] flex flex-col">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-h-[80vh] sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Добавить артикулы</DialogTitle>
           <DialogDescription>
@@ -118,9 +118,10 @@ export function AddArticleDialog({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="h-11"
             autoFocus
           />
-          <Button onClick={handleSearch} disabled={isSearching} variant="outline" size="icon">
+          <Button onClick={handleSearch} disabled={isSearching} variant="outline" size="icon" className="h-11 w-11 shrink-0" aria-label="Найти артикул">
             {isSearching ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent inline-block" />
             ) : (
@@ -130,8 +131,44 @@ export function AddArticleDialog({
         </div>
 
         {results.length > 0 && (
-          <div className="flex-1 overflow-auto rounded-md border">
-            <table className="w-full">
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+            <div className="divide-y md:hidden">
+              {results.map((item) => {
+                const alreadyExists = existingSet.has(item.nmId)
+                const isSelected = selected.has(item.nmId)
+                return (
+                  <div
+                    key={item.nmId}
+                    className={`flex min-h-14 items-center gap-3 p-3 ${alreadyExists ? 'opacity-50' : 'cursor-pointer active:bg-muted/50'}`}
+                    onClick={() => !alreadyExists && toggleSelect(item.nmId)}
+                  >
+                    <label
+                      className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(item.nmId)}
+                        disabled={alreadyExists}
+                        className="h-5 w-5 cursor-pointer disabled:cursor-default"
+                        aria-label={`Выбрать артикул ${item.vendorCode}`}
+                      />
+                    </label>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.vendorCode}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.category ?? 'Категория не указана'}</p>
+                    </div>
+                    <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+                      <WbArticleLink nmId={item.nmId} photoUrl={item.photoUrl} />
+                    </div>
+                    {alreadyExists && <span className="shrink-0 text-[11px] text-muted-foreground">В плане</span>}
+                  </div>
+                )
+              })}
+            </div>
+
+            <table className="hidden w-full md:table">
               <thead className="bg-muted/50 border-b sticky top-0">
                 <tr>
                   <th className="w-10 px-3 py-2" />
@@ -176,11 +213,11 @@ export function AddArticleDialog({
         )}
 
         {selected.size > 0 && (
-          <div className="flex items-center justify-between pt-2 border-t">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
             <span className="text-sm text-muted-foreground">
               Выбрано: {selected.size}
             </span>
-            <Button onClick={handleAdd} disabled={isAdding} className="gap-2">
+            <Button onClick={handleAdd} disabled={isAdding} className="min-h-11 gap-2 sm:min-h-9">
               <Plus className="h-4 w-4" />
               {isAdding ? 'Добавление...' : 'Добавить'}
             </Button>

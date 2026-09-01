@@ -154,7 +154,7 @@ export function ArticleComparisonChart({
             className="pl-8"
           />
         </div>
-        <div className="max-h-[428px] space-y-1.5 overflow-y-auto pr-1">
+        <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1 sm:max-h-[428px]">
           {filteredOptions.map((option) => {
             const isSelected = selectedSet.has(option.key)
             return (
@@ -163,7 +163,7 @@ export function ArticleComparisonChart({
                 type="button"
                 onClick={() => toggleArticle(option.key)}
                 className={[
-                  'flex w-full min-w-0 items-center gap-2 rounded-md border p-2 text-left transition-colors',
+                  'flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md border p-2 text-left transition-colors',
                   isSelected ? 'border-primary bg-primary/10' : 'bg-card hover:bg-secondary',
                 ].join(' ')}
                 aria-pressed={isSelected}
@@ -199,7 +199,7 @@ export function ArticleComparisonChart({
                   type="button"
                   onClick={() => toggleMetric(item.key)}
                   className={[
-                    'inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors',
+                    'inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors sm:min-h-8',
                     isSelected ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-secondary',
                   ].join(' ')}
                   aria-pressed={isSelected}
@@ -216,7 +216,7 @@ export function ArticleComparisonChart({
                 key={option.key}
                 type="button"
                 onClick={() => toggleArticle(option.key)}
-                className="inline-flex h-8 max-w-[180px] items-center gap-1.5 rounded-md border bg-card px-2 text-xs font-semibold"
+                className="inline-flex min-h-11 max-w-[180px] items-center gap-1.5 rounded-md border bg-card px-2 text-xs font-semibold sm:min-h-8"
               >
                 <span className="truncate">{option.vendorCode || `WB ${option.nmId}`}</span>
                 <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -229,7 +229,7 @@ export function ArticleComparisonChart({
           <SeriesLegend selected={selected} metrics={selectedMetricDefs} />
         )}
 
-        <div className="h-[420px] min-w-[1px] rounded-md border bg-secondary/25 p-3">
+        <div className="h-[340px] min-w-[1px] rounded-md border bg-secondary/25 p-2 sm:h-[420px] sm:p-3">
           {selected.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
               Выберите один или несколько артикулов слева.
@@ -277,12 +277,12 @@ export function ArticleComparisonChart({
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
                     return (
-                      <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-sm">
-                        <p className="mb-1 font-semibold">{label}</p>
+                      <div className="max-h-[60dvh] max-w-[calc(100vw-2rem)] overflow-auto rounded-md border bg-card px-3 py-2 text-xs shadow-sm">
+                        <p className="mb-1 truncate font-semibold" title={String(label ?? '')}>{label}</p>
                         {payload.map((entry) => (
-                          <p key={String(entry.dataKey)} className="flex items-center justify-between gap-4">
-                            <span className="text-muted-foreground">{entry.name}</span>
-                            <span className="font-semibold">
+                          <p key={String(entry.dataKey)} className="flex min-w-0 items-center justify-between gap-3">
+                            <span className="min-w-0 max-w-[60vw] truncate text-muted-foreground" title={String(entry.name ?? '')}>{entry.name}</span>
+                            <span className="shrink-0 font-semibold">
                               {metricKindByKey(String(entry.dataKey)) === 'money'
                                 ? formatMoney(Number(entry.value ?? 0))
                                 : formatNumber(Number(entry.value ?? 0))}
@@ -345,7 +345,7 @@ function MetricMarker({ metric }: { metric: MetricDef }) {
 
 function SeriesLegend({ selected, metrics }: { selected: ArticleChartOption[]; metrics: MetricDef[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex max-h-28 flex-wrap gap-1.5 overflow-auto sm:max-h-none">
       {selected.flatMap((option, articleIndex) => metrics.map((metric) => {
         const label = `${option.vendorCode || `WB ${option.nmId}`}: ${metric.label}`
         return (

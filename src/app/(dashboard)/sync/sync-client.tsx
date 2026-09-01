@@ -11,10 +11,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DateRangePicker } from '@/components/date-range-picker'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import {
   RUN_HISTORY_TABLE_CLASS_NAME,
   RunHistoryCell,
   RunHistoryColumnLayout,
+  RunHistoryMobileCard,
+  RunHistoryMobileField,
   RunHistoryPager,
   RunHistorySortableHead,
 } from '@/components/run-history-table'
@@ -118,6 +121,14 @@ const MANUAL_JOBS: SyncJobKind[] = [
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
 const RUN_HISTORY_COLUMN_WIDTHS = [14, 9, 11, 10, 11, 11, 10, 8, 10, 6] as const
+const JOB_SORT_OPTIONS = [
+  { value: 'kind', label: 'Тип' },
+  { value: 'status', label: 'Статус' },
+  { value: 'wbAccountName', label: 'Кабинет' },
+  { value: 'createdAt', label: 'Создано' },
+  { value: 'attempts', label: 'Попытки' },
+  { value: 'error', label: 'Ошибка' },
+] satisfies ReadonlyArray<{ value: SyncJobRunSortKey; label: string }>
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'
@@ -531,7 +542,7 @@ export function SyncClient({
         <CardHeader>
           <CardTitle className="text-base">Последние задачи</CardTitle>
           <CardDescription>
-            Полная история из базы с фильтрами, сортировкой и постраничным просмотром. Нажмите на ячейку, чтобы раскрыть обрезанный текст.
+            Полная история из базы с фильтрами, сортировкой и постраничным просмотром. На телефоне записи показаны карточками, на большом экране содержимое ячеек можно раскрывать.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -592,7 +603,52 @@ export function SyncClient({
               </Button>
             </div>
           </div>
-          <div className="overflow-x-auto rounded-md border">
+          <MobileSortControls
+            value={jobSort.sortBy}
+            direction={jobSort.sortDirection}
+            options={JOB_SORT_OPTIONS}
+            onFieldChange={(value) => sortJobs(value as SyncJobRunSortKey)}
+            onDirectionToggle={() => sortJobs(jobSort.sortBy)}
+            className="mb-3 lg:hidden"
+          />
+          <div className="space-y-3 lg:hidden">
+            {jobs.map((job) => (
+              <RunHistoryMobileCard
+                key={job.id}
+                title={JOB_LABELS[job.kind]}
+                status={<Badge variant={STATUS_VARIANTS[job.status]}>{STATUS_LABELS[job.status]}</Badge>}
+                actions={canEnqueue ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={job.status === 'RUNNING' || deletingJobId === job.id}
+                    onClick={() => deleteJob(job)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {job.status === 'RUNNING' ? 'Задача выполняется' : 'Удалить задачу'}
+                  </Button>
+                ) : undefined}
+              >
+                <RunHistoryMobileField label="Кабинет" fullWidth>{job.wbAccountName ?? '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Источник">{job.source === 'scheduled' ? 'Расписание' : job.source === 'manual' ? 'Ручной' : '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Создано">{formatDateTime(job.createdAt)}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Период" fullWidth>{job.period ?? '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Длительность">{formatDuration(job.durationMs)}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Попытки">{job.attempts}</RunHistoryMobileField>
+                {job.error && (
+                  <RunHistoryMobileField label="Ошибка" fullWidth expandable valueClassName="text-destructive">
+                    {job.error}
+                  </RunHistoryMobileField>
+                )}
+              </RunHistoryMobileCard>
+            ))}
+            {jobs.length === 0 && (
+              <div className="rounded-md border px-4 py-8 text-center text-sm text-muted-foreground">
+                {jobsLoading ? 'Загрузка…' : 'Задачи по выбранным фильтрам не найдены.'}
+              </div>
+            )}
+          </div>
+          <div className="hidden overflow-x-auto rounded-md border lg:block">
             <Table className={RUN_HISTORY_TABLE_CLASS_NAME}>
               <RunHistoryColumnLayout widths={RUN_HISTORY_COLUMN_WIDTHS} />
               <TableHeader>

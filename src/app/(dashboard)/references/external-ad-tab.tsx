@@ -124,16 +124,18 @@ export function ExternalAdTab({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-11 w-11 md:h-7 md:w-7"
             onClick={() => setEditTarget(row.original)}
+            aria-label="Редактировать внешнюю рекламу"
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-destructive hover:text-destructive"
+            className="h-11 w-11 text-destructive hover:text-destructive md:h-7 md:w-7"
             onClick={() => setDeleteTarget(row.original.id)}
+            aria-label="Удалить внешнюю рекламу"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -170,12 +172,31 @@ export function ExternalAdTab({
         </Button>
       </div>
 
-      {/* Table */}
-      <DataTable columns={columns} data={pagedRows} />
+      <div className="space-y-3 md:hidden">
+        {pagedRows.map((row) => (
+          <article key={row.id} className="space-y-3 rounded-lg border bg-card p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">{format(new Date(row.date), 'dd.MM.yyyy')}</p>
+              <p className="font-semibold tabular-nums">{Number(row.amount).toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽</p>
+            </div>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Артикул</dt><dd className="break-words">{row.vendorCode ?? '—'}</dd>
+              <dt className="text-muted-foreground">Источник</dt><dd className="break-words">{row.source ?? '—'}</dd>
+              <dt className="text-muted-foreground">Заметка</dt><dd className="whitespace-pre-wrap break-words">{row.note ?? '—'}</dd>
+            </dl>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => setEditTarget(row)}><Pencil className="mr-2 h-4 w-4" />Изменить</Button>
+              <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(row.id)}><Trash2 className="mr-2 h-4 w-4" />Удалить</Button>
+            </div>
+          </article>
+        ))}
+        {pagedRows.length === 0 && <p className="rounded-md border py-8 text-center text-sm text-muted-foreground">Нет данных</p>}
+      </div>
+      <div className="hidden md:block"><DataTable columns={columns} data={pagedRows} /></div>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
           <Button
             variant="outline" size="sm"
             disabled={page <= 1}
@@ -303,7 +324,7 @@ function ExternalAdDialog({
           <DialogTitle>{isEdit ? 'Редактировать внешнюю рекламу' : 'Добавить внешнюю рекламу'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ea-date">Дата</Label>
               <Input

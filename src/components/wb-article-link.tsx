@@ -28,7 +28,11 @@ export function WbArticleLink({ nmId, photoUrl }: WbArticleLinkProps) {
       rect.top - IMG_SIZE - GAP < 0
         ? rect.bottom + GAP
         : rect.top - IMG_SIZE - GAP
-    setPos({ x: rect.left, y })
+    const x = Math.min(
+      Math.max(GAP, rect.left),
+      Math.max(GAP, window.innerWidth - IMG_SIZE - GAP),
+    )
+    setPos({ x, y })
   }
 
   function handleMouseLeave() {
@@ -42,12 +46,18 @@ export function WbArticleLink({ nmId, photoUrl }: WbArticleLinkProps) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blue-500 hover:underline"
+        className="inline-flex min-h-11 items-center gap-2 text-blue-500 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0"
         onClick={(e) => e.stopPropagation()}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onFocus={handleMouseEnter}
+        onBlur={handleMouseLeave}
       >
-        {nmId}
+        {photoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt="" className="h-8 w-8 rounded border object-cover md:hidden" />
+        )}
+        <span>{nmId}</span>
       </a>
 
       {mounted && photoUrl && pos &&

@@ -64,7 +64,7 @@ export function InviteDialog() {
       }}
     >
       <DialogTrigger asChild>
-        <Button>Пригласить</Button>
+        <Button className="w-full sm:w-auto">Пригласить</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -91,9 +91,9 @@ export function InviteDialog() {
           {inviteUrl && (
             <div className="space-y-1.5">
               <Label>Ссылка для регистрации</Label>
-              <div className="flex gap-2">
-                <Input value={inviteUrl} readOnly className="text-xs" />
-                <Button type="button" variant="outline" onClick={handleCopy}>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input value={inviteUrl} readOnly className="min-w-0 text-base lg:text-xs" />
+                <Button className="w-full sm:w-auto" type="button" variant="outline" onClick={handleCopy}>
                   Копировать
                 </Button>
               </div>
@@ -104,7 +104,7 @@ export function InviteDialog() {
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 [&_button]:w-full sm:[&_button]:w-auto">
           <Button variant="ghost" onClick={handleClose}>
             Закрыть
           </Button>

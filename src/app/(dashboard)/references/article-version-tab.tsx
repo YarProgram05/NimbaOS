@@ -93,10 +93,10 @@ export function ArticleVersionTab({
           placeholder="Артикул, версия или WB..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="h-9 w-64"
+          className="h-10 w-full sm:h-9 sm:w-64"
         />
-        <div className="flex-1" />
-        <span className="text-muted-foreground">
+        <div className="hidden flex-1 sm:block" />
+        <span className="w-full text-sm text-muted-foreground sm:w-auto">
           Всего:{' '}
           <span className="font-medium text-foreground">{filtered.length}</span>
           {filtered.length !== rows.length && ` из ${rows.length}`}
@@ -107,8 +107,45 @@ export function ArticleVersionTab({
         </Button>
       </div>
 
-      <div className="rounded-md border overflow-hidden">
-        <table className="w-full">
+      <div className="space-y-3 md:hidden">
+        {pagedRows.length === 0 && (
+          <div className="rounded-md border px-4 py-10 text-center text-muted-foreground">
+            {rows.length === 0 ? 'Версий пока нет' : 'Ничего не найдено'}
+          </div>
+        )}
+        {pagedRows.map((row) => (
+          <article key={row.id} className="space-y-3 rounded-lg border bg-card p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words font-medium">{row.currentVendorCode ?? '—'}</p>
+                {row.title && <p className="mt-0.5 break-words text-xs text-muted-foreground">{row.title}</p>}
+              </div>
+              <span className="shrink-0 text-sm text-muted-foreground">WB {row.nmId}</span>
+            </div>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Версия</dt>
+              <dd className="break-words font-medium">{row.vendorCode}</dd>
+              <dt className="text-muted-foreground">Период</dt>
+              <dd>{formatDate(row.dateFrom)} — {row.dateTo ? formatDate(row.dateTo) : 'сейчас'}</dd>
+              <dt className="text-muted-foreground">Себестоимость</dt>
+              <dd>{row.costPrice ? `${formatMoney(row.costPrice)} ₽` : 'из справочника'}</dd>
+              <dt className="text-muted-foreground">Примечание</dt>
+              <dd className="break-words">{row.note ?? '—'}</dd>
+            </dl>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditTarget(row)}>
+                <Pencil className="mr-2 h-4 w-4" /> Изменить
+              </Button>
+              <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(row)}>
+                <Trash2 className="mr-2 h-4 w-4" /> Удалить
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-md border md:block">
+        <table className="min-w-[900px] w-full">
           <thead className="bg-muted/50 border-b">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Текущий артикул</th>
@@ -150,6 +187,7 @@ export function ArticleVersionTab({
                       size="icon"
                       className="h-7 w-7"
                       onClick={() => setEditTarget(row)}
+                      aria-label={`Редактировать версию ${row.vendorCode}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -158,6 +196,7 @@ export function ArticleVersionTab({
                       size="icon"
                       className="h-7 w-7 text-destructive hover:text-destructive"
                       onClick={() => setDeleteTarget(row)}
+                      aria-label={`Удалить версию ${row.vendorCode}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -170,7 +209,7 @@ export function ArticleVersionTab({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
           <Button variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
             Назад
           </Button>
@@ -342,7 +381,7 @@ function ArticleVersionDialog({
             {errors.versionName && <p className="text-sm text-destructive">{errors.versionName.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="article-version-from">С даты</Label>
               <Input id="article-version-from" type="date" {...register('dateFrom')} />

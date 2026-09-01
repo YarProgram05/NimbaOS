@@ -334,7 +334,7 @@ export function GoogleSheetTemplateEditor({
                           value={account.technicalKey ?? ''}
                           disabled={!canManage || !account.enabled}
                           onChange={(event) => onAccountChange(account.wbAccountId, { technicalKey: event.target.value })}
-                          className="font-mono text-xs"
+                          className="font-mono text-base lg:text-xs"
                         />
                         <p className="mt-1 text-xs text-muted-foreground">Используется для защиты от дублей. Не меняйте после первого успешного запуска.</p>
                       </div>

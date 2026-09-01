@@ -147,7 +147,7 @@ function BreakdownCell({
     setMounted(true)
   }, [])
 
-  function handleMouseEnter() {
+  function showTooltip() {
     if (!tooltipText || !cellRef.current) return
     const rect = cellRef.current.getBoundingClientRect()
     setPos({
@@ -156,7 +156,7 @@ function BreakdownCell({
     })
   }
 
-  function handleMouseLeave() {
+  function hideTooltip() {
     setPos(null)
   }
 
@@ -167,8 +167,27 @@ function BreakdownCell({
         className={`px-3 py-1.5 text-center tabular-nums whitespace-nowrap ${
           highlighted ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
         } ${tooltipText ? 'cursor-help' : ''}`}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        onClick={() => {
+          if (!tooltipText) return
+          if (pos) hideTooltip()
+          else showTooltip()
+        }}
+        onKeyDown={(event) => {
+          if (!tooltipText) return
+          if (event.key === 'Escape') hideTooltip()
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            if (pos) hideTooltip()
+            else showTooltip()
+          }
+        }}
+        tabIndex={tooltipText ? 0 : undefined}
+        role={tooltipText ? 'button' : undefined}
+        aria-label={tooltipText ? `${formatAdMetricValue(value, formatter)}. ${tooltipText}` : undefined}
       >
         {formatAdMetricValue(value, formatter)}
       </td>
@@ -206,7 +225,7 @@ export function AdBreakdownGrid({ daily, totals }: AdBreakdownGridProps) {
       <table className="w-max min-w-full border-collapse text-sm">
         <thead>
           <tr className="border-b bg-muted/40">
-            <th className="sticky left-0 z-20 min-w-[160px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur">
+            <th className="min-w-[140px] border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur sm:sticky sm:left-0 sm:z-20 sm:min-w-[160px]">
               Метрика
             </th>
             <th colSpan={2} className="border-r px-3 py-2 text-center font-medium">Итого</th>
@@ -223,7 +242,7 @@ export function AdBreakdownGrid({ daily, totals }: AdBreakdownGridProps) {
             ))}
           </tr>
           <tr className="border-b bg-muted/30">
-            <th className="sticky left-0 z-20 border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur" />
+            <th className="border-r bg-muted/80 px-3 py-2 text-left font-medium backdrop-blur sm:sticky sm:left-0 sm:z-20" />
             <th className="border-r px-3 py-2 text-center font-medium">П</th>
             <th className="border-r px-3 py-2 text-center font-medium">Р</th>
             {daily.map((item) => (
@@ -251,7 +270,7 @@ export function AdBreakdownGrid({ daily, totals }: AdBreakdownGridProps) {
         <tbody>
           {BREAKDOWN_METRIC_ROWS.map((row) => (
             <tr key={row.key} className="border-b last:border-b-0 hover:bg-muted/20">
-              <td className="sticky left-0 z-10 border-r bg-background/95 px-3 py-1.5 font-medium whitespace-nowrap backdrop-blur">
+              <td className="border-r bg-background/95 px-3 py-1.5 font-medium whitespace-nowrap backdrop-blur sm:sticky sm:left-0 sm:z-10">
                 {row.label}
               </td>
               <BreakdownCell

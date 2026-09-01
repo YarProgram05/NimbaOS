@@ -11,11 +11,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DateRangePicker } from '@/components/date-range-picker'
+import { MobileSortControls } from '@/components/mobile-sort-controls'
 import { Input } from '@/components/ui/input'
 import {
   RUN_HISTORY_TABLE_CLASS_NAME,
   RunHistoryCell,
   RunHistoryColumnLayout,
+  RunHistoryMobileCard,
+  RunHistoryMobileField,
   RunHistoryPager,
   RunHistorySortableHead,
 } from '@/components/run-history-table'
@@ -43,6 +46,14 @@ const STATUS_VARIANTS: Record<AutomationRunRow['status'], 'default' | 'secondary
 }
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
 const RUN_HISTORY_COLUMN_WIDTHS = [14, 9, 10, 9, 11, 11, 10, 8, 9, 9] as const
+const RUN_SORT_OPTIONS = [
+  { value: 'name', label: 'Автоматизация' },
+  { value: 'status', label: 'Статус' },
+  { value: 'source', label: 'Источник' },
+  { value: 'createdAt', label: 'Создано' },
+  { value: 'attempts', label: 'Попытки' },
+  { value: 'error', label: 'Ошибка' },
+] satisfies ReadonlyArray<{ value: AutomationRunSortKey; label: string }>
 
 function formatDateTime(value: string | null): string {
   return value ? format(new Date(value), 'd MMM yyyy HH:mm', { locale: ru }) : '-'
@@ -188,7 +199,7 @@ export function AutomationsClient({ initialAutomations, initialRunsPage }: Autom
         <CardHeader>
           <CardTitle className="text-base">История запусков</CardTitle>
           <CardDescription>
-            Полная история всех ручных и запланированных автоматизаций. Нажмите на ячейку, чтобы раскрыть обрезанный текст.
+            Полная история всех ручных и запланированных автоматизаций. На телефоне записи показаны карточками, на большом экране содержимое ячеек можно раскрывать.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -219,7 +230,44 @@ export function AutomationsClient({ initialAutomations, initialRunsPage }: Autom
             <Input value={runFilters.error} onChange={(event) => patchRunFilters({ error: event.target.value })} placeholder="Текст ошибки" aria-label="Фильтр по ошибке" />
             <Button type="button" variant="outline" onClick={resetRunFilters}>Сбросить фильтры</Button>
           </div>
-          <div className="overflow-x-auto rounded-md border">
+          <MobileSortControls
+            value={runSort.sortBy}
+            direction={runSort.sortDirection}
+            options={RUN_SORT_OPTIONS}
+            onFieldChange={(value) => sortRuns(value as AutomationRunSortKey)}
+            onDirectionToggle={() => sortRuns(runSort.sortBy)}
+            className="mb-3 lg:hidden"
+          />
+          <div className="space-y-3 lg:hidden">
+            {runs.map((run) => (
+              <RunHistoryMobileCard
+                key={run.id}
+                title={run.name}
+                status={<Badge variant={STATUS_VARIANTS[run.status]}>{STATUS_LABELS[run.status]}</Badge>}
+              >
+                <RunHistoryMobileField label="Источник">{run.source === 'scheduled' ? 'Расписание' : run.source === 'manual' ? 'Ручной' : '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Создано">{formatDateTime(run.createdAt)}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Дата отчёта">{run.targetDate ?? '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Длительность">{formatDuration(run.durationMs)}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Период" fullWidth>{run.period ?? '—'}</RunHistoryMobileField>
+                <RunHistoryMobileField label="Попытки">{run.attempts}</RunHistoryMobileField>
+                {run.resultSummary && (
+                  <RunHistoryMobileField label="Результат" fullWidth expandable>{run.resultSummary}</RunHistoryMobileField>
+                )}
+                {run.error && (
+                  <RunHistoryMobileField label="Ошибка" fullWidth expandable valueClassName="text-destructive">
+                    {run.error}
+                  </RunHistoryMobileField>
+                )}
+              </RunHistoryMobileCard>
+            ))}
+            {runs.length === 0 && (
+              <div className="rounded-md border px-4 py-8 text-center text-sm text-muted-foreground">
+                {runsLoading ? 'Загрузка…' : 'Запуски по выбранным фильтрам не найдены.'}
+              </div>
+            )}
+          </div>
+          <div className="hidden overflow-x-auto rounded-md border lg:block">
             <Table className={RUN_HISTORY_TABLE_CLASS_NAME}>
               <RunHistoryColumnLayout widths={RUN_HISTORY_COLUMN_WIDTHS} />
               <TableHeader>

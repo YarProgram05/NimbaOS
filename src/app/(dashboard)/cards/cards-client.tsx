@@ -14,9 +14,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DataTable } from '@/components/shared/data-table'
+import { WbArticleLink } from '@/components/wb-article-link'
 import { getProductColumns } from './columns'
+import { PriceCell } from './price-cell'
 import { syncProductsAction } from '@/lib/actions/products'
-import type { PaginatedProducts } from '@/types/products'
+import type { PaginatedProducts, ProductRow } from '@/types/products'
 import type { SortingState } from '@tanstack/react-table'
 
 interface CardsClientProps {
@@ -98,6 +100,11 @@ export function CardsClient({
         buildUrl({ sortBy: first.id, sortDir: first.desc ? 'desc' : 'asc', page: 1 }),
       )
     }
+  }
+
+  function handleMobileSort(value: string) {
+    const [sortBy, sortDir] = value.split(':')
+    router.push(buildUrl({ sortBy, sortDir, page: 1 }))
   }
 
   // ── Pagination ──────────────────────────────────────────────────────────────
@@ -192,8 +199,48 @@ export function CardsClient({
         товаров
       </p>
 
-      {/* Table */}
-      <div className="min-h-0 flex-1 overflow-auto rounded-md">
+      <div className="lg:hidden">
+        <Select
+          value={`${currentSortBy || 'nmId'}:${currentSortDir === 'desc' ? 'desc' : 'asc'}`}
+          onValueChange={handleMobileSort}
+        >
+          <SelectTrigger className="w-full" aria-label="Сортировка товаров">
+            <SelectValue placeholder="Сортировка" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="nmId:asc">WB артикул: по возрастанию</SelectItem>
+            <SelectItem value="nmId:desc">WB артикул: по убыванию</SelectItem>
+            <SelectItem value="vendorCode:asc">Артикул продавца: А–Я</SelectItem>
+            <SelectItem value="vendorCode:desc">Артикул продавца: Я–А</SelectItem>
+            <SelectItem value="brand:asc">Бренд: А–Я</SelectItem>
+            <SelectItem value="brand:desc">Бренд: Я–А</SelectItem>
+            <SelectItem value="category:asc">Категория: А–Я</SelectItem>
+            <SelectItem value="category:desc">Категория: Я–А</SelectItem>
+            <SelectItem value="price:asc">Цена: сначала ниже</SelectItem>
+            <SelectItem value="price:desc">Цена: сначала выше</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="grid gap-3 lg:hidden">
+        {data.rows.map((row) => (
+          <ProductMobileCard
+            key={row.id}
+            row={row}
+            wbAccountId={wbAccountId}
+            lastSyncAt={data.lastSyncAt}
+          />
+        ))}
+        {data.rows.length === 0 && (
+          <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+            Нет товаров по выбранным фильтрам
+          </div>
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden min-h-0 flex-1 overflow-auto rounded-md lg:block">
         <DataTable
           columns={getProductColumns(wbAccountId, data.lastSyncAt)}
           data={data.rows}
@@ -204,21 +251,23 @@ export function CardsClient({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex shrink-0 items-center justify-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
           <Button
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={currentPage <= 1}
             onClick={() => router.push(buildUrl({ page: currentPage - 1 }))}
           >
             Назад
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="order-first w-full text-center text-sm text-muted-foreground sm:order-none sm:w-auto">
             Страница {currentPage} из {totalPages}
           </span>
           <Button
             variant="outline"
             size="sm"
+            className="min-h-11"
             disabled={currentPage >= totalPages}
             onClick={() => router.push(buildUrl({ page: currentPage + 1 }))}
           >
@@ -227,5 +276,46 @@ export function CardsClient({
         </div>
       )}
     </div>
+  )
+}
+
+function ProductMobileCard({
+  row,
+  wbAccountId,
+  lastSyncAt,
+}: {
+  row: ProductRow
+  wbAccountId: string
+  lastSyncAt: string | null
+}) {
+  return (
+    <article className="rounded-lg border bg-card p-3 shadow-sm">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="break-words text-sm font-semibold">{row.vendorCode}</h2>
+          {row.vendorCodeLocal && (
+            <p className="mt-0.5 break-words text-xs text-muted-foreground">
+              Локальный: {row.vendorCodeLocal}
+            </p>
+          )}
+        </div>
+        <WbArticleLink nmId={row.nmId} photoUrl={row.photoUrl} />
+      </div>
+
+      {row.title && <p className="mt-2 break-words text-sm">{row.title}</p>}
+      <p className="mt-1 break-words text-xs text-muted-foreground">
+        {[row.brand, row.category].filter(Boolean).join(' · ') || 'Без бренда и категории'}
+      </p>
+
+      <div className="mt-3 flex min-w-0 items-center justify-between gap-3 rounded-md border bg-secondary/25 p-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Цена</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Нажмите, чтобы изменить</p>
+        </div>
+        <div className="shrink-0">
+          <PriceCell row={row} wbAccountId={wbAccountId} lastSyncAt={lastSyncAt} />
+        </div>
+      </div>
+    </article>
   )
 }
