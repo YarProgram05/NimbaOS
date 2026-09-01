@@ -12,7 +12,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Input } from '@/components/ui/input'
-import { RunHistoryPager, RunHistorySortableHead } from '@/components/run-history-table'
+import {
+  RUN_HISTORY_TABLE_CLASS_NAME,
+  RunHistoryCell,
+  RunHistoryColumnLayout,
+  RunHistoryPager,
+  RunHistorySortableHead,
+} from '@/components/run-history-table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type {
@@ -36,6 +42,7 @@ const STATUS_VARIANTS: Record<AutomationRunRow['status'], 'default' | 'secondary
   QUEUED: 'secondary', RUNNING: 'outline', SUCCEEDED: 'default', FAILED: 'destructive',
 }
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
+const RUN_HISTORY_COLUMN_WIDTHS = [14, 9, 10, 9, 11, 11, 10, 8, 9, 9] as const
 
 function formatDateTime(value: string | null): string {
   return value ? format(new Date(value), 'd MMM yyyy HH:mm', { locale: ru }) : '-'
@@ -180,7 +187,9 @@ export function AutomationsClient({ initialAutomations, initialRunsPage }: Autom
       <Card>
         <CardHeader>
           <CardTitle className="text-base">История запусков</CardTitle>
-          <CardDescription>Полная история всех ручных и запланированных автоматизаций.</CardDescription>
+          <CardDescription>
+            Полная история всех ручных и запланированных автоматизаций. Нажмите на ячейку, чтобы раскрыть обрезанный текст.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -211,7 +220,8 @@ export function AutomationsClient({ initialAutomations, initialRunsPage }: Autom
             <Button type="button" variant="outline" onClick={resetRunFilters}>Сбросить фильтры</Button>
           </div>
           <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[1200px]">
+            <Table className={RUN_HISTORY_TABLE_CLASS_NAME}>
+              <RunHistoryColumnLayout widths={RUN_HISTORY_COLUMN_WIDTHS} />
               <TableHeader>
                 <TableRow>
                   <RunHistorySortableHead label="Автоматизация" sortKey="name" activeSortKey={runSort.sortBy} direction={runSort.sortDirection} onSort={sortRuns} />
@@ -229,16 +239,16 @@ export function AutomationsClient({ initialAutomations, initialRunsPage }: Autom
               <TableBody>
                 {runs.map((run) => (
                   <TableRow key={run.id}>
-                    <TableCell className="font-medium">{run.name}</TableCell>
-                    <TableCell><Badge variant={STATUS_VARIANTS[run.status]}>{STATUS_LABELS[run.status]}</Badge></TableCell>
-                    <TableCell>{run.source === 'scheduled' ? 'Расписание' : run.source === 'manual' ? 'Ручной' : '—'}</TableCell>
-                    <TableCell>{run.targetDate ?? '-'}</TableCell>
-                    <TableCell>{run.period ?? '-'}</TableCell>
-                    <TableCell>{formatDateTime(run.createdAt)}</TableCell>
-                    <TableCell>{formatDuration(run.durationMs)}</TableCell>
-                    <TableCell>{run.attempts}</TableCell>
-                    <TableCell>{run.resultSummary ?? '-'}</TableCell>
-                    <TableCell className="max-w-[300px] truncate text-destructive">{run.error ?? '-'}</TableCell>
+                    <RunHistoryCell contentClassName="font-medium">{run.name}</RunHistoryCell>
+                    <RunHistoryCell><Badge variant={STATUS_VARIANTS[run.status]}>{STATUS_LABELS[run.status]}</Badge></RunHistoryCell>
+                    <RunHistoryCell>{run.source === 'scheduled' ? 'Расписание' : run.source === 'manual' ? 'Ручной' : '—'}</RunHistoryCell>
+                    <RunHistoryCell>{run.targetDate ?? '—'}</RunHistoryCell>
+                    <RunHistoryCell>{run.period ?? '—'}</RunHistoryCell>
+                    <RunHistoryCell>{formatDateTime(run.createdAt)}</RunHistoryCell>
+                    <RunHistoryCell>{formatDuration(run.durationMs)}</RunHistoryCell>
+                    <RunHistoryCell>{run.attempts}</RunHistoryCell>
+                    <RunHistoryCell>{run.resultSummary ?? '—'}</RunHistoryCell>
+                    <RunHistoryCell contentClassName="text-destructive">{run.error ?? '—'}</RunHistoryCell>
                   </TableRow>
                 ))}
                 {runs.length === 0 && (

@@ -23,6 +23,7 @@ export default async function AutomationDetailsPage({ params }: { params: { kind
         canManage={checkRole(session, 'MANAGER')}
         name={definition.name}
         description={definition.description}
+        sheetTemplate={definition.sheetTemplate}
       />
     )
   }
@@ -35,6 +36,7 @@ export default async function AutomationDetailsPage({ params }: { params: { kind
       canManage={checkRole(session, 'MANAGER')}
       name={definition.name}
       description={definition.description}
+      sheetTemplate={definition.sheetTemplate}
     />
   )
 }

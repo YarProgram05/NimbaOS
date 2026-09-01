@@ -8,14 +8,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { FbsMovementSheetWorkflowRow } from '@/types/automations'
+import type { AutomationSheetTemplateDefinition, FbsMovementSheetWorkflowRow } from '@/types/automations'
 import {
   enqueueFbsMovementSheetAction,
   getFbsMovementSheetWorkflowAction,
   updateFbsMovementSheetWorkflowAction,
 } from '@/lib/actions/automations'
 import { AutomationScheduleEditor } from './automation-schedule-editor'
+import { GoogleSheetTemplateEditor } from './google-sheet-template-editor'
 
 function yesterdayMoscow() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -40,16 +40,19 @@ export function FbsMovementSheetDetailsClient({
   canManage,
   name,
   description,
+  sheetTemplate,
 }: {
   initialWorkflow: FbsMovementSheetWorkflowRow
   canManage: boolean
   name: string
   description: string
+  sheetTemplate: AutomationSheetTemplateDefinition
 }) {
   const [workflow, setWorkflow] = useState(initialWorkflow)
   const [targetDate, setTargetDate] = useState(yesterdayMoscow)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [isTemplateValid, setIsTemplateValid] = useState(true)
   const [isRefreshing, startRefresh] = useTransition()
 
   function patchWorkflow(patch: Partial<FbsMovementSheetWorkflowRow>) {
@@ -81,11 +84,7 @@ export function FbsMovementSheetDetailsClient({
       enabled: workflow.enabled,
       schedule: workflow.schedule,
       spreadsheetUrl: workflow.config.spreadsheetUrl || workflow.config.spreadsheetId,
-      operationsSheetName: workflow.config.operationsSheetName,
-      controlSheetName: workflow.config.controlSheetName,
-      summarySheetName: workflow.config.summarySheetName,
-      referenceSheetName: workflow.config.referenceSheetName,
-      wbStockSheetName: workflow.config.wbStockSheetName,
+      sheetTabs: workflow.config.sheetTabs,
       startDate: workflow.config.startDate,
       accounts: workflow.accounts.map((account) => ({
         wbAccountId: account.wbAccountId,
@@ -145,64 +144,33 @@ export function FbsMovementSheetDetailsClient({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Таблица учета</CardTitle>
-          <CardDescription>Названия вкладок меняйте только если они действительно переименованы в Google Sheet.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Google Sheet URL или ID</label>
-            <Input value={workflow.config.spreadsheetUrl} disabled={!canManage}
-              onChange={(event) => patchConfig({ spreadsheetUrl: event.target.value })} />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {([
-              ['operationsSheetName', 'Операции'], ['controlSheetName', 'Контроль загрузки'],
-              ['summarySheetName', 'Сводка'], ['referenceSheetName', 'Справочники'],
-              ['wbStockSheetName', 'Остатки WB'],
-            ] as const).map(([key, label]) => (
-              <div key={key}>
-                <label className="mb-1 block text-sm font-medium">Вкладка «{label}»</label>
-                <Input value={workflow.config[key]} disabled={!canManage}
-                  onChange={(event) => patchConfig({ [key]: event.target.value })} />
+      <GoogleSheetTemplateEditor
+        spreadsheetUrl={workflow.config.spreadsheetUrl}
+        sheetTabs={workflow.config.sheetTabs}
+        accounts={workflow.accounts}
+        definition={sheetTemplate}
+        canManage={canManage}
+        workflowEnabled={workflow.enabled}
+        onSpreadsheetUrlChange={(spreadsheetUrl) => patchConfig({ spreadsheetUrl })}
+        onSheetTabsChange={(sheetTabs) => patchConfig({ sheetTabs })}
+        onAccountChange={patchAccount}
+        onValidityChange={setIsTemplateValid}
+        additionalSettings={(
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Параметры загрузки</CardTitle>
+              <CardDescription>Дата ограничивает самый ранний день автоматического учета.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-xs">
+                <label className="mb-1 block text-sm font-medium">Автоматически учитывать с даты</label>
+                <Input type="date" value={workflow.config.startDate} disabled={!canManage}
+                  onChange={(event) => patchConfig({ startDate: event.target.value })} />
               </div>
-            ))}
-          </div>
-          <div className="max-w-xs">
-            <label className="mb-1 block text-sm font-medium">Автоматически учитывать с даты</label>
-            <Input type="date" value={workflow.config.startDate} disabled={!canManage}
-              onChange={(event) => patchConfig({ startDate: event.target.value })} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Кабинеты</CardTitle>
-          <CardDescription>Название видно сотрудникам. Технический ключ нужен только для защиты от дублей и обычно не меняется.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[880px]">
-              <TableHeader><TableRow><TableHead>Кабинет NimbaOS</TableHead><TableHead>Вкл.</TableHead><TableHead>Название в таблице</TableHead><TableHead>Технический ключ</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {workflow.accounts.map((account) => (
-                  <TableRow key={account.wbAccountId}>
-                    <TableCell><div className="font-medium">{account.wbAccountName}</div>{account.sellerName && <div className="text-xs text-muted-foreground">{account.sellerName}</div>}</TableCell>
-                    <TableCell><input type="checkbox" checked={account.enabled} disabled={!canManage}
-                      onChange={(event) => patchAccount(account.wbAccountId, { enabled: event.target.checked })} className="h-4 w-4" /></TableCell>
-                    <TableCell><Input value={account.sheetName} disabled={!canManage || !account.enabled}
-                      onChange={(event) => patchAccount(account.wbAccountId, { sheetName: event.target.value })} /></TableCell>
-                    <TableCell><Input value={account.technicalKey ?? ''} disabled={!canManage || !account.enabled}
-                      onChange={(event) => patchAccount(account.wbAccountId, { technicalKey: event.target.value })} className="font-mono text-xs" /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+      />
 
       <Card className="border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20">
         <CardContent className="flex gap-3 pt-6 text-sm">
@@ -221,7 +189,7 @@ export function FbsMovementSheetDetailsClient({
           <Button variant="outline" disabled={!canManage || isRunning} onClick={runWorkflow}>
             <Play className="mr-2 h-4 w-4" /> {isRunning ? 'Запускаем...' : 'Запустить сейчас'}
           </Button>
-          <Button disabled={!canManage || isSaving} onClick={saveWorkflow}>
+          <Button disabled={!canManage || isSaving || !isTemplateValid} onClick={saveWorkflow}>
             <Save className="mr-2 h-4 w-4" /> {isSaving ? 'Сохраняем...' : 'Сохранить настройки'}
           </Button>
         </div>

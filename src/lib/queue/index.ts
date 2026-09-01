@@ -15,6 +15,8 @@ interface SyncJobBase {
   runId?: string
   wbAccountId?: string
   rollingDays?: number
+  scheduledTime?: string
+  scheduleFingerprint?: string
 }
 
 export interface ProductsRefreshJobData extends SyncJobBase {

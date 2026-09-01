@@ -1,5 +1,30 @@
 # Bugs And Incidents
 
+## BUG-033: Main dashboard did not adapt to normal-window and fullscreen heights
+
+Status:
+- Fixed locally on 2026-09-01.
+
+Symptoms:
+- At 100% browser zoom in the owner's normal Full HD Chrome window, the main dashboard showed a vertical scrollbar.
+- An initial fixed-height correction removed that scrollbar for one viewport but left excessive empty space below the dashboard in browser fullscreen.
+- An initial elastic-height pass compressed vertically stacked content below the desktop width breakpoint, visibly overlapping the chart, distributions and following cards.
+
+Root cause:
+- The page requested a 12 px section gap, but the shared `.dashboard-page` utility won the CSS cascade and applied 16 px.
+- The compact dashboard chart used a fixed pixel height and the page did not distribute additional or reduced viewport height among its rows.
+
+Resolution:
+- At `xl` desktop width, made the page fill the available main height and the chart/focus row consume remaining space.
+- Made the compact chart and distribution cards fill that flexible row only at desktop width; narrower layouts use natural stacked height and a stable compact chart height. The full analytics chart remains unchanged.
+- Added a height breakpoint that compacts only gaps and panel padding below 1000 px, preserving every metric and detail row.
+- Browser measurements at 1920x952, 1920x1001 and 1920x1080 report equal main `scrollHeight` and `clientHeight`. At 990x909, all adjacent section/panel/chart overlap measurements are zero and vertical scrolling is normal. No tested size has horizontal overflow or console errors.
+
+Prevention:
+- Verify responsive dashboard changes at both normal-window and fullscreen heights, including the exact breakpoint, instead of validating one static viewport.
+- Also verify the width breakpoint where multi-column desktop panels become a vertical stack; do not retain desktop height constraints across that transition.
+- Preserve real vertical scrolling on smaller viewports; do not hide overflow to mask layout bugs.
+
 ## BUG-032: CI prerendered the database-backed automations page
 
 Status:

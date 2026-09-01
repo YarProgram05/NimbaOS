@@ -6,6 +6,8 @@
 
 Проект использует BullMQ для фоновых sync jobs. Настройки sync-расписания живут в `SyncScheduleSetting`, helper functions — в `src/lib/sync/schedules.ts`, запуск применения расписаний — `scripts/schedule-sync.ts`.
 
+`/sync` показывает расписания группированным каталогом; одна выбранная задача редактируется в боковой панели. Расширенное sync-расписание хранится в nullable JSON `SyncScheduleSetting.schedule`, а `timeOfDay`/`intervalMinutes` остаются совместимыми полями. Все sync kinds поддерживают одно/несколько точных времён или ограниченное start/end/everyMinutes окно по единым правилам; снимки данных не показывают глубину периода, rolling jobs используют 1-30 дней. Sync cadence ограничен ежедневным режимом или выбранными днями недели. На каждое эффективное время регистрируется отдельный BullMQ scheduler, а fingerprint защищает от запуска задания из уже заменённого расписания.
+
 Для product/workflow автоматизаций добавлена отдельная очередь `automation`. Настройки живут в `AutomationWorkflowSetting`, привязки кабинетов к вкладкам — в `AutomationWorkflowAccount`, история — в `AutomationRun`. Helper functions — `src/lib/automations/workflows.ts`, запуск применения расписаний — `scripts/schedule-automations.ts`, worker — `scripts/automation-worker.ts`.
 
 ## Workflow Catalog And Schedule Model

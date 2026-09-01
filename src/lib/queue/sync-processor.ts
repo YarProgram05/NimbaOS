@@ -26,6 +26,8 @@ import {
   isScheduledJobTooLate,
   resolveScheduledStartGraceMinutes,
 } from '@/lib/queue/scheduled-job-policy'
+import { normalizeSyncSchedule, syncScheduleValidationOptions } from '@/lib/sync/schedules'
+import { flexibleScheduleFingerprint } from '@/lib/schedules/flexible-schedule'
 
 class SyncSubtaskError extends Error {
   constructor(message: string) {
@@ -98,13 +100,29 @@ async function shouldSkipScheduledJob(data: SyncJobData): Promise<string | null>
       enabled: true,
       timeOfDay: true,
       intervalMinutes: true,
+      schedule: true,
     },
   })
 
   if (!schedule?.enabled) return 'scheduled job is disabled'
-  if (schedule.intervalMinutes) return null
+  if (schedule.schedule && !data.scheduleFingerprint) {
+    return 'legacy scheduled job belongs to a replaced schedule'
+  }
+  const normalized = normalizeSyncSchedule(
+    data.kind,
+    schedule.schedule,
+    schedule.timeOfDay,
+    schedule.intervalMinutes,
+  )
+  if (
+    data.scheduleFingerprint &&
+    data.scheduleFingerprint !== flexibleScheduleFingerprint(normalized, syncScheduleValidationOptions())
+  ) {
+    return 'scheduled job belongs to a replaced schedule'
+  }
+  if (schedule.intervalMinutes && !data.scheduledTime) return null
 
-  const lateMinutes = minutesSinceScheduledTime(schedule.timeOfDay)
+  const lateMinutes = minutesSinceScheduledTime(data.scheduledTime ?? schedule.timeOfDay)
   if (isScheduledJobTooLate(lateMinutes, resolveScheduledStartGraceMinutes())) {
     return `scheduled job is ${lateMinutes} minutes late`
   }

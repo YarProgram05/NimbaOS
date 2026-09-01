@@ -7,15 +7,14 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { MorningWbReportWorkflowRow } from '@/types/automations'
+import type { AutomationSheetTemplateDefinition, MorningWbReportWorkflowRow } from '@/types/automations'
 import {
   enqueueMorningWbReportAction,
   getMorningWbReportWorkflowAction,
   updateMorningWbReportWorkflowAction,
 } from '@/lib/actions/automations'
 import { AutomationScheduleEditor } from './automation-schedule-editor'
+import { GoogleSheetTemplateEditor } from './google-sheet-template-editor'
 
 function formatNextRun(value: string | null): string {
   if (!value) return 'Не запланирован'
@@ -30,15 +29,18 @@ export function AutomationDetailsClient({
   canManage,
   name,
   description,
+  sheetTemplate,
 }: {
   initialWorkflow: MorningWbReportWorkflowRow
   canManage: boolean
   name: string
   description: string
+  sheetTemplate: AutomationSheetTemplateDefinition
 }) {
   const [workflow, setWorkflow] = useState(initialWorkflow)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [isTemplateValid, setIsTemplateValid] = useState(true)
   const [isRefreshing, startRefresh] = useTransition()
 
   function patchWorkflow(patch: Partial<MorningWbReportWorkflowRow>) {
@@ -137,56 +139,20 @@ export function AutomationDetailsClient({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Куда записывать отчет</CardTitle>
-          <CardDescription>Ссылка на Google Sheet и вкладка для каждого кабинета.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Google Sheet URL или ID</label>
-            <Input
-              value={workflow.config.spreadsheetUrl}
-              disabled={!canManage}
-              onChange={(event) => patchWorkflow({ config: { ...workflow.config, spreadsheetUrl: event.target.value } })}
-            />
-          </div>
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[760px]">
-              <TableHeader><TableRow><TableHead>Кабинет</TableHead><TableHead>Вкл.</TableHead><TableHead>Вкладка</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {workflow.accounts.map((account) => (
-                  <TableRow key={account.wbAccountId}>
-                    <TableCell>
-                      <div className="font-medium">{account.wbAccountName}</div>
-                      {account.sellerName && <div className="text-xs text-muted-foreground">{account.sellerName}</div>}
-                    </TableCell>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={account.enabled}
-                        disabled={!canManage}
-                        onChange={(event) => patchAccount(account.wbAccountId, { enabled: event.target.checked })}
-                        className="h-4 w-4"
-                        aria-label="Включить кабинет"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={account.sheetName}
-                        disabled={!canManage || !account.enabled}
-                        onChange={(event) => patchAccount(account.wbAccountId, { sheetName: event.target.value })}
-                        className="max-w-sm"
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {workflow.accounts.length === 0 && <TableRow><TableCell colSpan={3} className="h-20 text-center text-muted-foreground">Активных кабинетов пока нет.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <GoogleSheetTemplateEditor
+        spreadsheetUrl={workflow.config.spreadsheetUrl}
+        sheetTabs={workflow.config.sheetTabs}
+        accounts={workflow.accounts}
+        definition={sheetTemplate}
+        canManage={canManage}
+        workflowEnabled={workflow.enabled}
+        onSpreadsheetUrlChange={(spreadsheetUrl) => patchWorkflow({
+          config: { ...workflow.config, spreadsheetUrl },
+        })}
+        onSheetTabsChange={(sheetTabs) => patchWorkflow({ config: { ...workflow.config, sheetTabs } })}
+        onAccountChange={patchAccount}
+        onValidityChange={setIsTemplateValid}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
         {!canManage ? (
@@ -196,7 +162,7 @@ export function AutomationDetailsClient({
           <Button variant="outline" disabled={!canManage || isRunning} onClick={runWorkflow}>
             <Play className="mr-2 h-4 w-4" /> {isRunning ? 'Запускаем...' : 'Запустить сейчас'}
           </Button>
-          <Button disabled={!canManage || isSaving} onClick={saveWorkflow}>
+          <Button disabled={!canManage || isSaving || !isTemplateValid} onClick={saveWorkflow}>
             <Save className="mr-2 h-4 w-4" /> {isSaving ? 'Сохраняем...' : 'Сохранить настройки'}
           </Button>
         </div>

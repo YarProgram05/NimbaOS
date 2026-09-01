@@ -21,6 +21,13 @@ import {
   type UpdateMorningWbReportWorkflowInput,
 } from '@/types/automations'
 import { validateFbsAccountTechnicalKey } from '@/lib/automations/fbs-sheet'
+import {
+  FBS_DEFAULT_SHEET_TABS,
+  FBS_SHEET_ROLE_DEFINITIONS,
+  normalizeFbsSheetTabs,
+  normalizeSheetTabs,
+  validateSheetTabs,
+} from '@/lib/automations/sheet-template'
 import { getAutomationDefinition } from '@/lib/automations/catalog'
 import {
   automationScheduleFingerprint,
@@ -54,6 +61,7 @@ function defaultMorningConfig(timeOfDay = DEFAULT_TIME_OF_DAY): MorningWbReportC
   return {
     spreadsheetId: MORNING_WB_REPORT_SPREADSHEET_ID,
     spreadsheetUrl: MORNING_WB_REPORT_SPREADSHEET_URL,
+    sheetTabs: {},
     schedule: defaultAutomationSchedule(timeOfDay),
   }
 }
@@ -71,6 +79,7 @@ function parseMorningConfig(value: unknown, timeOfDay = DEFAULT_TIME_OF_DAY): Mo
   return {
     spreadsheetId,
     spreadsheetUrl,
+    sheetTabs: normalizeSheetTabs(config.sheetTabs),
     schedule: normalizeAutomationSchedule(config.schedule, timeOfDay),
   }
 }
@@ -79,11 +88,7 @@ function defaultFbsConfig(timeOfDay = FBS_DEFAULT_TIME_OF_DAY): FbsMovementSheet
   return {
     spreadsheetId: FBS_MOVEMENT_SPREADSHEET_ID,
     spreadsheetUrl: FBS_MOVEMENT_SPREADSHEET_URL,
-    operationsSheetName: 'Операции',
-    controlSheetName: 'Контроль загрузки',
-    summarySheetName: 'Сводка',
-    referenceSheetName: 'Справочники',
-    wbStockSheetName: 'Остатки WB',
+    sheetTabs: { ...FBS_DEFAULT_SHEET_TABS },
     startDate: '2026-08-10',
     accountKeys: {},
     productAliases: {
@@ -112,14 +117,11 @@ function parseFbsConfig(value: unknown, timeOfDay = FBS_DEFAULT_TIME_OF_DAY): Fb
   const configuredAliases = config.productAliases && typeof config.productAliases === 'object' && !Array.isArray(config.productAliases)
     ? Object.fromEntries(Object.entries(config.productAliases).filter(([, name]) => typeof name === 'string')) as Record<string, string>
     : {}
+  const sheetTabs = normalizeFbsSheetTabs(value)
   return {
     spreadsheetId,
     spreadsheetUrl: readText(config.spreadsheetUrl, `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`),
-    operationsSheetName: readText(config.operationsSheetName, defaults.operationsSheetName),
-    controlSheetName: readText(config.controlSheetName, defaults.controlSheetName),
-    summarySheetName: readText(config.summarySheetName, defaults.summarySheetName),
-    referenceSheetName: readText(config.referenceSheetName, defaults.referenceSheetName),
-    wbStockSheetName: readText(config.wbStockSheetName, defaults.wbStockSheetName),
+    sheetTabs,
     startDate: readText(config.startDate, defaults.startDate),
     accountKeys,
     productAliases: { ...defaults.productAliases, ...configuredAliases },
@@ -290,7 +292,7 @@ export async function ensureFbsMovementSheetWorkflow() {
   const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
   let configChanged = !(
     workflow.config && typeof workflow.config === 'object' && !Array.isArray(workflow.config) &&
-    'productAliases' in workflow.config && 'wbStockSheetName' in workflow.config
+    'productAliases' in workflow.config
   )
   for (const account of accounts) {
     if (!config.accountKeys[account.id]) {
@@ -363,6 +365,7 @@ export async function updateMorningWbReportWorkflow(
   const config: MorningWbReportConfig = {
     spreadsheetId,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+    sheetTabs: {},
     schedule,
   }
 
@@ -371,6 +374,21 @@ export async function updateMorningWbReportWorkflow(
     select: { id: true },
   })
   const activeAccountIds = new Set(activeAccounts.map((account) => account.id))
+
+  const enabledSheetNames = new Set<string>()
+  const normalizedAccounts = input.accounts
+    .filter((account) => activeAccountIds.has(account.wbAccountId))
+    .map((account) => {
+      const sheetName = account.sheetName.trim()
+      if (account.enabled && !sheetName) throw new Error('Укажите вкладку для каждого выбранного кабинета')
+      const normalizedSheetName = sheetName.toLocaleLowerCase('ru')
+      if (account.enabled && enabledSheetNames.has(normalizedSheetName)) {
+        throw new Error(`Вкладка «${sheetName}» выбрана для нескольких кабинетов`)
+      }
+      if (account.enabled) enabledSheetNames.add(normalizedSheetName)
+      return { ...account, sheetName }
+    })
+  if (input.enabled && enabledSheetNames.size === 0) throw new Error('Выберите хотя бы один кабинет')
 
   const workflow = await prisma.automationWorkflowSetting.upsert({
     where: { kind: MORNING_WB_REPORT_PRISMA_KIND },
@@ -389,9 +407,7 @@ export async function updateMorningWbReportWorkflow(
     },
   })
 
-  for (const account of input.accounts) {
-    if (!activeAccountIds.has(account.wbAccountId)) continue
-    if (!account.sheetName.trim()) throw new Error('Укажите вкладку для каждого выбранного кабинета')
+  for (const account of normalizedAccounts) {
     await prisma.automationWorkflowAccount.upsert({
       where: {
         workflowId_wbAccountId: {
@@ -403,11 +419,11 @@ export async function updateMorningWbReportWorkflow(
         workflowId: workflow.id,
         wbAccountId: account.wbAccountId,
         enabled: account.enabled,
-        sheetName: account.sheetName.trim(),
+        sheetName: account.sheetName,
       },
       update: {
         enabled: account.enabled,
-        sheetName: account.sheetName.trim(),
+        sheetName: account.sheetName,
       },
     })
   }
@@ -425,14 +441,7 @@ export async function updateFbsMovementSheetWorkflow(
   const timeOfDay = primaryAutomationTime(schedule)
   const spreadsheetId = extractSpreadsheetId(input.spreadsheetUrl)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error('Укажите дату начала в формате ГГГГ-ММ-ДД')
-  const tabs = [
-    input.operationsSheetName,
-    input.controlSheetName,
-    input.summarySheetName,
-    input.referenceSheetName,
-    input.wbStockSheetName,
-  ].map((value) => value.trim())
-  if (tabs.some((value) => !value)) throw new Error('Укажите все вкладки Google Sheet')
+  const sheetTabs = validateSheetTabs(input.sheetTabs, FBS_SHEET_ROLE_DEFINITIONS)
 
   const activeAccounts = await prisma.wbAccount.findMany({
     where: { isActive: true },
@@ -454,11 +463,7 @@ export async function updateFbsMovementSheetWorkflow(
   const config: FbsMovementSheetConfig = {
     spreadsheetId,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
-    operationsSheetName: tabs[0],
-    controlSheetName: tabs[1],
-    summarySheetName: tabs[2],
-    referenceSheetName: tabs[3],
-    wbStockSheetName: tabs[4],
+    sheetTabs,
     startDate: input.startDate,
     accountKeys,
     productAliases: existingConfig.productAliases,

@@ -25,6 +25,44 @@ Related files:
 
 ---
 
+## 2026-09-01 — All sync kinds share the same time modes
+
+Status:
+Active
+
+Decision:
+Synchronization and workflow automations share a generic flexible schedule model/editor, but `/sync` renders a separate grouped catalog and edits only one task in a right-side drawer. Every sync kind provides the same exact-time and bounded-interval modes under global validation. Sync kinds declare only snapshot versus rolling-period data behavior and recommended defaults. Sync cadence is limited to daily or selected weekdays; monthly and anchored multi-week modes remain workflow-only.
+
+Reason:
+The owner decides when a particular synchronization should run frequently and explicitly rejected hidden per-kind interval restrictions. A single time contract is more predictable and flexible. The separate catalog/drawer still avoids an unbounded form, while snapshot metadata prevents unrelated period fields from appearing.
+
+Consequences:
+`SyncScheduleSetting.schedule` is nullable JSON and legacy `timeOfDay`/`intervalMinutes` values remain readable until normal save. One effective clock time maps to one BullMQ scheduler; fingerprinted payloads are rejected after schedule replacement. The UI previews next runs, warns about coincident times and keeps save explicit because it immediately reapplies that task's schedulers. Production requires the committed migration and normal owner-confirmed deployment; existing production schedules are not changed automatically.
+
+Related files:
+`src/components/flexible-schedule-editor.tsx`, `src/lib/schedules/flexible-schedule.ts`, `src/lib/sync/catalog.ts`, `src/lib/sync/schedules.ts`, `src/app/(dashboard)/sync/sync-schedule-drawer.tsx`, `prisma/migrations/20260901143000_flexible_sync_schedules/`
+
+---
+
+## 2026-09-01 — Automation logic uses stable sheet roles, not workbook tab names
+
+Status:
+Active
+
+Decision:
+Google Sheet automation configuration stores a generic `sheetTabs` mapping from stable semantic roles to editable actual workbook tab names. The shared settings editor and automation registry render human-readable role metadata, while workflow services resolve only the stable keys. Cabinet mapping, connection inspection and validation use the same reusable UI contract across workflows.
+
+Reason:
+Workbook tab names are user-owned and may be renamed, whereas automation behavior still needs an unambiguous contract for operations, control, summary, references and stock. Individual config fields and JSX labels coupled implementation to the current workbook wording and duplicated the settings experience.
+
+Consequences:
+Renaming a tab requires only a read-only workbook scan and mapping update, not a code edit. Missing or duplicate detected mappings block save. Existing FBS JSON with individual tab-name fields is accepted by one compatibility adapter and is migrated to `sheetTabs` on the next normal save; no Prisma migration or automatic production rewrite is required. Arbitrary user-created roles are intentionally not supported unless the workflow definition also declares their behavior.
+
+Related files:
+`src/lib/automations/sheet-template.ts`, `src/app/(dashboard)/automations/google-sheet-template-editor.tsx`, `src/types/automations.ts`, `src/lib/automations/workflows.ts`, `src/lib/services/fbs-movement-sheet-workflow.ts`
+
+---
+
 ## 2026-08-24 — Production releases require an explicit GitHub Actions confirmation
 
 Status:

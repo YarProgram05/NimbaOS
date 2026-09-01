@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { DEFAULT_SYNC_JOB_OPTIONS, getSyncQueue, type SyncJobData } from '@/lib/queue'
 import {
   SYNC_JOB_KINDS,
@@ -6,9 +7,24 @@ import {
   type SyncScheduleRow,
   type UpdateSyncScheduleInput,
 } from '@/types/sync'
-import { getNextMoscowRunAt } from '@/lib/time/moscow'
+import { getSyncScheduleDefinition, SYNC_ALLOWED_TIME_MODES } from '@/lib/sync/catalog'
+import {
+  buildFlexibleScheduleRules,
+  defaultFlexibleSchedule,
+  flexibleScheduleFingerprint,
+  getNextFlexibleRunAt,
+  normalizeFlexibleSchedule,
+  primaryFlexibleTime,
+  validateFlexibleSchedule,
+  type FlexibleScheduleValidationOptions,
+} from '@/lib/schedules/flexible-schedule'
+import type { FlexibleSchedule } from '@/types/schedules'
 
 const TIMEZONE = 'Europe/Moscow'
+
+function scheduleJson(schedule: FlexibleSchedule): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(schedule)) as Prisma.InputJsonValue
+}
 
 export const SCHEDULED_SYNC_KINDS: SyncJobKind[] = [
   SYNC_JOB_KINDS.PRODUCTS_REFRESH,
@@ -117,44 +133,83 @@ const PRISMA_TO_KIND = Object.fromEntries(
   Object.entries(KIND_TO_PRISMA).map(([kind, prismaKind]) => [prismaKind, kind]),
 ) as Record<PrismaKind, SyncJobKind>
 
-function schedulerId(wbAccountId: string, kind: SyncJobKind) {
+function schedulerPrefix(wbAccountId: string, kind: SyncJobKind) {
   return `sync:${kind}:${wbAccountId}`
+}
+
+function schedulerId(wbAccountId: string, kind: SyncJobKind, idSuffix: string) {
+  return `${schedulerPrefix(wbAccountId, kind)}:${idSuffix}`
 }
 
 function legacySchedulerId(wbAccountId: string, kind: SyncJobKind) {
   return `${LEGACY_SCHEDULER_IDS[kind]}:${wbAccountId}`
 }
 
-function validateTimeOfDay(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) throw new Error('Укажите время в формате ЧЧ:ММ')
-  const [hours, minutes] = value.split(':').map(Number)
-  if (hours > 23 || minutes > 59) throw new Error('Укажите корректное время')
+export function syncScheduleValidationOptions(): FlexibleScheduleValidationOptions {
+  return {
+    allowedCadences: ['daily', 'weekly'],
+    allowedTimeModes: SYNC_ALLOWED_TIME_MODES,
+    maxRunsPerDay: 288,
+  }
 }
 
-function patternFromTime(timeOfDay: string) {
-  validateTimeOfDay(timeOfDay)
-  const [hours, minutes] = timeOfDay.split(':').map(Number)
-  return `0 ${minutes} ${hours} * * *`
+function lastLegacyIntervalTime(intervalMinutes: number): string {
+  const totalMinutes = Math.floor(1_439 / intervalMinutes) * intervalMinutes
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`
 }
 
-function buildJobData(wbAccountId: string, kind: SyncJobKind, rollingDays: number): SyncJobData {
+function legacySchedule(timeOfDay: string, intervalMinutes: number | null): FlexibleSchedule {
+  const schedule = {
+    ...defaultFlexibleSchedule(timeOfDay),
+    weekdays: [1, 2, 3, 4, 5, 6, 7],
+  }
+  if (!intervalMinutes) return schedule
+  return {
+    ...schedule,
+    timeMode: 'interval',
+    interval: {
+      startTime: '00:00',
+      endTime: lastLegacyIntervalTime(intervalMinutes),
+      everyMinutes: intervalMinutes,
+    },
+  }
+}
+
+export function normalizeSyncSchedule(
+  kind: SyncJobKind,
+  value: unknown,
+  timeOfDay: string,
+  intervalMinutes: number | null,
+): FlexibleSchedule {
+  if (!value || typeof value !== 'object') {
+    return validateFlexibleSchedule(legacySchedule(timeOfDay, intervalMinutes), syncScheduleValidationOptions())
+  }
+  return normalizeFlexibleSchedule(value, timeOfDay, syncScheduleValidationOptions())
+}
+
+function buildJobData(
+  wbAccountId: string,
+  kind: SyncJobKind,
+  rollingDays: number,
+  scheduledTime: string,
+  schedule: FlexibleSchedule,
+): SyncJobData {
   return {
     kind,
     source: 'scheduled',
     wbAccountId,
     rollingDays,
+    scheduledTime,
+    scheduleFingerprint: flexibleScheduleFingerprint(schedule, syncScheduleValidationOptions()),
   } as SyncJobData
 }
 
 function getNextRunAt(
-  timeOfDay: string,
+  schedule: FlexibleSchedule,
   enabled: boolean,
-  intervalMinutes: number | null,
 ): string | null {
   if (!enabled) return null
-  if (intervalMinutes) return new Date(Date.now() + intervalMinutes * 60_000).toISOString()
-  validateTimeOfDay(timeOfDay)
-  return getNextMoscowRunAt(timeOfDay).toISOString()
+  return getNextFlexibleRunAt(schedule, new Date(), syncScheduleValidationOptions()).toISOString()
 }
 
 export async function ensureDefaultSyncSchedules(wbAccountId: string) {
@@ -167,7 +222,8 @@ export async function ensureDefaultSyncSchedules(wbAccountId: string) {
         enabled: DEFAULT_ENABLED[kind],
         timeOfDay: DEFAULT_TIMES[kind],
         intervalMinutes: DEFAULT_INTERVALS[kind],
-        rollingDays: DEFAULT_INTERVALS[kind] ? 1 : 7,
+        schedule: scheduleJson(getSyncScheduleDefinition(kind).recommendedSchedule),
+        rollingDays: getSyncScheduleDefinition(kind).recommendedRollingDays,
         timezone: TIMEZONE,
       },
       update: {},
@@ -190,16 +246,18 @@ export async function listSyncSchedules(wbAccountId: string): Promise<SyncSchedu
     const enabled = row?.enabled ?? DEFAULT_ENABLED[kind]
     const timeOfDay = row?.timeOfDay ?? DEFAULT_TIMES[kind]
     const intervalMinutes = row?.intervalMinutes ?? DEFAULT_INTERVALS[kind]
+    const schedule = normalizeSyncSchedule(kind, row?.schedule, timeOfDay, intervalMinutes)
     return {
       id: row?.id ?? null,
       kind,
       enabled,
       timeOfDay,
       intervalMinutes,
+      schedule,
       rollingDays: row?.rollingDays ?? (intervalMinutes ? 1 : 7),
       timezone: row?.timezone ?? TIMEZONE,
       lastAppliedAt: row?.lastAppliedAt?.toISOString() ?? null,
-      nextRunAt: getNextRunAt(timeOfDay, enabled, intervalMinutes),
+      nextRunAt: getNextRunAt(schedule, enabled),
     }
   })
 }
@@ -214,25 +272,28 @@ export async function applySyncSchedule(
 
   const queue = await getSyncQueue()
   await queue.removeJobScheduler(legacySchedulerId(wbAccountId, kind)).catch(() => false)
+  const prefix = schedulerPrefix(wbAccountId, kind)
+  const existingSchedulers = await queue.getJobSchedulers(0, -1, true)
+  for (const scheduler of existingSchedulers) {
+    if (scheduler.key === prefix || scheduler.key.startsWith(`${prefix}:`)) {
+      await queue.removeJobScheduler(scheduler.key).catch(() => false)
+    }
+  }
 
-  if (!row.enabled) {
-    await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
-  } else {
-    const repeat = row.intervalMinutes
-      ? { every: row.intervalMinutes * 60_000 }
-      : {
-          pattern: patternFromTime(row.timeOfDay),
-          tz: row.timezone,
-        }
-    await queue.upsertJobScheduler(
-      schedulerId(wbAccountId, kind),
-      repeat,
-      {
-        name: kind,
-        data: buildJobData(wbAccountId, kind, row.rollingDays),
-        opts: DEFAULT_SYNC_JOB_OPTIONS,
-      },
-    )
+  const schedule = normalizeSyncSchedule(kind, row.schedule, row.timeOfDay, row.intervalMinutes)
+
+  if (row.enabled) {
+    for (const rule of buildFlexibleScheduleRules(schedule, syncScheduleValidationOptions())) {
+      await queue.upsertJobScheduler(
+        schedulerId(wbAccountId, kind, rule.idSuffix),
+        { pattern: rule.pattern, tz: row.timezone },
+        {
+          name: kind,
+          data: buildJobData(wbAccountId, kind, row.rollingDays, rule.scheduledTime, schedule),
+          opts: DEFAULT_SYNC_JOB_OPTIONS,
+        },
+      )
+    }
   }
 
   const updated = await prisma.syncScheduleSetting.update({
@@ -246,17 +307,24 @@ export async function applySyncSchedule(
     enabled: updated.enabled,
     timeOfDay: updated.timeOfDay,
     intervalMinutes: updated.intervalMinutes,
+    schedule,
     rollingDays: updated.rollingDays,
     timezone: updated.timezone,
     lastAppliedAt: updated.lastAppliedAt?.toISOString() ?? null,
-    nextRunAt: getNextRunAt(updated.timeOfDay, updated.enabled, updated.intervalMinutes),
+    nextRunAt: getNextRunAt(schedule, updated.enabled),
   }
 }
 
 export async function removeAllSyncSchedulesForAccount(wbAccountId: string): Promise<void> {
   const queue = await getSyncQueue()
   for (const kind of SCHEDULED_SYNC_KINDS) {
-    await queue.removeJobScheduler(schedulerId(wbAccountId, kind)).catch(() => false)
+    const prefix = schedulerPrefix(wbAccountId, kind)
+    const existingSchedulers = await queue.getJobSchedulers(0, -1, true)
+    for (const scheduler of existingSchedulers) {
+      if (scheduler.key === prefix || scheduler.key.startsWith(`${prefix}:`)) {
+        await queue.removeJobScheduler(scheduler.key).catch(() => false)
+      }
+    }
     await queue.removeJobScheduler(legacySchedulerId(wbAccountId, kind)).catch(() => false)
   }
 }
@@ -265,13 +333,9 @@ export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promis
   if (!SCHEDULED_SYNC_KINDS.includes(input.kind)) {
     throw new Error('Этот тип синхронизации не запускается по расписанию')
   }
-  if (input.intervalMinutes === null) validateTimeOfDay(input.timeOfDay)
-  if (
-    input.intervalMinutes !== null &&
-    (!Number.isInteger(input.intervalMinutes) || input.intervalMinutes < 1 || input.intervalMinutes > 1_440)
-  ) {
-    throw new Error('Интервал должен быть от 1 до 1440 минут')
-  }
+  const schedule = validateFlexibleSchedule(input.schedule, syncScheduleValidationOptions())
+  const timeOfDay = primaryFlexibleTime(schedule, syncScheduleValidationOptions())
+  const intervalMinutes = schedule.timeMode === 'interval' ? schedule.interval.everyMinutes : null
   if (input.rollingDays < 1 || input.rollingDays > 30) {
     throw new Error('Период должен быть от 1 до 30 дней')
   }
@@ -287,15 +351,17 @@ export async function updateSyncSchedule(input: UpdateSyncScheduleInput): Promis
       wbAccountId: input.wbAccountId,
       kind: KIND_TO_PRISMA[input.kind],
       enabled: input.enabled,
-      timeOfDay: input.timeOfDay,
-      intervalMinutes: input.intervalMinutes,
+      timeOfDay,
+      intervalMinutes,
+      schedule: scheduleJson(schedule),
       rollingDays: input.rollingDays,
       timezone: TIMEZONE,
     },
     update: {
       enabled: input.enabled,
-      timeOfDay: input.timeOfDay,
-      intervalMinutes: input.intervalMinutes,
+      timeOfDay,
+      intervalMinutes,
+      schedule: scheduleJson(schedule),
       rollingDays: input.rollingDays,
       timezone: TIMEZONE,
     },

@@ -9,38 +9,55 @@ export type AutomationWorkflowKind =
 export type AutomationRunStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 export type AutomationRunSource = 'manual' | 'scheduled'
 
-export type AutomationScheduleCadence = 'daily' | 'weekly' | 'every-n-weeks' | 'monthly'
-export type AutomationScheduleTimeMode = 'times' | 'interval'
+import type { FlexibleSchedule, ScheduleCadence, ScheduleTimeMode } from '@/types/schedules'
 
-export interface AutomationSchedule {
-  cadence: AutomationScheduleCadence
-  timeMode: AutomationScheduleTimeMode
-  times: string[]
-  interval: {
-    startTime: string
-    endTime: string
-    everyMinutes: number
-  }
-  weekdays: number[]
-  weekInterval: number
-  anchorDate: string
-  monthDays: number[]
-}
+export type AutomationScheduleCadence = ScheduleCadence
+export type AutomationScheduleTimeMode = ScheduleTimeMode
+export type AutomationSchedule = FlexibleSchedule
 
-export interface MorningWbReportConfig {
+export interface AutomationGoogleSheetConfig {
   spreadsheetId: string
   spreadsheetUrl: string
+  sheetTabs: Record<string, string>
+}
+
+export interface AutomationSheetRoleDefinition {
+  role: string
+  title: string
+  description: string
+  required: boolean
+  defaultSheetName: string
+}
+
+export interface AutomationSheetTemplateDefinition {
+  roles: AutomationSheetRoleDefinition[]
+  accountTargetMode: 'sheet' | 'label'
+  accountTargetLabel: string
+  accountTargetDescription: string
+  showTechnicalKeys: boolean
+}
+
+export interface AutomationSpreadsheetTab {
+  sheetId: number
+  title: string
+  index: number
+  rowCount: number
+  columnCount: number
+}
+
+export interface AutomationSpreadsheetInspection {
+  spreadsheetId: string
+  title: string
+  locale: string | null
+  timeZone: string | null
+  tabs: AutomationSpreadsheetTab[]
+}
+
+export interface MorningWbReportConfig extends AutomationGoogleSheetConfig {
   schedule: AutomationSchedule
 }
 
-export interface FbsMovementSheetConfig {
-  spreadsheetId: string
-  spreadsheetUrl: string
-  operationsSheetName: string
-  controlSheetName: string
-  summarySheetName: string
-  referenceSheetName: string
-  wbStockSheetName: string
+export interface FbsMovementSheetConfig extends AutomationGoogleSheetConfig {
   startDate: string
   accountKeys: Record<string, string>
   productAliases: Record<string, string>
@@ -90,11 +107,7 @@ export interface UpdateFbsMovementSheetWorkflowInput {
   enabled: boolean
   schedule: AutomationSchedule
   spreadsheetUrl: string
-  operationsSheetName: string
-  controlSheetName: string
-  summarySheetName: string
-  referenceSheetName: string
-  wbStockSheetName: string
+  sheetTabs: Record<string, string>
   startDate: string
   accounts: Array<{
     wbAccountId: string

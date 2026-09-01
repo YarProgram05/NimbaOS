@@ -8,15 +8,18 @@ import {
   getAutomationCatalog,
   getFbsMovementSheetWorkflow,
   getMorningWbReportWorkflow,
+  extractSpreadsheetId,
   updateFbsMovementSheetWorkflow,
   updateMorningWbReportWorkflow,
 } from '@/lib/automations/workflows'
 import { listAutomationRuns, enqueueAutomationRun } from '@/lib/automations/runs'
 import { morningWbReportPayload } from '@/lib/services/morning-wb-report-workflow'
 import { fbsMovementSheetPayload } from '@/lib/services/fbs-movement-sheet-workflow'
+import { getSpreadsheetMetadata } from '@/lib/google/sheets'
 import {
   AUTOMATION_WORKFLOW_KINDS,
   type FbsMovementSheetWorkflowRow,
+  type AutomationSpreadsheetInspection,
   type UpdateFbsMovementSheetWorkflowInput,
   type UpdateMorningWbReportWorkflowInput,
 } from '@/types/automations'
@@ -66,6 +69,35 @@ export async function getAutomationCatalogAction(): Promise<ActionResult<Automat
     return { success: true, data: await getAutomationCatalog() }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Ошибка загрузки автоматизаций' }
+  }
+}
+
+export async function inspectAutomationSpreadsheetAction(
+  spreadsheetUrl: string,
+): Promise<ActionResult<AutomationSpreadsheetInspection>> {
+  try {
+    await requireSession()
+    const spreadsheetId = extractSpreadsheetId(spreadsheetUrl)
+    const metadata = await getSpreadsheetMetadata(spreadsheetId)
+    return {
+      success: true,
+      data: {
+        spreadsheetId,
+        title: metadata.properties?.title?.trim() || 'Google Sheet',
+        locale: metadata.properties?.locale ?? null,
+        timeZone: metadata.properties?.timeZone ?? null,
+        tabs: (metadata.sheets ?? []).map((sheet, fallbackIndex) => ({
+          sheetId: sheet.properties?.sheetId ?? fallbackIndex,
+          title: sheet.properties?.title?.trim() || `Вкладка ${fallbackIndex + 1}`,
+          index: sheet.properties?.index ?? fallbackIndex,
+          rowCount: sheet.properties?.gridProperties?.rowCount ?? 0,
+          columnCount: sheet.properties?.gridProperties?.columnCount ?? 0,
+        })).sort((left, right) => left.index - right.index),
+      },
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Не удалось прочитать Google Sheet'
+    return { success: false, error: `Проверка Google Sheet не выполнена: ${message}` }
   }
 }
 

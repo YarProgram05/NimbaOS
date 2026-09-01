@@ -54,7 +54,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
     TREND_SERIES.some((series) => point[series.key] !== null)
   )
   const showDistributions = variant === 'compact'
-  const chartHeightClass = variant === 'full' ? 'h-[432px]' : 'h-[260px]'
+  const chartHeightClass = variant === 'full' ? 'h-[432px]' : 'h-[260px] xl:h-full xl:min-h-[238px]'
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setIsReady(true))
@@ -71,8 +71,10 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
   }
 
   return (
-    <div className={showDistributions ? 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]' : 'min-h-0'}>
-      <div className={`${chartHeightClass} min-w-[1px] rounded-md border bg-secondary/25 p-3`}>
+    <div className={showDistributions
+      ? 'grid gap-2 [@media(min-height:1000px)]:gap-3 lg:grid-cols-[minmax(0,1fr)_220px] xl:h-full xl:min-h-[238px]'
+      : 'min-h-0'}>
+      <div className={`${chartHeightClass} min-w-[1px] rounded-md border bg-secondary/25 p-2 [@media(min-height:1000px)]:p-3`}>
         <div className="flex h-full min-w-[1px] flex-col">
           <TrendLegend hiddenSeries={hiddenSeries} onToggle={toggleSeries} />
           <div ref={trendRef} className="min-h-0 min-w-[1px] flex-1">
@@ -177,7 +179,7 @@ export function DashboardOverviewChartsPanel({ charts, variant = 'compact' }: Da
       </div>
 
       {showDistributions && (
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+        <div className="grid min-h-0 grid-rows-3 gap-2 [@media(min-height:1000px)]:gap-3 sm:grid-cols-3 sm:grid-rows-1 lg:grid-cols-1 lg:grid-rows-3">
           <DistributionChart title="Финансы" items={charts.finance} valueKind="money" isReady={isReady} />
           <DistributionChart title="Данные" items={charts.dataQuality} valueKind="count" isReady={isReady} />
           <DistributionChart title="Риски" items={charts.risks} valueKind="count" isReady={isReady} />
@@ -235,7 +237,7 @@ function DistributionChart({
   const total = visibleItems.reduce((sum, item) => sum + item.value, 0)
 
   return (
-    <div className="h-[74px] min-w-[1px] rounded-md border bg-card/70 p-2">
+    <div className="h-full min-h-[74px] min-w-[1px] rounded-md border bg-card/70 p-2">
       <div className="grid h-full grid-cols-[58px_minmax(0,1fr)] items-center gap-2">
         <div className="relative h-[54px] w-[58px]">
           {isReady && total > 0 ? (

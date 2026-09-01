@@ -1,3 +1,5 @@
+import type { FlexibleSchedule } from '@/types/schedules'
+
 export const SYNC_JOB_KINDS = {
   PRODUCTS_REFRESH: 'products.refresh',
   REPORTS_PERIOD: 'reports.period',
@@ -70,6 +72,7 @@ export interface SyncScheduleRow {
   enabled: boolean
   timeOfDay: string
   intervalMinutes: number | null
+  schedule: FlexibleSchedule
   rollingDays: number
   timezone: string
   lastAppliedAt: string | null
@@ -82,5 +85,6 @@ export interface UpdateSyncScheduleInput {
   enabled: boolean
   timeOfDay: string
   intervalMinutes: number | null
+  schedule: FlexibleSchedule
   rollingDays: number
 }

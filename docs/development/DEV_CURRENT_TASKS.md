@@ -32,6 +32,38 @@
 
 ## Done Recently
 
+- ID: TASK-DASHBOARD-FULLHD-FIT
+  Status: Done locally
+  Priority: High
+  Description: Made the main dashboard height-responsive at 100% zoom. At desktop width the page fills available height and the central chart/focus row grows in fullscreen or shrinks in a normal Chrome window. A height breakpoint reduces only gaps/padding below 1000 px without hiding data; below `xl`, panels use natural stacked height so charts and cards cannot overlap. The full analytics chart is unchanged.
+  Next step: Include in the normal owner-confirmed deployment.
+  Related files: `src/app/(dashboard)/page.tsx`, `src/app/(dashboard)/dashboard-overview-charts.tsx`.
+  Risks: Narrow and genuinely short viewports scroll vertically by design; horizontal overflow and panel overlap remain absent.
+
+- ID: TASK-SYNC-SCHEDULE-SETTINGS-REDESIGN
+  Status: Done locally
+  Priority: High
+  Description: Replaced the wide eleven-row schedule form on `/sync` with a responsive grouped catalog and a single right-side task editor. Every sync job now offers the same two time modes: one or several exact times, or an interval inside a start/end window. The only contextual distinction is data semantics: snapshots hide rolling depth while period jobs label it clearly. The editor also includes selected weekdays, recommended reset, next-three-run preview and collision warnings.
+  Next step: Deploy code and migration through the normal owner-confirmed release path. Existing production values remain legacy-compatible until each task is normally saved; production schedulers were not reapplied by this local implementation.
+  Related files: `src/app/(dashboard)/sync/sync-client.tsx`, `src/app/(dashboard)/sync/sync-schedule-drawer.tsx`, `src/components/flexible-schedule-editor.tsx`, `src/lib/sync/catalog.ts`, `src/lib/sync/schedules.ts`, `prisma/migrations/20260901143000_flexible_sync_schedules/`.
+  Risks: Saving an enabled task replaces its BullMQ scheduler set immediately. A five-minute window expands into exact clock-time schedulers; the sync worker remains concurrency 1, so UI collision warnings are advisory and overlapping jobs execute sequentially. Production migration/application remains pending normal deployment.
+
+- ID: TASK-AUTOMATION-TABLE-SETTINGS-TEMPLATE
+  Status: Done locally
+  Priority: High
+  Description: Replaced workflow-specific Google Sheet controls with one responsive metadata-driven template editor. FBS tab names now use stable semantic role mappings, existing legacy JSON remains readable, workbook tabs can be scanned and selected, every detected tab is visibly classified as used or unused, cabinet settings share one layout, technical keys are advanced-only, and known invalid mappings block save.
+  Next step: Deploy through the normal release path. On first production edit, verify the workbook structure before saving; the normal save will migrate that workflow's JSON config to `sheetTabs` without a Prisma migration.
+  Related files: `src/app/(dashboard)/automations/google-sheet-template-editor.tsx`, `src/lib/automations/sheet-template.ts`, `src/types/automations.ts`, `src/lib/automations/workflows.ts`, `src/lib/services/fbs-movement-sheet-workflow.ts`.
+  Risks: A workbook scan is read-only and does not save. Manual names remain available for recovery, but a detected missing or duplicate tab disables save. Do not remove stable semantic roles: they are the workflow contract, not visible workbook names.
+
+- ID: TASK-RUN-HISTORY-UNIFIED-CELLS
+  Status: Done
+  Priority: Medium
+  Description: Unified `/automations` run history and `/sync` task history around a shared responsive full-width table with percentage-based columns and no horizontal overflow. All informational cells are 64 px/two lines while collapsed and toggle to their complete text on click; both page containers now use the same width.
+  Next step: After normal deployment, visually confirm the same behavior in production with the normal operator viewport before starting the separate automation-settings templating task.
+  Related files: `src/components/run-history-table.tsx`, `src/app/(dashboard)/automations/automations-client.tsx`, `src/app/(dashboard)/sync/sync-client.tsx`.
+  Risks: Expanding an exceptionally long error intentionally increases only that row's height; the sync delete button remains a distinct non-expandable action control. Very narrow mobile widths may still require a later dedicated card/list representation because ten desktop columns cannot remain equally informative indefinitely.
+
 - ID: BUG-032-AUTOMATIONS-CI-PRERENDER
   Status: Done
   Priority: High

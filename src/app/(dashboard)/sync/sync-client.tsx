@@ -5,13 +5,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
-import { RefreshCw, RotateCw, Trash2 } from 'lucide-react'
+import { CalendarClock, RefreshCw, RotateCw, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { RunHistoryPager, RunHistorySortableHead } from '@/components/run-history-table'
+import {
+  RUN_HISTORY_TABLE_CLASS_NAME,
+  RunHistoryCell,
+  RunHistoryColumnLayout,
+  RunHistoryPager,
+  RunHistorySortableHead,
+} from '@/components/run-history-table'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,6 +50,14 @@ import {
   type SyncScheduleRow,
 } from '@/types/sync'
 import type { RunHistoryPage, RunHistoryPageSize } from '@/types/run-history'
+import { SyncScheduleDrawer } from './sync-schedule-drawer'
+import {
+  SYNC_SCHEDULE_CATEGORIES,
+  SYNC_SCHEDULE_DEFINITIONS,
+  SYNC_ALLOWED_TIME_MODES,
+  getSyncScheduleDefinition,
+} from '@/lib/sync/catalog'
+import { formatFlexibleSchedule } from '@/lib/schedules/flexible-schedule'
 
 interface AccountRow {
   id: string
@@ -103,6 +117,7 @@ const MANUAL_JOBS: SyncJobKind[] = [
 ]
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow'
+const RUN_HISTORY_COLUMN_WIDTHS = [14, 9, 11, 10, 11, 11, 10, 8, 10, 6] as const
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'
@@ -129,6 +144,14 @@ function formatNextRun(value: string | null): string {
     parts.find((item) => item.type === type)?.value ?? ''
 
   return `${part('day')} ${part('month')} ${part('hour')}:${part('minute')}`.trim()
+}
+
+function formatSyncScheduleSummary(schedule: SyncScheduleRow): string {
+  return formatFlexibleSchedule(schedule.schedule, {
+    allowedCadences: ['daily', 'weekly'],
+    allowedTimeModes: SYNC_ALLOWED_TIME_MODES,
+    maxRunsPerDay: 288,
+  })
 }
 
 export function SyncClient({
@@ -162,12 +185,17 @@ export function SyncClient({
   const [schedules, setSchedules] = useState(initialSchedules)
   const [pendingKind, setPendingKind] = useState<SyncJobKind | null>(null)
   const [savingSchedule, setSavingSchedule] = useState<SyncJobKind | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<SyncScheduleRow | null>(null)
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null)
   const [isRefreshing, startRefresh] = useTransition()
   const jobsRequestId = useRef(0)
   const skipInitialJobFilterLoad = useRef(true)
   const jobs = jobsPage.rows
   const hasActiveJobs = jobs.some((job) => job.status === 'QUEUED' || job.status === 'RUNNING')
+  const enabledSchedules = schedules.filter((schedule) => schedule.enabled)
+  const nearestSchedule = enabledSchedules
+    .filter((schedule) => schedule.nextRunAt)
+    .sort((left, right) => new Date(left.nextRunAt!).getTime() - new Date(right.nextRunAt!).getTime())[0]
 
   const loadJobs = useCallback(async (page: number, pageSize: RunHistoryPageSize = jobsPage.pageSize) => {
     const requestId = ++jobsRequestId.current
@@ -210,6 +238,7 @@ export function SyncClient({
   }
 
   useEffect(() => {
+    setScheduleDraft(null)
     if (!selectedAccountId) {
       setSchedules([])
       return
@@ -308,7 +337,14 @@ export function SyncClient({
     )
   }
 
-  async function saveSchedule(schedule: SyncScheduleRow) {
+  function openSchedule(kind: SyncJobKind) {
+    const schedule = schedules.find((item) => item.kind === kind)
+    if (schedule) setScheduleDraft(structuredClone(schedule))
+  }
+
+  async function saveSchedule() {
+    const schedule = scheduleDraft
+    if (!schedule) return
     if (!selectedAccountId) {
       toast.error('Кабинет не выбран')
       return
@@ -321,6 +357,7 @@ export function SyncClient({
       enabled: schedule.enabled,
       timeOfDay: schedule.timeOfDay,
       intervalMinutes: schedule.intervalMinutes,
+      schedule: schedule.schedule,
       rollingDays: schedule.rollingDays,
     })
     setSavingSchedule(null)
@@ -331,11 +368,12 @@ export function SyncClient({
     }
 
     patchSchedule(schedule.kind, result.data)
+    setScheduleDraft(null)
     toast.success('Расписание сохранено')
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Синхронизация</h1>
@@ -395,113 +433,81 @@ export function SyncClient({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Расписание</CardTitle>
-          <CardDescription>
-            Автоматические read-only синхронизации запускаются по московскому времени. Сохранение сразу обновляет расписание в очереди.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[820px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Тип</TableHead>
-                  <TableHead>Вкл.</TableHead>
-                  <TableHead>Время / интервал</TableHead>
-                  <TableHead>Период</TableHead>
-                  <TableHead>Следующий запуск</TableHead>
-                  <TableHead className="text-right">Действие</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {schedules.map((schedule) => (
-                  <TableRow key={schedule.kind}>
-                    <TableCell className="font-medium">{JOB_LABELS[schedule.kind]}</TableCell>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={schedule.enabled}
-                        disabled={!canEnqueue}
-                        onChange={(event) => patchSchedule(schedule.kind, { enabled: event.target.checked })}
-                        className="h-4 w-4"
-                        aria-label="Включить расписание"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {schedule.intervalMinutes === null ? (
-                        <Input
-                          type="time"
-                          value={schedule.timeOfDay}
-                          disabled={!canEnqueue}
-                          onChange={(event) => patchSchedule(schedule.kind, { timeOfDay: event.target.value })}
-                          className="w-32"
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min={1}
-                            max={1440}
-                            value={schedule.intervalMinutes}
-                            disabled={!canEnqueue}
-                            onChange={(event) =>
-                              patchSchedule(schedule.kind, {
-                                intervalMinutes: Number(event.target.value) || 1,
-                              })
-                            }
-                            className="w-24"
-                          />
-                          <span className="text-sm text-muted-foreground">мин.</span>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={30}
-                          value={schedule.rollingDays}
-                          disabled={
-                            !canEnqueue ||
-                            schedule.kind === SYNC_JOB_KINDS.PRODUCTS_REFRESH ||
-                            schedule.kind === SYNC_JOB_KINDS.ADVERTISING_CAMPAIGNS ||
-                            schedule.kind === SYNC_JOB_KINDS.STOCKS_CURRENT ||
-                            schedule.kind === SYNC_JOB_KINDS.FBS_STOCKS_CURRENT
-                          }
-                          onChange={(event) =>
-                            patchSchedule(schedule.kind, {
-                              rollingDays: Number(event.target.value) || 1,
-                            })
-                          }
-                          className="w-20"
-                        />
-                        <span className="text-sm text-muted-foreground">дней</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{formatNextRun(schedule.nextRunAt)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!canEnqueue || savingSchedule !== null}
-                        onClick={() => saveSchedule(schedule)}
-                      >
-                        {savingSchedule === schedule.kind ? 'Сохраняем...' : 'Сохранить'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {schedules.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-20 text-center text-muted-foreground">
-                      Выберите кабинет, чтобы настроить расписание.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Расписание</CardTitle>
+              <CardDescription className="mt-1">
+                Выберите задачу и настройте её отдельно. Все времена указаны по Москве.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm">
+              <Badge variant="outline">Включено: {enabledSchedules.length} из {schedules.length}</Badge>
+              {nearestSchedule?.nextRunAt && (
+                <Badge variant="secondary">
+                  Ближайший: {getSyncScheduleDefinition(nearestSchedule.kind).title} · {formatNextRun(nearestSchedule.nextRunAt)}
+                </Badge>
+              )}
+            </div>
           </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {SYNC_SCHEDULE_CATEGORIES.map((category) => {
+            const definitions = SYNC_SCHEDULE_DEFINITIONS.filter((definition) => definition.category === category.id)
+            return (
+              <section key={category.id} aria-labelledby={`sync-category-${category.id}`}>
+                <div className="mb-3">
+                  <h3 id={`sync-category-${category.id}`} className="text-sm font-semibold">{category.title}</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{category.description}</p>
+                </div>
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {definitions.map((definition) => {
+                    const schedule = schedules.find((item) => item.kind === definition.kind)
+                    if (!schedule) return null
+                    return (
+                      <div key={definition.kind} className="flex min-w-0 flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{definition.title}</p>
+                            <Badge variant={schedule.enabled ? 'default' : 'secondary'}>
+                              {schedule.enabled ? 'Включено' : 'Выключено'}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">{definition.description}</p>
+                          <div className="mt-3 flex min-w-0 flex-col gap-1.5 text-sm">
+                            <div className="flex min-w-0 items-start gap-2">
+                              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 break-words">{formatSyncScheduleSummary(schedule)}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {definition.dataDepthMode === 'rolling'
+                                ? `Обновляет последние ${schedule.rollingDays} дн. · `
+                                : 'Текущий снимок · '}
+                              Следующий запуск: {formatNextRun(schedule.nextRunAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={!selectedAccountId}
+                          onClick={() => openSchedule(schedule.kind)}
+                        >
+                          <Settings2 className="mr-2 h-4 w-4" /> Настроить
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )
+          })}
+          {schedules.length === 0 && (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Выберите кабинет, чтобы настроить расписание.
+            </div>
+          )}
           {!canEnqueue && (
             <p className="mt-3 text-sm text-muted-foreground">
               У вашей роли доступен только просмотр расписания.
@@ -510,10 +516,23 @@ export function SyncClient({
         </CardContent>
       </Card>
 
+      <SyncScheduleDrawer
+        draft={scheduleDraft}
+        allSchedules={schedules}
+        open={scheduleDraft !== null}
+        saving={scheduleDraft !== null && savingSchedule === scheduleDraft.kind}
+        disabled={!canEnqueue}
+        onOpenChange={(open) => { if (!open && savingSchedule === null) setScheduleDraft(null) }}
+        onChange={setScheduleDraft}
+        onSave={() => void saveSchedule()}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Последние задачи</CardTitle>
-          <CardDescription>Полная история из базы с фильтрами, сортировкой и постраничным просмотром.</CardDescription>
+          <CardDescription>
+            Полная история из базы с фильтрами, сортировкой и постраничным просмотром. Нажмите на ячейку, чтобы раскрыть обрезанный текст.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -574,7 +593,8 @@ export function SyncClient({
             </div>
           </div>
           <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[1200px]">
+            <Table className={RUN_HISTORY_TABLE_CLASS_NAME}>
+              <RunHistoryColumnLayout widths={RUN_HISTORY_COLUMN_WIDTHS} />
               <TableHeader>
                 <TableRow>
                   <RunHistorySortableHead label="Тип" sortKey="kind" activeSortKey={jobSort.sortBy} direction={jobSort.sortDirection} onSort={sortJobs} />
@@ -592,19 +612,17 @@ export function SyncClient({
               <TableBody>
                 {jobs.map((job) => (
                   <TableRow key={job.id}>
-                    <TableCell className="font-medium">{JOB_LABELS[job.kind]}</TableCell>
-                    <TableCell>
+                    <RunHistoryCell contentClassName="font-medium">{JOB_LABELS[job.kind]}</RunHistoryCell>
+                    <RunHistoryCell>
                       <Badge variant={STATUS_VARIANTS[job.status]}>{STATUS_LABELS[job.status]}</Badge>
-                    </TableCell>
-                    <TableCell>{job.wbAccountName ?? '—'}</TableCell>
-                    <TableCell>{job.source === 'scheduled' ? 'Расписание' : job.source === 'manual' ? 'Ручной' : '—'}</TableCell>
-                    <TableCell>{job.period ?? '—'}</TableCell>
-                    <TableCell>{formatDateTime(job.createdAt)}</TableCell>
-                    <TableCell>{formatDuration(job.durationMs)}</TableCell>
-                    <TableCell>{job.attempts}</TableCell>
-                    <TableCell className="max-w-[280px] truncate text-destructive">
-                      {job.error ?? '—'}
-                    </TableCell>
+                    </RunHistoryCell>
+                    <RunHistoryCell>{job.wbAccountName ?? '—'}</RunHistoryCell>
+                    <RunHistoryCell>{job.source === 'scheduled' ? 'Расписание' : job.source === 'manual' ? 'Ручной' : '—'}</RunHistoryCell>
+                    <RunHistoryCell>{job.period ?? '—'}</RunHistoryCell>
+                    <RunHistoryCell>{formatDateTime(job.createdAt)}</RunHistoryCell>
+                    <RunHistoryCell>{formatDuration(job.durationMs)}</RunHistoryCell>
+                    <RunHistoryCell>{job.attempts}</RunHistoryCell>
+                    <RunHistoryCell contentClassName="text-destructive">{job.error ?? '—'}</RunHistoryCell>
                     <TableCell className="text-right">
                       {canEnqueue && (
                         <Button

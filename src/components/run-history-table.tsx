@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, type ReactNode } from 'react'
 import { ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,8 +10,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { TableHead } from '@/components/ui/table'
+import { TableCell, TableHead } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import type { RunHistoryPageSize, RunHistorySortDirection } from '@/types/run-history'
+
+export const RUN_HISTORY_TABLE_CLASS_NAME = 'w-full table-fixed [&_th]:overflow-hidden [&_th]:px-2 [&_th]:text-[10px] [&_th]:tracking-normal [&_th]:[overflow-wrap:anywhere]'
+
+export function RunHistoryColumnLayout({ widths }: { widths: readonly number[] }) {
+  return (
+    <colgroup>
+      {widths.map((width, index) => (
+        <col key={`${index}-${width}`} style={{ width: `${width}%` }} />
+      ))}
+    </colgroup>
+  )
+}
+
+export function RunHistoryCell({
+  children,
+  className,
+  contentClassName,
+}: {
+  children: ReactNode
+  className?: string
+  contentClassName?: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <TableCell className={cn('h-16 p-0 align-top', className)}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        title={expanded ? 'Свернуть ячейку' : 'Показать содержимое полностью'}
+        onClick={() => setExpanded((current) => !current)}
+        className={cn(
+          'flex min-h-16 w-full cursor-pointer items-center px-3 py-2 text-left leading-5 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+          expanded ? 'h-auto items-start' : 'h-16 overflow-hidden',
+          contentClassName,
+        )}
+      >
+        <span
+          className={cn(
+            'block min-w-0 w-full [overflow-wrap:anywhere]',
+            expanded ? 'whitespace-pre-wrap' : 'line-clamp-2',
+          )}
+        >
+          {children}
+        </span>
+      </button>
+    </TableCell>
+  )
+}
 
 export function RunHistorySortableHead<TSortKey extends string>({
   label,
@@ -36,11 +87,11 @@ export function RunHistorySortableHead<TSortKey extends string>({
     >
       <button
         type="button"
-        className="inline-flex items-center gap-1 whitespace-nowrap font-medium hover:text-foreground"
+        className="flex w-full min-w-0 items-center gap-1 overflow-hidden text-left font-medium hover:text-foreground"
         onClick={() => onSort(sortKey)}
       >
-        {label}
-        <ChevronsUpDown className={`h-3.5 w-3.5 ${isActive ? 'opacity-100' : 'opacity-40'}`} />
+        <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+        <ChevronsUpDown className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'opacity-100' : 'opacity-40'}`} />
       </button>
     </TableHead>
   )

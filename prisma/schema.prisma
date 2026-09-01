@@ -332,6 +332,7 @@ model SyncScheduleSetting {
   enabled         Boolean     @default(true)
   timeOfDay       String
   intervalMinutes Int?
+  schedule        Json?
   rollingDays     Int         @default(7)
   timezone        String      @default("Europe/Moscow")
   lastAppliedAt   DateTime?

@@ -84,8 +84,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   return (
-    <div className="dashboard-page gap-3">
-      <section className="old-money-panel rounded-md p-3 sm:p-4">
+    <div className="dashboard-page h-auto !gap-2 [@media(min-height:1000px)]:!gap-3 xl:h-full">
+      <section className="old-money-panel shrink-0 rounded-md p-3 sm:p-4 [@media(max-height:999px)]:!p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -122,15 +122,15 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <KpiCard metric={summary.kpis.buyouts} href={chartHref} />
       </section>
 
-      <section className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <section className="old-money-panel min-w-0 rounded-md p-3 sm:p-4">
+      <section className="grid min-h-0 gap-2 [@media(min-height:1000px)]:gap-3 xl:flex-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <section className="old-money-panel flex min-h-0 min-w-0 flex-col rounded-md p-3 sm:p-4 [@media(max-height:999px)]:!p-3">
           <PanelHeader
             label={summary.overviewCharts.granularity === 'week' ? 'Динамика по неделям' : 'Динамика по дням'}
             title="Выручка, прибыль, заказы и реклама"
             href={chartHref}
             icon={<LineChart className="h-5 w-5 text-primary" />}
           />
-          <div className="mt-3">
+          <div className="mt-2 min-h-0 [@media(min-height:1000px)]:mt-3 xl:flex-1">
             <DashboardOverviewChartsPanel charts={summary.overviewCharts} />
           </div>
         </section>
@@ -305,7 +305,7 @@ function ActionCenterPanel({ summary, syncHref }: { summary: DashboardSummary; s
   const hiddenCount = Math.max(0, summary.recommendations.length - visibleRecommendations.length)
 
   return (
-    <section className="old-money-panel rounded-md p-3 sm:p-4">
+    <section className="old-money-panel rounded-md p-3 sm:p-4 [@media(max-height:999px)]:!p-3 xl:h-full">
       <PanelHeader
         label="Фокус"
         title="Что проверить сейчас"

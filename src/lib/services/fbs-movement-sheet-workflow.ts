@@ -35,6 +35,13 @@ import {
   type FbsWbStockSnapshot,
 } from '@/lib/automations/fbs-sheet'
 import { AUTOMATION_WORKFLOW_KINDS, type FbsMovementSheetConfig } from '@/types/automations'
+import {
+  FBS_SHEET_ROLE_DEFINITIONS,
+  FBS_SHEET_ROLES,
+  getRequiredSheetTab,
+  normalizeFbsSheetTabs,
+  validateSheetTabs,
+} from '@/lib/automations/sheet-template'
 
 const MOSCOW_TIMEZONE = 'Europe/Moscow'
 const CONTROL_HEADER_ROW = 4
@@ -150,17 +157,32 @@ function previousMoscowDate(now = new Date()) {
 }
 
 function configFromWorkflow(value: Prisma.JsonValue): FbsMovementSheetConfig {
-  const config = value as unknown as Partial<FbsMovementSheetConfig>
-  if (!config.spreadsheetId || !config.operationsSheetName || !config.controlSheetName || !config.wbStockSheetName || !config.startDate) {
+  const raw = value as unknown as Partial<FbsMovementSheetConfig>
+  const sheetTabs = normalizeFbsSheetTabs(value, { withDefaults: false })
+  if (!raw.spreadsheetId || !raw.startDate) {
     throw new Error('Настройки FBS-автоматизации заполнены не полностью')
   }
-  return config as FbsMovementSheetConfig
+  return {
+    ...raw,
+    sheetTabs: validateSheetTabs(sheetTabs, FBS_SHEET_ROLE_DEFINITIONS),
+  } as FbsMovementSheetConfig
+}
+
+function fbsSheetNames(config: FbsMovementSheetConfig) {
+  return {
+    operations: getRequiredSheetTab(config, FBS_SHEET_ROLES.OPERATIONS),
+    control: getRequiredSheetTab(config, FBS_SHEET_ROLES.CONTROL),
+    summary: getRequiredSheetTab(config, FBS_SHEET_ROLES.SUMMARY),
+    reference: getRequiredSheetTab(config, FBS_SHEET_ROLES.REFERENCE),
+    wbStock: getRequiredSheetTab(config, FBS_SHEET_ROLES.WB_STOCK),
+  }
 }
 
 function validateFormulaSentinel(values: unknown[][], config: FbsMovementSheetConfig) {
+  const sheetNames = fbsSheetNames(config)
   const formula = normalize(values[0]?.[0])
-  if (!formula.startsWith('=') || !formula.includes(config.operationsSheetName) || !formula.includes('Приход')) {
-    throw new Error(`${config.summarySheetName}!C14 должна содержать формулу прихода; загрузка остановлена`)
+  if (!formula.startsWith('=') || !formula.includes(sheetNames.operations) || !formula.includes('Приход')) {
+    throw new Error(`${sheetNames.summary}!C14 должна содержать формулу прихода; загрузка остановлена`)
   }
 }
 
@@ -172,13 +194,7 @@ function validateSpreadsheetContract(params: {
     throw new Error(`Часовой пояс таблицы должен быть ${MOSCOW_TIMEZONE}`)
   }
   const titles = new Set(params.metadata.sheets?.map((sheet) => sheet.properties?.title).filter(Boolean))
-  for (const title of [
-    params.config.operationsSheetName,
-    params.config.controlSheetName,
-    params.config.summarySheetName,
-    params.config.referenceSheetName,
-    params.config.wbStockSheetName,
-  ]) {
+  for (const title of Object.values(fbsSheetNames(params.config))) {
     if (!titles.has(title)) throw new Error(`В Google Sheet нет вкладки «${title}»`)
   }
 }
@@ -411,13 +427,14 @@ function validateSummaryStockFormulas(params: {
   config: FbsMovementSheetConfig
   accounts: Array<{ cabinetLabel: string; technicalKey: string }>
 }) {
+  const wbStockSheetName = fbsSheetNames(params.config).wbStock
   const header = params.values[0] ?? []
   const firstDataRow = params.values[1] ?? []
   for (const account of params.accounts) {
     const column = summaryStockColumnIndex(header, account.cabinetLabel)
     const formula = normalize(firstDataRow[column])
-    if (!formula.startsWith('=') || !formula.includes(params.config.wbStockSheetName) || !formula.includes(account.technicalKey)) {
-      throw new Error(`Формула остатка WB для ${account.cabinetLabel} должна ссылаться на вкладку «${params.config.wbStockSheetName}» и ключ ${account.technicalKey}`)
+    if (!formula.startsWith('=') || !formula.includes(wbStockSheetName) || !formula.includes(account.technicalKey)) {
+      throw new Error(`Формула остатка WB для ${account.cabinetLabel} должна ссылаться на вкладку «${wbStockSheetName}» и ключ ${account.technicalKey}`)
     }
   }
 }
@@ -591,6 +608,7 @@ export async function runFbsMovementSheetWorkflow(
     },
   })
   const config = configFromWorkflow(workflow.config)
+  const sheetNames = fbsSheetNames(config)
   const targetDate = options.targetDate ?? previousMoscowDate()
   parseIsoDate(targetDate, 'Дата загрузки')
   parseIsoDate(config.startDate, 'Дата начала')
@@ -600,15 +618,15 @@ export async function runFbsMovementSheetWorkflow(
 
   const metadata = await getSpreadsheetMetadata(config.spreadsheetId)
   validateSpreadsheetContract({ metadata, config })
-  const operationsPrefix = quoteSheetName(config.operationsSheetName)
-  const wbStockPrefix = quoteSheetName(config.wbStockSheetName)
+  const operationsPrefix = quoteSheetName(sheetNames.operations)
+  const wbStockPrefix = quoteSheetName(sheetNames.wbStock)
   const [operationValues, controlValues, formulaValues, referenceProductValues, wbStockValues, summaryFormulaValues] = await Promise.all([
     getSheetValues(config.spreadsheetId, `${operationsPrefix}!A${FBS_OPERATIONS_HEADER_ROW}:M`, 'UNFORMATTED_VALUE'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(config.controlSheetName)}!A${CONTROL_HEADER_ROW}:H`, 'UNFORMATTED_VALUE'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(config.summarySheetName)}!C14`, 'FORMULA'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(config.referenceSheetName)}!A4:A`, 'UNFORMATTED_VALUE'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.control)}!A${CONTROL_HEADER_ROW}:H`, 'UNFORMATTED_VALUE'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.summary)}!C14`, 'FORMULA'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.reference)}!A4:A`, 'UNFORMATTED_VALUE'),
     getSheetValues(config.spreadsheetId, `${wbStockPrefix}!A1:I`, 'UNFORMATTED_VALUE'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(config.summarySheetName)}!A7:Z8`, 'FORMULA'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.summary)}!A7:Z8`, 'FORMULA'),
   ])
   validateHeaderRow(operationValues[0] ?? [], FBS_OPERATIONS_HEADERS, 'Операции')
   validateHeaderRow(wbStockValues[0] ?? [], FBS_WB_STOCK_HEADERS, 'Остатки WB')
@@ -692,7 +710,7 @@ export async function runFbsMovementSheetWorkflow(
   if (!options.dryRun && firstBeyondTemplate.length) {
     await copySheetRowPresentation({
       spreadsheetId: config.spreadsheetId,
-      sheetId: sheetIdByTitle(metadata, config.operationsSheetName),
+      sheetId: sheetIdByTitle(metadata, sheetNames.operations),
       sourceRowNumber: PRESENTATION_TEMPLATE_ROW,
       startRowNumber: Math.min(...firstBeyondTemplate),
       endRowNumber: Math.max(...firstBeyondTemplate),
@@ -700,8 +718,8 @@ export async function runFbsMovementSheetWorkflow(
   }
   if (!options.dryRun) {
     await batchUpdateSheetValues(config.spreadsheetId, [
-      ...writeRanges(config.operationsSheetName, plan.writes),
-      ...wbStockWriteRanges(config.wbStockSheetName, stockPlan.writes),
+      ...writeRanges(sheetNames.operations, plan.writes),
+      ...wbStockWriteRanges(sheetNames.wbStock, stockPlan.writes),
     ])
   }
 
@@ -743,7 +761,7 @@ export async function runFbsMovementSheetWorkflow(
   if (!options.dryRun || stockPlan.writes.length === 0) {
     const summaryValues = await getSheetValues(
       config.spreadsheetId,
-      `${quoteSheetName(config.summarySheetName)}!A7:Z`,
+      `${quoteSheetName(sheetNames.summary)}!A7:Z`,
       'UNFORMATTED_VALUE',
     )
     const summaryVerification = verifySummaryWbStock({ values: summaryValues, accounts: prepared })
@@ -763,12 +781,12 @@ export async function runFbsMovementSheetWorkflow(
   })
   if (!options.dryRun) {
     await batchUpdateSheetValues(config.spreadsheetId, controlWrites.map((write) => ({
-      range: `${quoteSheetName(config.controlSheetName)}!A${write.rowNumber}:H${write.rowNumber}`,
+      range: `${quoteSheetName(sheetNames.control)}!A${write.rowNumber}:H${write.rowNumber}`,
       values: [write.values],
     })))
     await verifyControlRows({
       spreadsheetId: config.spreadsheetId,
-      controlSheetName: config.controlSheetName,
+      controlSheetName: sheetNames.control,
       expectedWrites: controlWrites,
     })
   }
@@ -780,7 +798,7 @@ export async function runFbsMovementSheetWorkflow(
     return {
       wbAccountId: account.wbAccountId,
       accountName: account.accountName,
-      sheetName: config.operationsSheetName,
+      sheetName: sheetNames.operations,
       status: error ? 'FAILED' : 'SUCCEEDED',
       orders: account.events.filter((event) => event.kind === 'order').length,
       cancellations: account.events.filter((event) => event.kind === 'cancellation').length,
@@ -798,12 +816,12 @@ export async function runFbsMovementSheetWorkflow(
   const accountsFailed = results.filter((result) => result.status === 'FAILED').length
   if (!options.dryRun && !accountsFailed) {
     await batchUpdateSheetValues(config.spreadsheetId, [{
-      range: `${quoteSheetName(config.referenceSheetName)}!E12`,
+      range: `${quoteSheetName(sheetNames.reference)}!E12`,
       values: [[sheetSerialDate(targetDate)]],
     }])
     const lastSuccess = await getSheetValues(
       config.spreadsheetId,
-      `${quoteSheetName(config.referenceSheetName)}!E12`,
+      `${quoteSheetName(sheetNames.reference)}!E12`,
       'UNFORMATTED_VALUE',
     )
     if (parseSheetDate(lastSuccess[0]?.[0]) !== targetDate) {
