@@ -1,5 +1,25 @@
 # Bugs And Incidents
 
+## BUG-034: Google Sheet connection check could not authenticate in production app
+
+Status:
+- Fixed in code, pending production redeploy.
+
+Symptoms:
+- After the successful `c57f120` production deployment, the automation settings action `Проверить подключение` returned `Google Sheets не настроен: задайте GOOGLE_SERVICE_ACCOUNT_JSON_BASE64`.
+
+Root cause:
+- The untracked production environment already contained the Google service-account credential and `automation-worker` received it, but `docker-compose.prod.yml` injected the variable only into `automation-worker`. The connection check is a server action executed by the `app` service, where the variable was missing.
+
+Fix:
+- Pass `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` to the production `app` service as well. No credential rotation or `.env.production` change is required; the normal production deployment must recreate `app` with the corrected environment mapping.
+
+Verification:
+- Read-only mini-PC diagnostics confirmed the expected host, commit `c57f120`, healthy production services, HTTP health `200`, credential `PRESENT` in `automation-worker` and `MISSING_OR_EMPTY` in `app`, without reading or printing the secret value.
+
+Related files:
+- `docker-compose.prod.yml`, `src/lib/actions/automations.ts`, `src/lib/google/sheets.ts`
+
 ## BUG-033: Main dashboard did not adapt to normal-window and fullscreen heights
 
 Status:

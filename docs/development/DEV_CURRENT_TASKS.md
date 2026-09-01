@@ -32,6 +32,14 @@
 
 ## Done Recently
 
+- ID: TASK-GOOGLE-SHEETS-APP-CREDENTIAL
+  Status: Done locally, Pending rollout
+  Priority: High
+  Description: Fixed production Google Sheet connection inspection: the service-account credential existed on the server and was available to `automation-worker`, but Compose did not pass it to the `app` service where the read-only inspection server action runs.
+  Next step: Run the normal owner-confirmed production deployment, then retry `Проверить подключение`. No `.env.production` edit or credential rotation is needed.
+  Related files: `docker-compose.prod.yml`, `docs/development/BUGS_AND_INCIDENTS.md`.
+  Risks: Do not print or inspect the credential value; verify only presence and the read-only Sheets metadata request.
+
 - ID: TASK-DASHBOARD-FULLHD-FIT
   Status: Done locally
   Priority: High

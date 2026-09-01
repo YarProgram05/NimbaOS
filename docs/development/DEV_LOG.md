@@ -1,5 +1,11 @@
 # Development Log
 
+## 2026-09-01 - Production Google Sheet inspection credential injection
+
+Diagnosed the owner-reported production failure of the automation settings action `Проверить подключение` after deployment of commit `c57f120`. Safe remote checks proved the mini-PC identity, deployed commit, running production services and HTTP 200. A presence-only check showed `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` available to `automation-worker` but missing from `app`; no credential content was read or printed.
+
+The credential already exists in the untracked production environment. The defect was the tracked Compose mapping: only the worker received the variable, while the read-only spreadsheet metadata server action executes in the Next.js app. Added the same variable mapping to the `app` environment. No database, queue, scheduler, WB API, Google Sheet write, credential rotation or production runtime mutation occurred during diagnosis or the local fix. A normal owner-confirmed redeploy is required to recreate `app`, after which `Проверить подключение` should be retried.
+
 ## 2026-09-01 - Main dashboard Full HD fit
 
 Fixed BUG-033, where the main dashboard produced an unnecessary vertical scrollbar in a normal Full HD Chrome window, while an initial fixed-height correction left excessive unused space in browser fullscreen. The root issue was a layout sized by width breakpoints and fixed chart pixels rather than the actual available viewport height; additionally, the page's requested gap was losing to the shared `.dashboard-page` utility.
