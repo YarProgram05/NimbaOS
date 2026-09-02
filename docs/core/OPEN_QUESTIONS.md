@@ -1,39 +1,38 @@
 # Open Questions
 
-Открытые вопросы для владельца проекта и будущих агентов. Last updated: 2026-05-24.
+Только нерешенные owner/product questions. Решенные пункты переносятся в `DECISIONS.md` или role log, а не остаются здесь.
+
+Last updated: 2026-09-02.
 
 ## Data And Performance
 
-- Нужны ли materialized views или summary tables для daily account/nm sales, ad spend, stock risk and dashboard periods?
-- Какие реальные объемы `realization_reports`, `wb_orders`, `wb_sales`, ad stats ожидаются через 6-12 месяцев?
-- Нужны ли дополнительные индексы после EXPLAIN на production-like данных?
+- При каких объемах нужно вводить persisted daily aggregates/materialized views для reports, dashboard, ads и stock risk?
+- Какие production-like EXPLAIN/latency thresholds должны запускать index/aggregate work?
 
-## Sync
+## Sync And Monitoring
 
-- Какой период считать свежим для каждого домена: reports, ads, stocks, reviews, funnel?
-- Нужно ли запрещать repeated historical sync на уровне UI/service, а не только через правила docs?
-- Какой полный safe smoke matrix нужен для Phase 7/8 live verification?
+- Какой freshness SLA нужен для reports, ads, stocks, reviews, funnel и FBS?
+- Какой bounded smoke matrix закроет Phase 7/8 live verification?
+- Какой канал должен получать sync/automation failure alerts?
 
-## Marketplace Logic
+## Marketplace Policy
 
-- Какие thresholds владелец считает нормой для DRR, margin, buyout, conversion, stock coverage?
-- Какие отчеты должны быть ежедневными, а какие weekly owner summary?
-- Какие действия агент может только рекомендовать, а какие можно автоматизировать после отдельного approval flow?
+- Какие owner-approved thresholds считаются нормой для DRR, margin, buyout, conversion и stock coverage?
+- Какие reports должны быть daily, weekly и owner-summary?
+- Какие actions можно автоматизировать только после отдельного approval-flow design?
 
-## Production
+## Production And Access
 
-- Production rollout target and schedule need confirmation.
-- Monitoring/alerting channel for sync failures is not defined.
-- Backup/restore policy for PostgreSQL needs explicit runbook.
-
-## Documentation
-
-- Старые `docs/*.md` сохранены как legacy redirects/archives; можно ли удалить их позже после подтверждения?
+- Какой non-Cloudflare public ingress выбрать: public/static ISP IPv4 with direct HTTPS или другой route?
+- Какой external monitoring/alerting нужен поверх current healthcheck и persisted run histories?
 
 ## FBS Stage 2
 
-- Which Chestny Znak True API environment, participant credentials, certificate/signature provider and document types will be used?
-- What SLA and owner should apply to commissioning, remote-sale withdrawal, B2B withdrawal and return-to-circulation tasks?
-- After live WB smoke tests, which seller warehouses may have `writeEnabled=true` and who approves stock publication?
-- Should sticker batches be combined into a printable PDF in addition to current per-order PNG?
-- What monitoring channel should receive FBS stock mismatch, overdue order and overdue compliance alerts?
+- Какие True API environment, participant credentials, certificate/signature provider и document types будут использованы?
+- Какой SLA/owner нужен для commissioning, withdrawal, B2B withdrawal и return-to-circulation tasks?
+- Какие seller warehouses могут получить `writeEnabled=true` после reconciliation и кто это подтверждает?
+- Нужен ли printable sticker-batch PDF в дополнение к current per-order PNG?
+
+## Knowledge Graph
+
+- Какие архивные классы нужно полностью исключить из Graphify, а какие оставить как explicitly historical corpus?

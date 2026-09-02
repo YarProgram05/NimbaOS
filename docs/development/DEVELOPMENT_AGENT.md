@@ -1,6 +1,6 @@
 # Development Agent
 
-Playbook агента-разработчика NimbaOS. Last updated: 2026-05-24.
+Playbook агента-разработчика NimbaOS. Last updated: 2026-09-02.
 
 ## Role
 
@@ -46,10 +46,8 @@ Development agent поддерживает код, архитектуру, БД,
 
 ## Documentation After Work
 
-Минимум обновить:
-- `docs/development/DEV_HANDOFF.md`;
-- `docs/development/DEV_CURRENT_TASKS.md`;
-- `docs/development/DEV_LOG.md`.
-
-Дополнительно обновлять core/decision/bug docs, если изменились состояние, команды, данные, API, sync, БД или риски.
-
+- Подробный завершенный result записать один раз в `docs/development/DEV_LOG.md`.
+- `DEV_CURRENT_TASKS.md` менять только если изменились Active/Next/Blocked; Done Recently ограничен 3–5 короткими строками.
+- `DEV_HANDOFF.md` заменяет устаревший current context; не дописывать туда session history.
+- Core/decision/bug docs обновлять только если изменился их canonical contract/status.
+- Не дублировать полный summary в нескольких memory files.

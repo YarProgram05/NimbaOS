@@ -1,0 +1,43 @@
+# Dependencies, builds and generated caches
+node_modules/
+.next/
+out/
+build/
+coverage/
+src/generated/
+*.tsbuildinfo
+next-env.d.ts
+package-lock.json
+
+# Runtime, browser and local-agent artifacts
+.git/
+.logs/
+.playwright-cli/
+.codex-transfer/
+.gigacode/
+.agents/
+.codex/
+tmp/
+output/
+outputs/
+graphify-out/
+
+# Historical/superseded documentation is preserved, but not canonical graph truth
+docs/archive/
+
+# Secrets and machine-local configuration
+.env
+.env.*
+secrets/
+*.pem
+
+# Temporary screenshots and loose image artifacts at repository root
+/ig_*.png
+/image_*.png
+
+# Raster assets do not carry project architecture or business semantics
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp

@@ -1,6 +1,6 @@
 # Project Map
 
-Карта проекта NimbaOS для быстрого поиска нужного слоя. Last updated: 2026-05-24.
+Карта проекта NimbaOS для быстрого поиска нужного слоя. Last updated: 2026-09-02.
 
 ## Root
 
@@ -9,6 +9,7 @@
 - `AGENTS.md` — короткий старт для Codex-агентов.
 - `SPECIFICATION.md` — стабильная продуктовая спецификация.
 - `DECISIONS.md` — канонический журнал решений.
+- `docs/archive` — historical/superseded memory; не читать как current truth.
 - `.env.example` — пример переменных окружения без реальных секретов.
 - `docker-compose.dev.yml` — локальные PostgreSQL и Redis.
 - `docker-compose.prod.yml`, `Dockerfile`, `deploy/nginx/nimbaos.conf` — production/VPS артефакты, не запускать без подтверждения.
@@ -34,6 +35,8 @@
 - `src/lib/wb-api` — клиент и методы WB API.
 - `src/lib/queue` — BullMQ queue/worker processor.
 - `src/lib/sync` — coverage, schedules, job run helpers.
+- `src/lib/automations` — workflow registry, schedules and Google Sheet contracts.
+- `src/lib/fbs` — FBS state-machine and KIZ helpers.
 - `src/lib/reports` — агрегация и preferences отчетов.
 - `src/lib/db/index.ts` — Prisma Client через adapter.
 - `src/lib/encryption` — шифрование WB API keys.
@@ -63,4 +66,5 @@
 - План/факт: `src/lib/services/plan-calculator.ts`, `src/lib/actions/sales-plan.ts`.
 - Dashboard analytics: `src/lib/services/dashboard-summary.ts`, `dashboard-problem-center.ts`, `dashboard-export.ts`.
 - Быстрый доступ к данным: `docs/core/DATABASE_ACCESS_GUIDE.md`.
-
+- FBS: `src/app/(dashboard)/fbs`, `src/lib/services/fbs-*`, `src/lib/fbs`.
+- Automations: `src/app/(dashboard)/automations`, `src/lib/automations`, `src/lib/queue/automation*`.

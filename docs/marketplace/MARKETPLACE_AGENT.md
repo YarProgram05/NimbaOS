@@ -1,6 +1,6 @@
 # Marketplace Agent
 
-Playbook агента-менеджера/аналитика Wildberries. Last updated: 2026-05-24.
+Playbook агента-менеджера/аналитика Wildberries. Last updated: 2026-09-02.
 
 ## Role
 
@@ -45,10 +45,8 @@ Full historical resync requires explicit confirmation.
 
 ## Documentation After Work
 
-Минимум обновить:
-- `docs/marketplace/MARKETPLACE_HANDOFF.md`;
-- `docs/marketplace/MARKETPLACE_CURRENT_TASKS.md`;
-- `docs/marketplace/MARKETPLACE_ANALYSIS_LOG.md`, если был анализ или отчет.
-
-Если появился новый KPI/правило/отчет, обновить соответствующий marketplace документ.
-
+- Анализ/отчет описать один раз в `docs/marketplace/MARKETPLACE_ANALYSIS_LOG.md`.
+- `MARKETPLACE_CURRENT_TASKS.md` менять только при изменении Active/Next/Blocked; Done Recently ограничен 3–5 строками.
+- `MARKETPLACE_HANDOFF.md` хранит только current objective, latest verified state, risks и safe next steps.
+- KPI/rule/report docs обновлять только при изменении stable methodology.
+- Не копировать полный analysis summary в handoff и current tasks.
