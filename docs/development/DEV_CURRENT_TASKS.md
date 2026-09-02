@@ -32,6 +32,22 @@
 
 ## Done Recently
 
+- ID: TASK-WB-TOKEN-EXPIRY-NOTICE
+  Status: Done locally, Pending production rollout
+  Priority: High
+  Description: `/settings` now displays each active cabinet token's JWT expiration date without exposing the key. Admins receive one warning per Moscow calendar day per browser profile when a token has 10 or fewer days remaining or is already expired; other roles do not receive the notification.
+  Next step: Include the code in the normal owner-confirmed deployment, then verify the displayed production dates. The daily warning will begin automatically when the first token enters its 10-day window.
+  Related files: `src/lib/wb-api/token-expiration.ts`, `src/lib/actions/accounts.ts`, `src/app/(dashboard)/settings/accounts-section.tsx`, `src/components/wb-token-expiry-notifier.tsx`.
+  Risks: Non-JWT/legacy tokens without a numeric `exp` claim show `Срок не указан`; validity still comes from normal WB API validation, not from trusting display metadata.
+
+- ID: TASK-SELF-SERVICE-CREDENTIALS
+  Status: Done locally and local migration applied, Pending production rollout
+  Priority: High
+  Description: Added self-service email and password changes for every authenticated user under `/settings`. Both operations require the current password and revoke all existing sessions for that user through `User.sessionVersion`; email login is case-insensitive and new passwords require 12-128 characters.
+  Next step: Log in locally with the existing credentials and smoke-test email/password changes. Then include migration `20260902120000_user_session_version` in the normal owner-confirmed production deployment. Existing pre-rollout JWT sessions intentionally require a fresh login.
+  Related files: `src/app/(dashboard)/settings/security-forms.tsx`, `src/lib/actions/profile.ts`, `src/lib/auth/index.ts`, `prisma/schema.prisma`, `prisma/migrations/20260902120000_user_session_version`.
+  Risks: Do not deploy the application code without its migration. The migration is applied only to confirmed local `localhost:5432/wb_cabinet`; production remains unchanged.
+
 - ID: BUG-036-FBS-SHEET-WRONG-PRODUCT-ALIAS
   Status: Done locally and live Sheet corrected
   Priority: High

@@ -1,5 +1,19 @@
 # Development Log
 
+## 2026-09-02 - WB API-token expiration dates and daily admin warning
+
+- Added safe JWT `exp` extraction for encrypted WB cabinet tokens. Account summaries decrypt only on the server and return only the expiration ISO date; malformed/opaque tokens return no date and no raw key or payload is logged or sent to the client.
+- Added `Действует до` to the desktop API column and mobile account cards, with normal, 10-day amber and expired destructive states. The settings page supports direct `/settings?tab=accounts` navigation.
+- Added an admin-only toast after account metadata loads. It is shown once per Moscow calendar day per admin/browser profile, lists every active cabinet at 10 or fewer remaining calendar days (including expired tokens), and links to the account settings. Manager/viewer roles are excluded.
+- Verification: all 69 tests, type-check, lint and `git diff --check` pass; lint retains two unrelated existing `<img>` warnings. Authenticated local Chrome QA showed all three cabinet expiration dates with clean console output. The active local dev server was preserved, so no concurrent production build was run. No account/token/database/WB API/production mutation occurred.
+
+## 2026-09-02 - Self-service email/password changes and session revocation
+
+- Added separate email and password forms to `/settings` for all authenticated roles. Both require the current password; email is normalized/lowercased and checked case-insensitively, while passwords require 12-128 characters, matching confirmation and a value different from the current password.
+- Added server actions that hash new passwords with bcrypt cost 12 and never return or log credential values. Registration now applies the same email normalization and 12-character password minimum.
+- Added `User.sessionVersion` and migration `20260902120000_user_session_version`. Every credential change increments the version, and the NextAuth JWT callback rejects inactive users, old versions and pre-migration tokens while refreshing current identity/role fields from PostgreSQL. The authenticated server layout performs this check before rendering protected content.
+- Verification: Prisma schema validation, TypeScript, lint, production build, `git diff --check` and all 66 tests passed. Lint retains two unrelated existing `<img>` warnings. The migration was later applied only to confirmed local `localhost:5432/wb_cabinet` after the running app exposed the expected missing-column login failure; migration status is current and local health is HTTP 200. No credential value was read or changed, and no production deployment occurred.
+
 ## 2026-09-02 - FBS Sheet product mapping correction and audit
 
 - Diagnosed the wrong FBS Sheet name for order `5630396936`: local DB identity is `nimba:412122105:591014919`, vendor code `парео квадр/синий шиф`, while the Sheet had inherited `парео синий шиф` from the same previously poisoned tuple.

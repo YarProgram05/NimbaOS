@@ -2,6 +2,7 @@ import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
+import { isSessionCurrent, normalizeEmail } from '@/lib/auth/account-security'
 import type { UserRole } from '@/types'
 
 export const authOptions: NextAuthOptions = {
@@ -19,8 +20,13 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        const user = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: normalizeEmail(credentials.email),
+              mode: 'insensitive',
+            },
+          },
         })
 
         if (!user || !user.isActive) return null
@@ -33,6 +39,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
+          sessionVersion: user.sessionVersion,
         }
       },
     }),
@@ -43,10 +50,45 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         // user.role comes from the authorize() return value
         token.role = (user as { role: UserRole }).role
+        token.sessionVersion = user.sessionVersion
+        token.invalid = false
+        return token
       }
+
+      // Tokens issued before sessionVersion support are intentionally expired once.
+      if (!token.id || typeof token.sessionVersion !== 'number') {
+        token.invalid = true
+        return token
+      }
+
+      const currentUser = await prisma.user.findUnique({
+        where: { id: token.id },
+        select: {
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          sessionVersion: true,
+        },
+      })
+
+      if (!currentUser || !isSessionCurrent(currentUser, token.sessionVersion)) {
+        token.invalid = true
+        return token
+      }
+
+      token.email = currentUser.email
+      token.name = currentUser.name
+      token.role = currentUser.role
+      token.invalid = false
       return token
     },
     async session({ session, token }) {
+      if (token.invalid) {
+        session.user = undefined as unknown as typeof session.user
+        return session
+      }
+
       if (session.user) {
         session.user.id = token.id as string
         session.user.role = token.role as UserRole

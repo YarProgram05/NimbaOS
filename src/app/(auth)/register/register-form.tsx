@@ -10,11 +10,15 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { registerByInvitation } from '@/lib/actions/users'
+import { MIN_PASSWORD_LENGTH } from '@/lib/auth/account-security'
 
 const schema = z.object({
   name: z.string().min(2, 'Введите имя (минимум 2 символа)'),
   email: z.string().email('Некорректный email'),
-  password: z.string().min(8, 'Пароль — минимум 8 символов'),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Пароль — минимум ${MIN_PASSWORD_LENGTH} символов`)
+    .max(128, 'Пароль слишком длинный'),
 })
 
 type FormData = z.infer<typeof schema>

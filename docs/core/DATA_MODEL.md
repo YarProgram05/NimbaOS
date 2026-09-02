@@ -1,6 +1,6 @@
 # Data Model
 
-Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
+Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-09-02.
 
 ## Business Keys
 
@@ -14,7 +14,7 @@ Prisma/PostgreSQL модель NimbaOS. Last updated: 2026-06-16.
 
 ## Core Account/Auth Tables
 
-- `users`, `invitations`, `user_preferences`.
+- `users`, `invitations`, `user_preferences`. `users.sessionVersion` increments after an email or password change so all older JWT sessions for that user are rejected.
 - `wb_accounts`: encrypted WB API key, tax rate, seller metadata, `lastSyncAt`.
 
 ## Sync State Tables

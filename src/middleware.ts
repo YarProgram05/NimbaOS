@@ -6,7 +6,7 @@ export default withAuth({
     signIn: '/login',
   },
   callbacks: {
-    authorized: ({ token }) => !!token,
+    authorized: ({ token }) => !!token && token.invalid !== true,
   },
 })
 

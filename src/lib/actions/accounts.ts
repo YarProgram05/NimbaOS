@@ -5,10 +5,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { checkRole } from '@/lib/auth/check-role'
 import { prisma } from '@/lib/db'
-import { encrypt } from '@/lib/encryption'
+import { decrypt, encrypt } from '@/lib/encryption'
 import { removeAllSyncSchedulesForAccount } from '@/lib/sync/schedules'
 import { validateAndFetchSellerInfo } from '@/lib/wb-api/accounts'
 import { WbApiError } from '@/lib/wb-api/client'
+import { extractWbTokenExpiration } from '@/lib/wb-api/token-expiration'
 import type { ActionResult } from '@/types'
 
 export interface WbAccountSummary {
@@ -21,6 +22,7 @@ export interface WbAccountSummary {
   isActive: boolean
   lastSyncAt: Date | null
   createdAt: Date
+  apiKeyExpiresAt: string | null
 }
 
 const WB_ACCOUNT_SUMMARY_SELECT = {
@@ -34,6 +36,18 @@ const WB_ACCOUNT_SUMMARY_SELECT = {
   lastSyncAt: true,
   createdAt: true,
 } as const
+
+function tokenExpirationIso(apiKey: string): string | null {
+  return extractWbTokenExpiration(apiKey)?.toISOString() ?? null
+}
+
+function encryptedTokenExpirationIso(encryptedApiKey: string): string | null {
+  try {
+    return tokenExpirationIso(decrypt(encryptedApiKey))
+  } catch {
+    return null
+  }
+}
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -52,11 +66,15 @@ export async function getWbAccounts(): Promise<WbAccountSummary[]> {
 
   const accounts = await prisma.wbAccount.findMany({
     where: { isActive: true },
-    select: WB_ACCOUNT_SUMMARY_SELECT,
+    select: { ...WB_ACCOUNT_SUMMARY_SELECT, apiKey: true },
     orderBy: { createdAt: 'asc' },
   })
 
-  return accounts.map((a) => ({ ...a, taxRate: a.taxRate.toString() }))
+  return accounts.map(({ apiKey, ...account }) => ({
+    ...account,
+    taxRate: account.taxRate.toString(),
+    apiKeyExpiresAt: encryptedTokenExpirationIso(apiKey),
+  }))
 }
 
 export async function addWbAccount(data: {
@@ -146,7 +164,14 @@ export async function addWbAccount(data: {
     )
 
     revalidatePath('/settings')
-    return { success: true, data: { ...account, taxRate: account.taxRate.toString() } }
+    return {
+      success: true,
+      data: {
+        ...account,
+        taxRate: account.taxRate.toString(),
+        apiKeyExpiresAt: tokenExpirationIso(data.apiKey),
+      },
+    }
   }
 
   const account = await prisma.wbAccount.create({
@@ -162,7 +187,14 @@ export async function addWbAccount(data: {
   })
 
   revalidatePath('/settings')
-  return { success: true, data: { ...account, taxRate: account.taxRate.toString() } }
+  return {
+    success: true,
+    data: {
+      ...account,
+      taxRate: account.taxRate.toString(),
+      apiKeyExpiresAt: tokenExpirationIso(data.apiKey),
+    },
+  }
 }
 
 export async function updateTaxRate(
@@ -224,7 +256,14 @@ export async function updateWbAccountApiKey(
   })
 
   revalidatePath('/settings')
-  return { success: true, data: { ...updated, taxRate: updated.taxRate.toString() } }
+  return {
+    success: true,
+    data: {
+      ...updated,
+      taxRate: updated.taxRate.toString(),
+      apiKeyExpiresAt: tokenExpirationIso(apiKey),
+    },
+  }
 }
 
 export async function toggleAccountActive(id: string): Promise<ActionResult> {

@@ -26,6 +26,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AddAccountDialog } from './add-account-dialog'
 import { updateTaxRate, toggleAccountActive, updateWbAccountApiKey } from '@/lib/actions/accounts'
 import type { WbAccountSummary } from '@/lib/actions/accounts'
+import { daysUntilWbTokenExpiration } from '@/lib/wb-api/token-expiration'
+
+const expirationFormatter = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: 'Europe/Moscow',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
+function ApiExpiration({ expiresAt }: { expiresAt: string | null }) {
+  if (!expiresAt) {
+    return <span className="text-xs text-muted-foreground">Срок не указан</span>
+  }
+
+  const days = daysUntilWbTokenExpiration(expiresAt)
+  const color = days < 0
+    ? 'text-destructive'
+    : days <= 10
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-muted-foreground'
+  const suffix = days < 0
+    ? 'срок истёк'
+    : days === 0
+      ? 'сегодня'
+      : days <= 10
+        ? `осталось ${days} дн.`
+        : null
+
+  return (
+    <span className={`text-xs ${color}`}>
+      Действует до {expirationFormatter.format(new Date(expiresAt))}
+      {suffix && <span className="block">{suffix}</span>}
+    </span>
+  )
+}
 
 interface TaxRateCellProps {
   account: WbAccountSummary
@@ -218,10 +253,18 @@ function AccountRow({
             <Badge variant="secondary" className="shrink-0">Активен</Badge>
           </div>
 
-          <div className="mt-4 rounded-md border bg-secondary/25 p-3">
-            <p className="text-xs text-muted-foreground">Налоговая ставка</p>
-            <div className="mt-1">
-              <TaxRateCell account={account} isReadOnly={isReadOnly} />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border bg-secondary/25 p-3">
+              <p className="text-xs text-muted-foreground">Налоговая ставка</p>
+              <div className="mt-1">
+                <TaxRateCell account={account} isReadOnly={isReadOnly} />
+              </div>
+            </div>
+            <div className="rounded-md border bg-secondary/25 p-3">
+              <p className="text-xs text-muted-foreground">API-токен</p>
+              <div className="mt-1">
+                <ApiExpiration expiresAt={account.apiKeyExpiresAt} />
+              </div>
             </div>
           </div>
 
@@ -272,19 +315,20 @@ function AccountRow({
             <TaxRateCell account={account} isReadOnly={isReadOnly} />
           </TableCell>
           <TableCell>
-            {canEditApiKey ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-11 gap-1 md:h-8"
-                onClick={() => setKeyOpen(true)}
-              >
-                <KeyRound className="h-4 w-4" />
-                API
-              </Button>
-            ) : (
-              <span className="text-sm text-muted-foreground">—</span>
-            )}
+            <div className="flex flex-col items-start gap-1.5">
+              {canEditApiKey && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-11 gap-1 md:h-8"
+                  onClick={() => setKeyOpen(true)}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  API
+                </Button>
+              )}
+              <ApiExpiration expiresAt={account.apiKeyExpiresAt} />
+            </div>
           </TableCell>
           <TableCell className="text-right">
             {!isReadOnly && (
@@ -422,7 +466,7 @@ export function AccountsSection({ accounts, isReadOnly, canEditApiKey }: Account
                     <TableHead>Продавец</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead>Налоговая ставка</TableHead>
-                    <TableHead>API</TableHead>
+                    <TableHead>API-токен</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>

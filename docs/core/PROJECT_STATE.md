@@ -1,5 +1,9 @@
 # Project State
 
+Update 2026-09-02: active WB cabinet settings now show each API token's JWT expiration date, derived server-side from the encrypted key without sending the token or payload to the browser. Admins receive one reminder per Moscow calendar day per browser profile from 10 remaining days onward, including expiration; other roles do not. Local authenticated Chrome QA displayed all current cabinet dates with no console errors. No WB API call, token update, database write or production action occurred.
+
+Update 2026-09-02: all authenticated users can now change their own email and password under `/settings` after confirming the current password. Email identity is normalized and matched case-insensitively; passwords require 12-128 characters. Migration `20260902120000_user_session_version` adds per-user JWT revocation: either credential change invalidates every previous session for that user, and protected dashboard rendering verifies the database-backed version. The migration is applied only to confirmed local `localhost:5432/wb_cabinet`; local health is HTTP 200. Existing production sessions intentionally require one fresh login after rollout; production remains unchanged.
+
 Update 2026-09-01: the full local phone-responsive pass is complete. NimbaOS now has a `dvh`/safe-area mobile shell, scrollable closing navigation, touch-sized shared controls, viewport-safe dialogs/popovers and a one-month phone calendar. Product cards, reports, stocks, reviews/questions, references, sales plans, FBS, sync/automation history, WB account settings and admin users expose mobile cards, preserved sorting and nearby primary actions below `lg`, while existing desktop tables remain available at `lg+`. Authenticated Codex in-app-browser QA covered 340 px portrait, multiple 638-897 px landscape/breakpoint sizes and 1531 px desktop with no document horizontal overflow or console errors. TypeScript, lint, 60 tests and diff validation pass. The change is local and pending normal deployment; no production/data/WB mutation occurred.
 
 Update 2026-09-01: production Google Sheet connection inspection failed because `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` was passed to `automation-worker` but not to the Next.js `app` service that executes the read-only inspection action. Presence-only mini-PC diagnostics confirmed the credential already exists and no `.env.production` change is needed. The tracked Compose fix is pending normal production redeployment.
@@ -66,7 +70,7 @@ Update 2026-08-13: BUG-025 added the CRPT-required numeric unit price to withdra
 
 ## Implemented
 
-- Auth/users: NextAuth Credentials, роли `ADMIN`, `MANAGER`, `VIEWER`, invitations, admin users.
+- Auth/users: NextAuth Credentials, роли `ADMIN`, `MANAGER`, `VIEWER`, invitations, admin users, self-service email/password changes and per-user JWT session revocation.
 - WB accounts: encrypted API keys, tax rate, seller metadata, active status, account selector через `?account=id`.
 - Product cards: sync карточек/цен, карточная таблица, price refresh/update flow.
 - References: себестоимость, самовыкупы, внешняя реклама, article overrides, reply templates.

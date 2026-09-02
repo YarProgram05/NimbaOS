@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { checkRole } from '@/lib/auth/check-role'
+import { MIN_PASSWORD_LENGTH, normalizeEmail } from '@/lib/auth/account-security'
 import type { ActionResult, UserRole } from '@/types'
 
 export async function createInvitation(
@@ -79,7 +80,20 @@ export async function registerByInvitation(
     return { success: false, error: 'Приглашение недействительно или истекло' }
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: data.email } })
+  const email = normalizeEmail(data.email)
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+    return { success: false, error: 'Некорректный email' }
+  }
+  if (data.password.length < MIN_PASSWORD_LENGTH || data.password.length > 128) {
+    return {
+      success: false,
+      error: `Пароль должен содержать от ${MIN_PASSWORD_LENGTH} до 128 символов`,
+    }
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+  })
   if (existing) return { success: false, error: 'Email уже используется' }
 
   const passwordHash = await bcrypt.hash(data.password, 12)
@@ -88,7 +102,7 @@ export async function registerByInvitation(
     const user = await tx.user.create({
       data: {
         name: data.name,
-        email: data.email,
+        email,
         passwordHash,
         role: invitation.role,
         invitedById: invitation.createdById,

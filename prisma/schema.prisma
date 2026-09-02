@@ -144,6 +144,7 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  sessionVersion Int      @default(0)
   role         Role     @default(VIEWER)
   isActive     Boolean  @default(true)
   invitedById  String?

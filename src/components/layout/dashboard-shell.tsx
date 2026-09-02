@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { AccountProvider } from '@/components/providers/account-context'
+import { WbTokenExpiryNotifier } from '@/components/wb-token-expiry-notifier'
 import type { SessionUser, UserRole } from '@/types'
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AccountProvider>
+      <WbTokenExpiryNotifier userId={user.id} userRole={user.role} />
       <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
         <Sidebar
           isCollapsed={isCollapsed}
