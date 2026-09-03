@@ -1,12 +1,12 @@
 # Scheduled Automation
 
-Расписание и автоматизация. Last updated: 2026-09-01.
+Расписание и автоматизация. Last updated: 2026-09-04.
 
 ## Current Project Mechanism
 
 Проект использует BullMQ для фоновых sync jobs. Настройки sync-расписания живут в `SyncScheduleSetting`, helper functions — в `src/lib/sync/schedules.ts`, запуск применения расписаний — `scripts/schedule-sync.ts`.
 
-`/sync` показывает расписания группированным каталогом; одна выбранная задача редактируется в боковой панели. Расширенное sync-расписание хранится в nullable JSON `SyncScheduleSetting.schedule`, а `timeOfDay`/`intervalMinutes` остаются совместимыми полями. Все sync kinds поддерживают одно/несколько точных времён или ограниченное start/end/everyMinutes окно по единым правилам; снимки данных не показывают глубину периода, rolling jobs используют 1-30 дней. Sync cadence ограничен ежедневным режимом или выбранными днями недели. На каждое эффективное время регистрируется отдельный BullMQ scheduler, а fingerprint защищает от запуска задания из уже заменённого расписания.
+`/sync` показывает расписания группированным каталогом; одна выбранная задача редактируется в боковой панели. Расширенное sync-расписание хранится в nullable JSON `SyncScheduleSetting.schedule`, а `timeOfDay`/`intervalMinutes` остаются совместимыми полями. Все sync kinds поддерживают одно/несколько точных времён или ограниченное start/end/everyMinutes окно по единым правилам; снимки данных не показывают глубину периода, rolling jobs используют 1-30 дней. Sync cadence ограничен ежедневным режимом или выбранными днями недели. На каждое эффективное время регистрируется отдельный BullMQ scheduler, а fingerprint защищает от запуска задания из уже заменённого расписания. Fingerprint содержит только поля, влияющие на выбранные cadence/time mode; неактивные поля редактора и динамические fallback-значения не должны инвалидировать ежедневные задания.
 
 Для product/workflow автоматизаций добавлена отдельная очередь `automation`. Настройки живут в `AutomationWorkflowSetting`, привязки кабинетов к вкладкам — в `AutomationWorkflowAccount`, история — в `AutomationRun`. Helper functions — `src/lib/automations/workflows.ts`, запуск применения расписаний — `scripts/schedule-automations.ts`, worker — `scripts/automation-worker.ts`.
 
@@ -17,7 +17,7 @@
 - Расширенное расписание хранится в существующем `AutomationWorkflowSetting.config.schedule`; миграция БД не требуется. `timeOfDay` сохраняет первое эффективное время для обратной совместимости.
 - Поддерживаются daily, weekly, every-N-weeks и monthly; одно/несколько конкретных времён или интервал start/end/everyMinutes; выбранные дни недели; якорная неделя; выбранные числа месяца.
 - На каждое эффективное время создаётся отдельный BullMQ Job Scheduler. Every-N-weeks дополнительно проверяется worker-ом по московской календарной дате и якорной неделе.
-- Scheduled job содержит fingerprint расписания. Работа из уже заменённого расписания безопасно пропускается до создания `AutomationRun`.
+- Scheduled job содержит fingerprint только эффективных полей расписания. Работа из уже заменённого расписания безопасно пропускается до создания `AutomationRun`, но неактивные поля других cadence/time mode не считаются изменением конфигурации.
 
 ## Daily Jobs
 

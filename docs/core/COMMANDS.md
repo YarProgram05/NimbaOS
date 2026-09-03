@@ -1,6 +1,6 @@
 # Commands
 
-Команды проекта с точки зрения безопасности. Last updated: 2026-08-24.
+Команды проекта с точки зрения безопасности. Last updated: 2026-09-04.
 
 ## Safe Inspection
 
@@ -71,8 +71,8 @@
 - On the Windows mini-PC, Docker Desktop builds started from a non-interactive SSH logon may fail because Windows Credential Manager has no interactive logon session. Run the normal build from the logged-in AnyDesk/console session; this is a Docker Desktop credential-helper limitation, not an application or `.env.production` failure.
 - `docker compose --env-file .env.production -f docker-compose.prod.yml --profile migrate run --rm migrate` — применить production Prisma migrations; только после резервной копии и явного подтверждения.
 - `docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate app worker automation-worker` — переключить app и оба worker-контейнера на уже собранные образы, не пересоздавая PostgreSQL/Redis.
-- `docker compose --env-file .env.production -f docker-compose.prod.yml run --rm --no-deps app npx tsx scripts/schedule-sync.ts` — заново зарегистрировать production BullMQ sync schedules из PostgreSQL в Redis; обязательно после восстановления или пересоздания Redis data volume, только с явным подтверждением.
-- `docker compose --env-file .env.production -f docker-compose.prod.yml --profile scheduler run --rm automation-scheduler` — заново зарегистрировать production automation schedules; требуется после восстановления или пересоздания Redis data volume.
+- После проверки identity/labels запустить `docker exec nimba-app-1 npx tsx scripts/schedule-sync.ts` — заново зарегистрировать production BullMQ sync schedules из PostgreSQL в Redis кодом текущего запущенного release; обязательно после восстановления или пересоздания Redis data volume, только с явным подтверждением.
+- После проверки identity/labels запустить `docker exec nimba-app-1 npx tsx scripts/schedule-automations.ts` — заново зарегистрировать production automation schedules кодом текущего запущенного release. Не использовать compose one-shot без явно проверенного `NIMBA_IMAGE_TAG`: fallback `latest` может указывать на устаревший image.
 - `Invoke-WebRequest http://127.0.0.1:3000/api/health -UseBasicParsing` — локальная health-проверка на mini-PC.
 - `ssh -i "$env:USERPROFILE\.ssh\nimba_minipc_codex" n8929@100.107.244.75` — remote shell через Tailscale с доверенного development-ноутбука.
 - `Start-ScheduledTask -TaskName 'NimbaOS Temporary Tunnel'` — запустить временный private browser tunnel на laptop; адрес `http://127.0.0.1:13000`.
