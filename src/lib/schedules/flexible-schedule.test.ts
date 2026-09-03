@@ -4,6 +4,7 @@ import {
   buildFlexibleScheduleRules,
   defaultFlexibleSchedule,
   expandFlexibleScheduleTimes,
+  flexibleScheduleFingerprint,
   getNextFlexibleRunAt,
   validateFlexibleSchedule,
   type FlexibleScheduleValidationOptions,
@@ -44,4 +45,35 @@ test('supports selected weekdays for sync schedules', () => {
 test('rejects unsupported monthly cadence for sync schedules', () => {
   const schedule = { ...defaultFlexibleSchedule('09:00'), cadence: 'monthly' as const }
   assert.throws(() => validateFlexibleSchedule(schedule, syncOptions), /недоступна/)
+})
+
+test('fingerprint ignores inactive fields that do not affect a daily schedule', () => {
+  const first = {
+    ...defaultFlexibleSchedule('02:00'),
+    anchorDate: '2026-09-02',
+    weekdays: [1],
+  }
+  const second = {
+    ...first,
+    anchorDate: '2026-09-04',
+    weekdays: [1, 2, 3, 4, 5, 6, 7],
+    monthDays: [1, 15],
+  }
+
+  assert.equal(
+    flexibleScheduleFingerprint(first, syncOptions),
+    flexibleScheduleFingerprint(second, syncOptions),
+  )
+})
+
+test('fingerprint changes when an effective schedule field changes', () => {
+  const first = {
+    ...defaultFlexibleSchedule('10:00'),
+    cadence: 'every-n-weeks' as const,
+    weekdays: [1],
+    anchorDate: '2026-09-02',
+  }
+  const second = { ...first, anchorDate: '2026-09-09' }
+
+  assert.notEqual(flexibleScheduleFingerprint(first), flexibleScheduleFingerprint(second))
 })

@@ -280,7 +280,30 @@ export function flexibleScheduleFingerprint(
   schedule: FlexibleSchedule,
   options: FlexibleScheduleValidationOptions = {},
 ): string {
-  return JSON.stringify(validateFlexibleSchedule(schedule, options))
+  const normalized = validateFlexibleSchedule(schedule, options)
+  const effectiveSchedule: Record<string, unknown> = {
+    cadence: normalized.cadence,
+    timeMode: normalized.timeMode,
+  }
+
+  if (normalized.timeMode === 'times') {
+    effectiveSchedule.times = normalized.times
+  } else {
+    effectiveSchedule.interval = normalized.interval
+  }
+
+  if (normalized.cadence === 'weekly' || normalized.cadence === 'every-n-weeks') {
+    effectiveSchedule.weekdays = normalized.weekdays
+  }
+  if (normalized.cadence === 'every-n-weeks') {
+    effectiveSchedule.weekInterval = normalized.weekInterval
+    effectiveSchedule.anchorDate = normalized.anchorDate
+  }
+  if (normalized.cadence === 'monthly') {
+    effectiveSchedule.monthDays = normalized.monthDays
+  }
+
+  return JSON.stringify(effectiveSchedule)
 }
 
 const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
