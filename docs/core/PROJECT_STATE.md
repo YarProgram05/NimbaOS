@@ -2,11 +2,11 @@
 
 Текущий snapshot реализации NimbaOS без хронологического журнала. История прежнего файла сохранена в `docs/archive/snapshots/2026-09-02-pre-cleanup/PROJECT_STATE.md`; implementation history — в role logs.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
 
 ## Current Phase
 
-Основной MVP и последующие dashboard/FBS/automation расширения реализованы. Mini-PC production работает через Docker и доступен по trusted Tailscale path. В локальном `main` есть объединенный release delta от 2026-09-01/02, который еще требует owner-confirmed production rollout.
+Основной MVP и последующие dashboard/FBS/automation расширения реализованы. Mini-PC production работает через Docker и доступен по trusted Tailscale path. Production runtime обновлён 2026-09-04 до `fdb3f5e0b3e8808b455a2f967c3b2680834a7a80`; последующий delta в `main` относится только к документации и памяти агента и не требует отдельного runtime rollout.
 
 ## Implemented
 
@@ -23,9 +23,9 @@ Last updated: 2026-09-02.
 - Google Sheets workflows: DB-only morning report and local FBS movement-sheet workflow.
 - Production operations: Docker Compose on Windows mini-PC, healthcheck, workers, GitHub Actions owner-confirmed release path, backup/restore runbook and Tailscale administration.
 - Documentation memory: compact canonical current layer plus explicit historical archive; startup context is role-routed through `AGENTS.md` and `docs/DOCS_INDEX.md`.
-- Development tooling: Graphify 0.9.53 with SQL parsing is installed through `uv`, connected as a Codex project-scoped skill under `.codex/skills/graphify`, and initialized in deep mode under `graphify-out/`. Current graph counts belong in `graphify-out/GRAPH_REPORT.md` rather than this snapshot. A DB-first navigation audit links the financial report's local tables to `calculateReport()` and its KPI formulas while preserving the explicit live-ad-cost exception.
+- Development tooling: Graphify 0.9.53 with SQL parsing is installed through `uv` and connected as a project-scoped Codex skill. Scoped tasks use direct sources; broad navigation may use one bounded read-only query; semantic refresh is a separate batch-maintenance task. Only `graphify-out/graph.json` and `graphify-out/manifest.json` are portable tracked artifacts.
 
-## Local Changes Awaiting Production Rollout
+## Deployed September 1–4 Rollup
 
 - Token expiry display and admin warning.
 - Self-service email/password changes with `User.sessionVersion`; migration `20260902120000_user_session_version`.
@@ -34,6 +34,9 @@ Last updated: 2026-09-02.
 - Shared Google Sheet template editor and app-service credential mapping.
 - FBS movement-sheet workflow; migration `20260901120000_fbs_movement_sheet_automation`.
 - Exact FBS physical-product tuple aliases and mapping audit tooling.
+- Stable schedule fingerprints that include only fields effective for the selected cadence/time mode, preventing daily BullMQ schedules from being treated as replaced after midnight.
+
+Локальная development database обновлена из проверенного production snapshot 2026-09-02. Для scheduler fix 2026-09-04 CI и штатный production workflow завершились успешно; отчёты и хранение создали реальные runs в 02:30. Карточки пользователь синхронизировал вручную, повторный recovery не требуется.
 
 ## Partially Implemented
 

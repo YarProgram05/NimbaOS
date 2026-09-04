@@ -2,40 +2,38 @@
 
 Короткая передача только актуального development-контекста. Полная история до структурной чистки сохранена в `docs/archive/snapshots/2026-09-02-pre-cleanup/DEV_HANDOFF.md`; последующие результаты находятся в `docs/development/DEV_LOG.md`.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
 
 ## Current Objective
 
-Подготовить контролируемый production rollout локальных изменений от 2026-09-01/02, не смешивая его с незавершенной проверкой исторической синхронизации `WB AGNIA` и не выполняя production-действий без явного подтверждения владельца.
+Read-only проверить фактический статус старой исторической синхронизации `WB AGNIA` и наблюдать следующие плановые runs после исправления midnight drift расписаний, не повторяя уже выполненную ручную синхронизацию карточек.
 
 ## Current Local Delta
 
-- WB API-token expiry: срок JWT показывается без передачи токена в браузер; администратор получает предупреждение за 10 календарных дней до истечения.
-- Self-service credentials: пользователь может изменить email/пароль с подтверждением текущего пароля; миграция `20260902120000_user_session_version` отзывает старые сессии.
-- Mobile/UI: завершен общий phone-responsive pass и height-responsive dashboard.
-- Scheduling: `/sync` использует общий flexible schedule editor; миграция `20260901143000_flexible_sync_schedules` применена только локально.
-- Google Sheets automation: общий role-based template editor, Compose credential mapping для app service и FBS movement-sheet workflow; миграция `20260901120000_fbs_movement_sheet_automation` применена только локально.
-- FBS Sheet identity: известные физические объединения закреплены точными `account + nmId + chrtId` aliases; последний аудит проверил 62 active tuples без расхождений.
+- Production runtime работает на `fdb3f5e0b3e8808b455a2f967c3b2680834a7a80`; последующий delta в `main` относится только к документации и памяти агента.
+- Локальная `wb_cabinet` обновлена 2026-09-02 из проверенного production snapshot; схема содержит все 16 repository migrations.
+- Известного application/schema delta, требующего нового production rollout, нет.
 
-Последняя записанная комплексная проверка: type-check, lint, `git diff --check` и 69 тестов прошли; lint сохраняет два ранее известных предупреждения `<img>`. Перед релизом выполнить проверки повторно на текущем дереве.
+Для scheduler fix прошли type-check, 71 тест, lint и `git diff --check`; lint сохраняет два ранее известных предупреждения `<img>`. CI run `33817010275` и production workflow `33817076564` завершились успешно.
 
 ## Production Delta
 
 - Mini-PC production работает через Docker; надежный приватный доступ — Tailscale.
 - Публичный Cloudflare response path остается непригодным для части российских IPv4-клиентов.
-- Изменения и миграции выше еще требуют обычного owner-confirmed release.
+- Production release `fdb3f5e` устранил ложный skip `scheduled job belongs to a replaced schedule`: daily fingerprints больше не зависят от неиспользуемого текущего `anchorDate`.
+- Отчёты и хранение 2026-09-04 создали реальные runs в 02:30. Карточки пользователь синхронизировал вручную; повторный recovery не нужен.
+- После rollout app/PostgreSQL/Redis были healthy, оба worker работали.
 - FBS WB write gates не включать как часть этого rollout.
 
 ## Safe Next Steps
 
 1. Read-only проверить фактический статус старой очереди `WB AGNIA`; не считать запись `Running` актуальной без проверки.
-2. Перед rollout повторить локальные проверки и сверить migration status.
-3. После отдельного подтверждения владельца выполнить штатный GitHub Actions production release.
-4. После релиза проверить health, вход после session-version migration, Google Sheet connection, workers/schedulers и read-only UI flows.
+2. Read-only проверить следующие запланированные sync/automation runs; не ставить повторно карточки, уже выполненные пользователем.
+3. При следующем application/schema delta повторить локальные проверки и сверить migration status перед новым rollout.
+4. Любой следующий production release выполнять только через штатный owner-confirmed GitHub Actions workflow.
 
 ## Active Risks
 
-- Не деплоить application code для self-service credentials без `20260902120000_user_session_version`.
 - Saving enabled schedule немедленно заменяет BullMQ schedulers соответствующей задачи.
 - Не печатать Google credential или WB tokens; проверять только наличие и безопасный результат запроса.
 - Не запускать повторную историческую синхронизацию AGNIA, пока старые runs не проверены.
