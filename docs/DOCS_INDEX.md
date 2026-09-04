@@ -2,14 +2,14 @@
 
 Короткий навигатор по канонической памяти NimbaOS. Архив не является текущей истиной.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
 
 ## Startup
 
 1. Всегда читать `AGENTS.md` и этот индекс.
-2. Development task: затем `docs/development/DEV_HANDOFF.md` и `docs/development/DEV_CURRENT_TASKS.md`.
-3. Marketplace task: затем `docs/marketplace/MARKETPLACE_HANDOFF.md` и `docs/marketplace/MARKETPLACE_CURRENT_TASKS.md`.
-4. Остальные документы открывать только по необходимости из таблиц ниже.
+2. Handoff/current-task файлы читать только для продолжения прежней работы, запроса статуса/плана или зависимости от недавнего контекста.
+3. Для изолированной задачи с известным компонентом сразу открыть только нужный документ или исходник из таблиц ниже.
+4. Не загружать handoff, current tasks, project state и architecture одновременно «на всякий случай».
 
 ## Root Truth
 
@@ -35,6 +35,7 @@ Last updated: 2026-09-02.
 | `docs/core/DATA_FRESHNESS_POLICY.md` | Coverage and DB-first rules | Before analytics or sync decisions |
 | `docs/core/SAFETY_RULES.md` | Approval gates and forbidden actions | Potentially dangerous work |
 | `docs/core/SCHEDULED_AUTOMATION.md` | Scheduler and workflow runtime | Recurring sync/automation work |
+| `docs/core/GRAPHIFY_MEMORY_GUIDE.md` | Простые правила использования и пакетного обслуживания Graphify | Memory workflow, token/time optimization or graph maintenance |
 | `docs/core/OPEN_QUESTIONS.md` | Unresolved owner/product decisions | Before designs depending on unknown policy |
 
 ## Development

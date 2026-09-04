@@ -21,10 +21,12 @@ NimbaOS — внутреннее веб-приложение для оцифро
 1. `AGENTS.md`
 2. `docs/DOCS_INDEX.md`
 
-Затем по типу задачи:
-- development: `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_CURRENT_TASKS.md`;
-- marketplace: `docs/marketplace/MARKETPLACE_HANDOFF.md`, `docs/marketplace/MARKETPLACE_CURRENT_TASKS.md`;
-- mixed: только релевантные handoff/current task документы.
+Не читать handoff/current-task файлы автоматически для каждой задачи. Открывать их только когда запрос продолжает прежнюю работу, спрашивает текущий статус/план или действительно зависит от недавнего контекста:
+- development continuity: `docs/development/DEV_HANDOFF.md`, `docs/development/DEV_CURRENT_TASKS.md`;
+- marketplace continuity: `docs/marketplace/MARKETPLACE_HANDOFF.md`, `docs/marketplace/MARKETPLACE_CURRENT_TASKS.md`;
+- mixed continuity: только релевантные handoff/current-task документы.
+
+Для изолированной задачи с понятным компонентом сразу использовать точный документ/исходник из индекса ниже. Не загружать handoff, current tasks, project state и архитектуру одновременно «на всякий случай».
 
 Дополнительно открывать по необходимости:
 - продукт/MVP: `SPECIFICATION.md`;
@@ -90,15 +92,15 @@ NimbaOS — внутреннее веб-приложение для оцифро
 
 ## Graphify Memory Workflow
 
-Graphify is the project memory and navigation index. Its project-scoped skill lives at `.codex/skills/graphify/`; graph outputs live in `graphify-out/`. The user does not need to invoke `/graphify`: apply this workflow automatically whenever it is relevant.
+Graphify is a derived navigation index, not mandatory session memory. Its project-scoped skill lives at `.codex/skills/graphify/`; graph outputs live in `graphify-out/`. Use the lightest mode that materially helps the task.
 
-### Graph-first navigation
+### Everyday navigation
 
-1. If `graphify-out/graph.json` exists and is current for the relevant sources, use Graphify before broad `rg` searches or mass file reading.
-2. At the start of graph work, refresh/read `graphify-out/reflections/LESSONS.md` according to the Graphify skill, then use `graphify query` for a scoped subgraph, `graphify path` for a dependency/flow and `graphify explain` for one entity.
-3. Use returned `source_file` and `source_location` values to open only the exact source files or necessary sections. Do not reread many Markdown files merely for general orientation.
-4. Use `graphify-out/wiki/index.md` for broad navigation when present. Read `graphify-out/GRAPH_REPORT.md` only for a graph-wide audit or when query/path/explain is insufficient.
-5. Dirty generated files in `graphify-out/` are normal and do not invalidate the graph. If the graph is known to be stale, update it or navigate directly to the relevant source until it is synchronized.
+1. For a narrow task with known files, symbols, routes, errors or services, use direct `rg` and source inspection. Graphify is unnecessary.
+2. For broad architecture, dependency, cross-subsystem or unknown-entrypoint questions, one read-only Graphify query with a small token budget may be used before opening the returned sources.
+3. Do not run `reflect`, `save-result`, semantic extraction, clustering or HTML generation during ordinary work.
+4. A stale/noisy graph is a hint only: stop querying and inspect current sources directly. Do not refresh it merely to finish the current task.
+5. Dirty generated files in `graphify-out/` are normal. `GRAPH_REPORT.md` and `graph.html` are for deliberate graph audits, not startup reading.
 
 ### Source of truth
 
@@ -106,18 +108,15 @@ Graphify is the project memory and navigation index. Its project-scoped skill li
 - Code, active Markdown documentation, KPI/metric definitions, analytical methodology, data contracts and decision records remain the source of truth.
 - Confirm exact formulas, contracts, implementation details and consequential claims in their source before changing code or presenting a final conclusion.
 
-### Memory update after substantial work
+### Batched maintenance
 
-Treat a task as graph-relevant when it changes architecture, business logic, analytical methods, KPI/metric definitions, data contracts, documentation, important decisions or component relationships.
+1. Ordinary tasks update only their actual source of truth and required canonical documentation. They never block on Graphify synchronization.
+2. Graph maintenance runs only on an explicit user request or as a dedicated maintenance task, preferably after several substantial changes rather than after each change.
+3. Code-only batches use a cheap AST refresh without semantic extraction, clustering or HTML. Important documentation/architecture/business-rule batches may use semantic incremental maintenance once for the whole batch.
+4. Full rebuild, community relabeling and visualization are rare operations for major restructuring, corruption recovery or an explicit graph audit.
+5. Do not save ordinary query answers through `graphify save-result`; upstream Graphify re-ingests its default memory directory and creates avoidable self-referential updates.
+6. If an important decision exists only in conversation, record it in `DECISIONS.md` or the relevant canonical source immediately; do not rely on the graph to preserve it.
 
-For every graph-relevant change:
+Human usage and maintenance guide: `docs/core/GRAPHIFY_MEMORY_GUIDE.md`.
 
-1. Update the appropriate source of truth first.
-2. If an important decision exists only in the conversation, record it in `DECISIONS.md` or the relevant canonical document before updating the graph.
-3. Run the project-scoped Graphify incremental update according to `.codex/skills/graphify/SKILL.md`.
-4. Verify with a focused query, path or explanation that the changed entities, sources and relationships are present and correct.
-5. Do not consider the substantive task complete until its source of truth and Graphify are synchronized. If synchronization cannot be completed, report the graph as stale and state the exact reason.
-
-Routine edits that do not change project knowledge or relationships do not require a graph rebuild.
-
-Last updated: 2026-09-02 - established Graphify-first project memory workflow.
+Last updated: 2026-09-04 - switched Graphify to read-only-by-default navigation with explicit batched maintenance.

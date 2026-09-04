@@ -2,6 +2,34 @@
 
 Canonical post-cleanup development history. Earlier entries are preserved in `docs/archive/development/DEV_LOG_2026-05_to_2026-09-02.md`.
 
+## 2026-09-04 - Reduced Graphify memory overhead
+
+- Replaced mandatory graph-first behavior with a read-only-by-default workflow: scoped tasks use direct sources, while broad architecture/dependency questions may use one bounded query before source verification.
+- Removed the pre-tool Graphify hook and shortened the project skill from a full maintenance manual to a lightweight mode router. Ordinary work no longer loads semantic/update instructions or waits for graph synchronization.
+- Moved semantic extraction, clustering, labeling and HTML generation into explicit batch maintenance. Code-only maintenance uses deterministic AST update without clustering by default.
+- Disabled normal `save-result`/`reflect` usage because upstream Graphify intentionally re-ingests `graphify-out/memory`, which previously created a self-referential second update.
+- Relaxed session startup so handoff/current-task files are loaded only for continuity or status work, not every isolated task.
+- Added `docs/core/GRAPHIFY_MEMORY_GUIDE.md` with simple user prompts, maintenance cadence and warning signs. No application, database, production or WB state was changed.
+
+## 2026-09-04 - Fixed daily sync and morning-report scheduler skips
+
+- Investigated production on mini-PC `WIN-SK69NVLD6F0` after all non-FBS nightly syncs were skipped on September 3 and product-card refresh was skipped again at 02:00 on September 4. Host, Docker, PostgreSQL, Redis and both workers were continuously healthy; the failure was not sleep, reboot or worker downtime.
+- BullMQ evidence showed affected jobs completed instantly with `scheduled job belongs to a replaced schedule`; the September 3 morning-report job likewise returned `scheduled workflow configuration has changed`. Because these skips happen before run creation, they were absent from `SyncJobRun`/`AutomationRun` history and looked like missed launches.
+- Root cause: legacy sync settings and the morning workflow had no stored extended `schedule`. Normalization filled the unused `anchorDate` with the current Moscow date, while `flexibleScheduleFingerprint()` serialized every field. The fingerprint therefore changed at midnight. Fully saved FBS schedules had a fixed anchor date and continued working.
+- Changed schedule fingerprints to include only effective fields for the selected cadence and time mode. Daily fingerprints ignore unused anchor/week/month fields; weekly, monthly and every-N-weeks fingerprints still include the fields that affect their execution. Added regression coverage for stable daily fingerprints and meaningful every-N-weeks changes.
+- Before 02:30, re-applied production schedules from the running release container so the remaining September 4 jobs were protected. Corrected the manual recovery commands to execute scheduler scripts in the verified running release rather than an unpinned compose `latest` image.
+- Local type-check, 71 tests, lint and `git diff --check` passed; lint retains the two known `<img>` warnings. CI run `33817010275` and production workflow `33817076564` completed successfully. Production now runs image/commit `fdb3f5e0b3e8808b455a2f967c3b2680834a7a80`; app/PostgreSQL/Redis are healthy and both workers are running.
+- Live verification at 02:30 confirmed `reports.period` created a real `RUNNING` `SyncJobRun` instead of a silent skip. Three current, read-only `products.refresh` jobs were queued to recover the missed 02:00 refresh. No historical resync, WB write, schema migration, environment change or volume operation was performed.
+
+## 2026-09-02 - Refreshed local development database from production
+
+- With explicit owner request, repeated the controlled mini-PC snapshot workflow. Verified remote host `WIN-SK69NVLD6F0`, user `n8929`, checkout `C:\NimbaOS\nimba`, compose project `nimba`, database `nimba_production`, container identities and local application health before export.
+- Read-only verification found production, local `main` and `origin/main` at commit `e5c5a5af7b3ff88c858767c177de49434b81c6f3`. Production and the repository both contain 16 completed migrations plus the expected historical rolled-back attempt; the previous handoff statement that the September 1–2 rollup still awaited deployment was stale and was corrected.
+- Stopped only the running local Next.js development process; local sync and automation workers were not running. Created a custom-format `pg_dump`, validated archive readability, size and SHA-256 on the production container, mini-PC and laptop, and restored it first into isolated database `wb_cabinet_refresh_20260902_194618`.
+- Validation found zero unfinished migrations, invalid indexes or unvalidated constraints. Final local controls are 2 users, 3 WB accounts, 171 products, 14,298 orders and 78,601 realization-report rows; order/report coverage reaches 2026-09-01 and the latest successful sync timestamp in the snapshot is `2026-09-02 15:00:47.761`.
+- Final FBS controls are 625 orders, 1,021 order events, 8 inventory movements, 614 KIZ units, 4,249 KIZ events, 551 compliance tasks, 7 operation batches and 0 FBS action logs. Latest FBS/KIZ timestamps in the snapshot are from 2026-09-02.
+- Switched the validated database into the standard local `wb_cabinet` name, confirmed `prisma migrate status` reports the schema up to date, then removed the superseded local database and all temporary dump copies from both hosts and containers. Production remained online and healthy (HTTP 200); no production data, Redis state, worker, scheduler, code or WB state was changed.
+
 ## 2026-09-02 - Permanent Graphify memory workflow
 
 - Replaced the minimal Graphify notes in `AGENTS.md` with a permanent project-level workflow: graph-first navigation, scoped source reading, source-of-truth precedence, decision capture, incremental memory updates and post-update verification.

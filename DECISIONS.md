@@ -2,7 +2,17 @@
 
 Канонические действующие продуктовые и архитектурные решения NimbaOS. Полная история, включая superseded решения и legacy phase notes, сохранена в `docs/archive/snapshots/2026-09-02-pre-cleanup/DECISIONS.md`.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-04.
+
+## 2026-09-04 — Graphify is read-only by default and maintained in batches
+
+Status: Active.
+
+Decision: Обычные задачи используют прямое чтение известных исходников либо один короткий read-only Graphify query для широкой навигации. Задача не блокируется обновлением графа. Semantic extraction, incremental maintenance, clustering и HTML выполняются только отдельной явной задачей, пакетно после нескольких существенных изменений. Обычные query results не сохраняются через `graphify save-result`.
+
+Reason: Обязательная синхронизация после каждой задачи загружала большой skill, запускала semantic subagents и полную переработку производных артефактов. Кроме того, upstream Graphify намеренно повторно индексирует `graphify-out/memory`, поэтому сохранение проверочного запроса создавало самореферентный второй цикл обновления.
+
+Consequences: Graphify остаётся полезной картой архитектуры, но может временно отставать от code/docs до ближайшего пакетного обслуживания. Точные утверждения всегда проверяются в канонических источниках. Автоматический pre-tool hook удалён; full rebuild и visualization больше не являются повседневным workflow.
 
 ## 2026-09-02 — Project memory has current and archive layers
 
