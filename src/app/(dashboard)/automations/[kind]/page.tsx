@@ -7,6 +7,7 @@ import { getFbsMovementSheetWorkflow, getMorningWbReportWorkflow } from '@/lib/a
 import { AUTOMATION_WORKFLOW_KINDS } from '@/types/automations'
 import { AutomationDetailsClient } from '../automation-details-client'
 import { FbsMovementSheetDetailsClient } from '../fbs-movement-sheet-details-client'
+import { getFbsSheetMappingReview } from '@/lib/services/fbs-sheet-mappings'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,9 +18,11 @@ export default async function AutomationDetailsPage({ params }: { params: { kind
 
   if (params.kind === AUTOMATION_WORKFLOW_KINDS.FBS_MOVEMENT_SHEET) {
     const workflow = await getFbsMovementSheetWorkflow()
+    const mappingReview = await getFbsSheetMappingReview(workflow)
     return (
       <FbsMovementSheetDetailsClient
         initialWorkflow={workflow}
+        initialMappingReview={mappingReview}
         canManage={checkRole(session, 'MANAGER')}
         name={definition.name}
         description={definition.description}

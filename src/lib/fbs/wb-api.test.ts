@@ -4,8 +4,27 @@ import type { WbApiClient } from '@/lib/wb-api/client'
 import {
   fetchFbsMarkingReport,
   fetchFbsOrdersPeriod,
+  fetchFbsStocks,
   fetchFbsWarehouses,
 } from '@/lib/wb-api/fbs'
+import { fetchCardsList } from '@/lib/wb-api/products'
+
+test('does not treat malformed cards or stock responses as a fresh empty catalog or zero stock', async () => {
+  const client = { post: async () => ({}) } as unknown as WbApiClient
+  await assert.rejects(() => fetchCardsList(client), /invalid product cards response/)
+  await assert.rejects(() => fetchFbsStocks(client, 'warehouse', [101]), /invalid FBS stocks response/)
+})
+
+test('accepts a valid empty stock response and batches stock reads by size ID', async () => {
+  const calls: number[][] = []
+  const client = { post: async (_domain: string, _path: string, body: { chrtIds: number[] }) => {
+    calls.push(body.chrtIds)
+    return { stocks: [] }
+  } } as unknown as WbApiClient
+  assert.deepEqual(await fetchFbsStocks(client, 'warehouse', Array.from({ length: 1001 }, (_, index) => index + 1)), [])
+  assert.equal(calls[0].length, 1000)
+  assert.deepEqual(calls[1], [1001])
+})
 
 test('normalizes numeric WB warehouse classifiers before Prisma persistence', async () => {
   const client = {

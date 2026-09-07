@@ -1,6 +1,6 @@
 # Scheduled Automation
 
-Расписание и автоматизация. Last updated: 2026-09-04.
+Расписание и автоматизация. Last updated: 2026-09-07.
 
 ## Current Project Mechanism
 
@@ -28,10 +28,17 @@
 - Projection: order, pre-handoff cancellation and explicit `RETURN_RECEIVED` events with stable account/order or movement keys. Existing rows are updated by key; retries do not append duplicates.
 - Guardrails: exact headers, Moscow spreadsheet timezone, protected summary formula sentinel, known product mapping, unique existing/desired keys, readback, per-day/per-cabinet control rows and final idempotency verification.
 - Product names remain human-readable display values. Technical joins use account + `nmId` + `chrtId`; duplicate WB listings may be mapped to one canonical physical product through `config.productAliases`.
+- New tuples require an explicit physical-product mapping. `/automations/fbs-movement-sheet` shows unmatched FBS positions, existing accounting groups and suggested matches; a manager confirms an existing group or enters a new name. Similarity only ranks suggestions and never merges inventory. Existing Sheet tuple mappings are retained; a confirmed tuple cannot be renamed through this flow.
+- The workflow registers approved names in the first empty product slot of `Справочники!A4:A153`, after checking the paired formulas in `Сводка!A8:T157`. Instruction/footer rows are outside these ranges. Full capacity or a damaged template stops the run before writes. Names are written as literal text, re-read and checked for Summary coverage before operations/stocks are written. Registration creates no opening quantity or movement.
+- Owner-confirmed groups and their separate cabinet tuples from 2026-09-07 are recorded in `src/lib/automations/fbs-product-aliases.ts`: nine listings share five physical names. Configured mappings take precedence over these defaults. Future similar listings still require confirmation.
 - Explicit `config.productAliases` have highest priority over names retained in prior Sheet rows. They pin the corrected Nimba squares tuple `412122105:591014919 → синий шифон квадраты` and every active tuple found for the known `туника ↔ парео` category duplicates (black leaf, leopard/spots, blue waves, green wave, blue cotton and light green).
 - Current WB sellable stock is maintained on the separate employee-readable `Остатки WB` tab. Rows are upserted by account + `nmId` + `chrtId`; disappeared tuples are retained with zero so stale positive stock cannot survive.
 - The workflow requires a locally synchronized WB stock timestamp no older than 75 minutes (for the current 60-minute FBS sync cadence) and verifies Summary values per product/account after write. A Sheet/WB mismatch is a hard failure.
 - A lower local physical ledger than WB is not a load failure. Summary displays `ВНЕСТИ ПОПОЛНЕНИЕ +N`, the run/control result records the warning count, and the operator decides whether to add the missing local movement.
+- `Сводка!K4:L6` contains two unmerged operational metrics and an explicit Moscow date range. `Передано в доставку по WB, шт.` counts distinct cabinet/order IDs by the first proven `supply.closedAt`; one WB assembly order is one item. It measures system transfer, not per-item physical acceptance or fulfillment charges. Later returns/cancellations do not subtract prior transfers. Local `shippedAt` is not a substitute for the WB event date.
+- Both metrics use retained history from the earliest local order or existing Sheet order date through the target day, independently of `config.startDate`. The DB reader is scoped to enabled active workflow cabinets, checks existing Sheet order keys against local coverage and fails explicitly above its 50,000-order bound. Missing history or handoff dates yield a lower bound or `Нет данных`, never a false exact count.
+- `Приёмка WB подтверждена, шт.` displays `не менее N` for orders in the same handoff cohort with individual `sorted`, `ready_for_pickup` or `sold` evidence observed by the end of the target Moscow day. `observedAt`/`fetchedAt` are knowledge timestamps, not physical acceptance dates; future evidence is excluded from older reports. Absence of proof means a gap in available history, not proven non-acceptance. `accepted_by_carrier`, supply-level scans and late return statuses alone do not prove WB acceptance.
+- Metric planning rejects formulas, unknown content or intersecting merges in `K4:L6` before any Sheet write. It preserves the existing `Всего заказов` formula and other cells, writes specific format fields without merges or changing the row-6 border, and raises row 4 to 60px for wrapped titles. The metric readback must match before the last successful report date advances.
 
 Подходящие read-only jobs:
 - products/cards refresh в непиковое время;
@@ -69,6 +76,7 @@
 - `Утренний отчет WB` must not call WB API or sync services. It checks local coverage/stocks, writes from DB when ready, and fails fast when data is missing; run sync jobs separately before rerunning it.
 - Dangerous writes require human confirmation.
 - FBS interval schedules are created disabled by default. They are read-only even after enablement; stock publication and other WB changes are never scheduled.
+- `FBS_STOCKS_CURRENT` first refreshes card/size identities through the cards-only catalog service, without price API calls. A catalog failure fails the job before stock freshness advances. Newly stocked seller-warehouse sizes create local assortment rows with `onHand=reserved=0`; WB sellable stock stays in `wbStock`. Existing balances, disabled flags and marking settings are preserved. Unchanged size/barcode pairs retain their `ProductSize` IDs.
 
 ## Need To Clarify
 

@@ -21,38 +21,8 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
   const apiKey = decrypt(account.apiKey)
   const client = new WbApiClient(apiKey)
 
-  // 2. Paginate through all product cards (cursor-based)
-  let cursor: CardsCursor | undefined = undefined
-  let hasMore = true
-  const syncedNmIds = new Set<number>()
-
-  while (hasMore) {
-    let page
-    try {
-      page = await fetchCardsList(client, cursor)
-    } catch (error) {
-      if (error instanceof WbRateLimitError) throw error
-      result.errors++
-      break
-    }
-
-    hasMore = page.hasMore
-    if (page.cards.length === 0) break
-
-    // Advance cursor to the last card of this page
-    const lastCard = page.cards[page.cards.length - 1]
-    cursor = { updatedAt: lastCard.updatedAt, nmID: lastCard.nmID }
-
-    // Upsert each card (independent transactions)
-    for (const card of page.cards) {
-      try {
-        await upsertCard(wbAccountId, card, result)
-        syncedNmIds.add(card.nmID)
-      } catch {
-        result.errors++
-      }
-    }
-  }
+  // 2. Paginate through all product cards (cursor-based).
+  const syncedNmIds = await syncCatalogCards(wbAccountId, client, result, false)
 
   // 3. Fetch prices for exactly the local catalogue.
   // WB's full price-list pagination can skip cards in some seller cabinets;
@@ -107,10 +77,59 @@ export async function syncProducts(wbAccountId: string): Promise<SyncResult> {
 
 // ── Internal helpers ────────────────────────────────────────────────────────────
 
+/** Fresh size IDs for FBS discovery, without price API requests or false account freshness. */
+export async function syncProductCatalog(wbAccountId: string, client: WbApiClient) {
+  const startMs = Date.now()
+  const result: SyncResult = { created: 0, updated: 0, priceRows: 0, errors: 0, durationMs: 0 }
+  await syncCatalogCards(wbAccountId, client, result, true)
+  result.durationMs = Date.now() - startMs
+  return result
+}
+
+async function syncCatalogCards(
+  wbAccountId: string,
+  client: WbApiClient,
+  result: SyncResult,
+  strict: boolean,
+) {
+  let cursor: CardsCursor | undefined
+  let hasMore = true
+  const syncedNmIds = new Set<number>()
+  const seenCursors = new Set<string>()
+  while (hasMore) {
+    let page
+    try {
+      page = await fetchCardsList(client, cursor)
+    } catch (error) {
+      if (strict || error instanceof WbRateLimitError) throw error
+      result.errors++
+      break
+    }
+    hasMore = page.hasMore
+    if (!page.cards.length) break
+    const lastCard = page.cards[page.cards.length - 1]
+    cursor = { updatedAt: lastCard.updatedAt, nmID: lastCard.nmID }
+    const cursorKey = JSON.stringify(cursor)
+    if (seenCursors.has(cursorKey)) throw new Error('WB product catalog pagination did not advance')
+    seenCursors.add(cursorKey)
+    for (const card of page.cards) {
+      try {
+        await upsertCard(wbAccountId, card, result, !strict)
+        syncedNmIds.add(card.nmID)
+      } catch (error) {
+        if (strict) throw error
+        result.errors++
+      }
+    }
+  }
+  return syncedNmIds
+}
+
 async function upsertCard(
   wbAccountId: string,
   card: WbCard,
   result: SyncResult,
+  fullRefresh: boolean,
 ): Promise<void> {
   const photoUrl = card.photos?.[0]?.big ?? null
 
@@ -123,19 +142,7 @@ async function upsertCard(
   await prisma.$transaction(async (tx) => {
     const existing = await tx.product.findUnique({
       where: { wbAccountId_nmId: { wbAccountId, nmId: card.nmID } },
-      select: {
-        id: true,
-        sizes: {
-          select: {
-            barcode: true,
-            techSize: true,
-            wbSize: true,
-            price: true,
-            discount: true,
-            spp: true,
-          },
-        },
-      },
+      select: { id: true },
     })
 
     let productId: string
@@ -173,8 +180,17 @@ async function upsertCard(
       result.created++
     }
 
+    // Read sizes after the product write has serialized concurrent refreshes of this card.
+    const existingSizes = await tx.productSize.findMany({
+      where: { productId },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true, chrtId: true, barcode: true, techSize: true, wbSize: true,
+        price: true, discount: true, spp: true,
+      },
+    })
     const existingPricesByBarcode = new Map(
-      (existing?.sizes ?? []).map((size) => [
+      existingSizes.map((size) => [
         size.barcode,
         {
           price: size.price?.toString() ?? null,
@@ -184,7 +200,7 @@ async function upsertCard(
       ]),
     )
     const existingPricesBySize = new Map(
-      (existing?.sizes ?? []).map((size) => [
+      existingSizes.map((size) => [
         `${size.techSize.trim().toLowerCase()}|${(size.wbSize ?? '').trim().toLowerCase()}`,
         {
           price: size.price?.toString() ?? null,
@@ -194,10 +210,10 @@ async function upsertCard(
       ]),
     )
 
-    // Replace sizes atomically, but preserve previous prices until the price API refreshes them.
-    await tx.productSize.deleteMany({ where: { productId } })
-    if (card.sizes.length > 0) {
-      const sizeData = card.sizes.flatMap((s) =>
+    // Keep IDs for unchanged size/barcode pairs: FBS and KIZ rows reference these IDs.
+    const retainedIds = new Set<string>()
+    const incomingKeys = new Set<string>()
+    const sizeData = card.sizes.flatMap((s) =>
         s.skus.map((barcode) => {
           const preserved =
             existingPricesByBarcode.get(barcode) ??
@@ -209,20 +225,32 @@ async function upsertCard(
             techSize: s.techSize,
             wbSize:   s.wbSize || null,
             barcode,
-            // WB cards API price is in kopecks; convert to roubles.
-            // If the cards response has no price, keep the last known price.
-            price:    s.price ? s.price / 100 : preserved?.price ?? null,
+            // Content prices can lag the Prices API. A cards-only FBS refresh
+            // must preserve the stored price, including a known empty price.
+            price:    !fullRefresh && preserved ? preserved.price
+              : s.price ? s.price / 100 : preserved?.price ?? null,
             discount: preserved?.discount ?? null,
             spp:      preserved?.spp ?? null,
           }
         }),
+    )
+    for (const data of sizeData) {
+      const key = JSON.stringify([data.chrtId, data.barcode])
+      if (incomingKeys.has(key)) continue
+      incomingKeys.add(key)
+      const previous = existingSizes.find((size) =>
+        !retainedIds.has(size.id) && size.chrtId === data.chrtId && size.barcode === data.barcode,
       )
-      await tx.productSize.createMany({ data: sizeData })
+      const saved = previous
+        ? await tx.productSize.update({ where: { id: previous.id }, data, select: { id: true } })
+        : await tx.productSize.create({ data, select: { id: true } })
+      retainedIds.add(saved.id)
     }
+    await tx.productSize.deleteMany({ where: { productId, id: { notIn: Array.from(retainedIds) } } })
 
     // Replace materials
-    await tx.productMaterial.deleteMany({ where: { productId } })
-    if (compositions.length > 0) {
+    if (fullRefresh) await tx.productMaterial.deleteMany({ where: { productId } })
+    if (fullRefresh && compositions.length > 0) {
       await tx.productMaterial.createMany({
         data: compositions.map((comp) => ({
           productId,

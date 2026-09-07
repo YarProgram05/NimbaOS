@@ -172,7 +172,11 @@ export async function fetchFbsStocks(
       `/api/v3/stocks/${warehouseExternalId}`,
       { chrtIds: batch },
     )
-    result.push(...(Array.isArray(response) ? response : response?.stocks ?? []))
+    const stocks = Array.isArray(response) ? response : response?.stocks
+    if (!Array.isArray(stocks)) {
+      throw new Error('WB API returned an invalid FBS stocks response')
+    }
+    result.push(...stocks)
   }
   return result
 }

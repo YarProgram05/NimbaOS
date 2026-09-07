@@ -2,6 +2,8 @@ import { createHash } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/encryption'
+import { buildFbsStockUpserts, groupFbsCatalogSizes, selectFbsCatalogSize } from '@/lib/fbs/assortment'
+import { syncProductCatalog } from '@/lib/services/sync-products'
 import {
   extractFbsSgtinCodes,
   getWbKizGtinValidationStatus,
@@ -265,17 +267,28 @@ async function resolveAssortment(
 ) {
   if (!input.warehouseId) return null
 
-  const barcode = input.order.skus?.[0] ?? ''
-  const size = await tx.productSize.findFirst({
-    where: {
-      product: { wbAccountId: input.wbAccountId },
-      OR: [
-        { chrtId: input.order.chrtId },
-        ...(barcode ? [{ barcode }] : []),
-      ],
-    },
-    select: { id: true, productId: true, barcode: true, product: { select: { vendorCode: true } } },
+  const barcode = input.order.skus?.find((sku) => sku.trim()) ?? ''
+  const identity = { warehouseId: input.warehouseId, chrtId: input.order.chrtId }
+  const existing = await tx.fbsAssortmentItem.findUnique({
+    where: { warehouseId_chrtId: identity },
+    select: { nmId: true, barcode: true, productSizeId: true },
   })
+  if (existing && existing.nmId !== input.order.nmId) {
+    throw new Error(`FBS order nmId conflicts with assortment for chrtId ${input.order.chrtId}`)
+  }
+  const sizes = await tx.productSize.findMany({
+    where: {
+      product: { wbAccountId: input.wbAccountId, nmId: input.order.nmId },
+      chrtId: input.order.chrtId,
+    },
+    select: { id: true, productId: true, chrtId: true, barcode: true, product: { select: { nmId: true, vendorCode: true } } },
+  })
+  const size = selectFbsCatalogSize(sizes, {
+    nmId: input.order.nmId,
+    barcode: existing?.barcode || barcode,
+    productSizeId: existing?.productSizeId,
+  })
+  const assortmentBarcode = size?.barcode || existing?.barcode || barcode
 
   return tx.fbsAssortmentItem.upsert({
     where: {
@@ -291,16 +304,20 @@ async function resolveAssortment(
       productSizeId: size?.id ?? null,
       nmId: input.order.nmId,
       chrtId: input.order.chrtId,
-      barcode: barcode || size?.barcode || '',
+      barcode: assortmentBarcode,
       vendorCode: input.order.article ?? size?.product.vendorCode ?? null,
       requiresKiz: input.requiresKiz,
+      onHand: 0,
+      reserved: 0,
     },
     update: {
-      productId: size?.productId,
-      productSizeId: size?.id,
-      nmId: input.order.nmId,
-      barcode: barcode || size?.barcode || undefined,
-      vendorCode: input.order.article ?? size?.product.vendorCode ?? undefined,
+      ...(existing ? {
+        productId: size?.productId,
+        productSizeId: size?.id,
+        nmId: input.order.nmId,
+        barcode: assortmentBarcode || undefined,
+        vendorCode: input.order.article ?? size?.product.vendorCode ?? undefined,
+      } : {}),
       ...(input.requiresKiz ? { requiresKiz: true } : {}),
     },
   })
@@ -1017,12 +1034,14 @@ export async function syncFbsStocksCurrent(wbAccountId: string) {
   })
   const client = new WbApiClient(decrypt(account.apiKey))
   await upsertWarehouses(wbAccountId, client)
+  // Stock reads require chrtIds; refresh cards so newly listed WB sizes are discoverable now.
+  // A catalog failure aborts before any stock freshness timestamps are advanced.
+  const catalogRefresh = await syncProductCatalog(wbAccountId, client)
   const [warehouses, catalogSizes] = await Promise.all([
     prisma.fbsSellerWarehouse.findMany({
       where: { wbAccountId, isEnabled: true },
       include: {
         assortmentItems: {
-          where: { isEnabled: true },
           select: {
             id: true,
             productId: true,
@@ -1062,12 +1081,8 @@ export async function syncFbsStocksCurrent(wbAccountId: string) {
   let updated = 0
   let discovered = 0
   let wbStockUnits = 0
+  const catalogMap = groupFbsCatalogSizes(catalogSizes)
   for (const warehouse of warehouses) {
-    const catalogMap = new Map(
-      catalogSizes.flatMap((size) =>
-        size.chrtId == null ? [] : [[size.chrtId, size] as const],
-      ),
-    )
     const existingMap = new Map(
       warehouse.assortmentItems.map((item) => [item.chrtId, item]),
     )
@@ -1085,58 +1100,27 @@ export async function syncFbsStocksCurrent(wbAccountId: string) {
       warehouse.externalId.toString(),
       chrtIds,
     )
-    const stockMap = new Map(stocks.map((stock) => [stock.chrtId, stock.amount]))
-    const mutations: Prisma.PrismaPromise<unknown>[] = []
-
-    for (const chrtId of chrtIds) {
-      const existing = existingMap.get(chrtId)
-      const catalog = catalogMap.get(chrtId)
-      const amount = stockMap.get(chrtId) ?? 0
-      if (!existing && (!catalog || amount <= 0)) continue
-
-      if (!existing) discovered += 1
-      updated += 1
-      wbStockUnits += amount
-      mutations.push(
-        prisma.fbsAssortmentItem.upsert({
-          where: {
-            warehouseId_chrtId: {
-              warehouseId: warehouse.id,
-              chrtId,
-            },
-          },
-          create: {
-            wbAccountId,
-            warehouseId: warehouse.id,
-            productId: catalog?.productId ?? null,
-            productSizeId: catalog?.id ?? null,
-            nmId: catalog?.product.nmId ?? existing?.nmId ?? 0,
-            chrtId,
-            barcode: catalog?.barcode ?? existing?.barcode ?? '',
-            vendorCode: catalog?.product.vendorCode ?? existing?.vendorCode ?? null,
-            wbStock: amount,
-            wbStockSyncedAt: new Date(),
-          },
-          update: {
-            productId: catalog?.productId ?? undefined,
-            productSizeId: catalog?.id ?? undefined,
-            nmId: catalog?.product.nmId ?? undefined,
-            barcode: catalog?.barcode ?? undefined,
-            vendorCode: catalog?.product.vendorCode ?? undefined,
-            wbStock: amount,
-            wbStockSyncedAt: new Date(),
-          },
-        }),
-      )
+    const plan = buildFbsStockUpserts({
+      wbAccountId,
+      warehouseId: warehouse.id,
+      catalog: catalogMap,
+      existing: warehouse.assortmentItems,
+      stocks,
+      syncedAt: new Date(),
+    })
+    if (plan.length) {
+      await prisma.$transaction(plan.map((item) => prisma.fbsAssortmentItem.upsert(item.args)))
     }
-
-    if (mutations.length) await prisma.$transaction(mutations)
+    discovered += plan.filter((item) => item.discovered).length
+    updated += plan.length
+    wbStockUnits += plan.reduce((total, item) => total + item.amount, 0)
   }
 
   return {
     readOnly: true,
     warehouses: warehouses.length,
     catalogSizes: catalogSizes.length,
+    catalogRefresh,
     updated,
     discovered,
     wbStockUnits,

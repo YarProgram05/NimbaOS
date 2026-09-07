@@ -21,6 +21,7 @@ import {
   type UpdateMorningWbReportWorkflowInput,
 } from '@/types/automations'
 import { validateFbsAccountTechnicalKey } from '@/lib/automations/fbs-sheet'
+import { FBS_CONFIRMED_PRODUCT_ALIASES } from '@/lib/automations/fbs-product-aliases'
 import {
   FBS_DEFAULT_SHEET_TABS,
   FBS_SHEET_ROLE_DEFINITIONS,
@@ -92,6 +93,7 @@ function defaultFbsConfig(timeOfDay = FBS_DEFAULT_TIME_OF_DAY): FbsMovementSheet
     startDate: '2026-08-10',
     accountKeys: {},
     productAliases: {
+      ...FBS_CONFIRMED_PRODUCT_ALIASES,
       'nimba:158472051:263727213': 'парео черн шиф',
       'nimba:169028676:408742887': 'парео хлопок голубой',
       'nimba:232092330:366203451': 'туника зеленая волна',
@@ -300,16 +302,7 @@ export async function ensureFbsMovementSheetWorkflow() {
     select: { id: true, name: true },
     orderBy: { createdAt: 'asc' },
   })
-  const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
-  let configChanged = !(
-    workflow.config && typeof workflow.config === 'object' && !Array.isArray(workflow.config) &&
-    'productAliases' in workflow.config
-  )
   for (const account of accounts) {
-    if (!config.accountKeys[account.id]) {
-      config.accountKeys[account.id] = defaultFbsTechnicalKey(account)
-      configChanged = true
-    }
     await prisma.automationWorkflowAccount.upsert({
       where: { workflowId_wbAccountId: { workflowId: workflow.id, wbAccountId: account.id } },
       create: {
@@ -321,13 +314,38 @@ export async function ensureFbsMovementSheetWorkflow() {
       update: {},
     })
   }
-  if (configChanged) {
-    workflow = await prisma.automationWorkflowSetting.update({
-      where: { id: workflow.id },
-      data: { config: config as unknown as Prisma.InputJsonValue },
+  // Account discovery may overlap a manager's alias confirmation or settings edit.
+  // Recompute only the missing keys from the latest config after a competing write.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const config = parseFbsConfig(workflow.config, workflow.timeOfDay)
+    const storedConfig = workflow.config && typeof workflow.config === 'object' && !Array.isArray(workflow.config)
+      ? workflow.config as Prisma.JsonObject
+      : null
+    const hasAliases = Boolean(storedConfig && 'productAliases' in storedConfig)
+    let configChanged = !hasAliases
+    for (const account of accounts) {
+      if (!config.accountKeys[account.id]) {
+        config.accountKeys[account.id] = defaultFbsTechnicalKey(account)
+        configChanged = true
+      }
+    }
+    if (!configChanged) return workflow
+    const saved = await prisma.automationWorkflowSetting.updateMany({
+      where: {
+        id: workflow.id,
+        updatedAt: workflow.updatedAt,
+        ...(workflow.config !== null ? { config: { equals: workflow.config as Prisma.InputJsonValue } } : {}),
+      },
+      data: { config: {
+        ...(storedConfig ?? config),
+        accountKeys: config.accountKeys,
+        ...(!hasAliases ? { productAliases: config.productAliases } : {}),
+      } as Prisma.InputJsonValue },
     })
+    workflow = await prisma.automationWorkflowSetting.findUniqueOrThrow({ where: { id: workflow.id } })
+    if (saved.count) return workflow
   }
-  return workflow
+  throw new Error('Настройки FBS одновременно изменились. Обновите страницу для подключения нового кабинета.')
 }
 
 export async function getFbsMovementSheetWorkflow(): Promise<FbsMovementSheetWorkflowRow> {
@@ -480,22 +498,17 @@ export async function updateFbsMovementSheetWorkflow(
     productAliases: existingConfig.productAliases,
     schedule,
   }
-  const workflow = await prisma.automationWorkflowSetting.upsert({
-    where: { kind: FBS_MOVEMENT_SHEET_PRISMA_KIND },
-    create: {
-      kind: FBS_MOVEMENT_SHEET_PRISMA_KIND,
-      enabled: input.enabled,
-      timeOfDay,
-      timezone: TIMEZONE,
-      config: config as unknown as Prisma.InputJsonValue,
-    },
-    update: {
+  const saved = await prisma.automationWorkflowSetting.updateMany({
+    where: { id: existingWorkflow.id, updatedAt: existingWorkflow.updatedAt },
+    data: {
       enabled: input.enabled,
       timeOfDay,
       timezone: TIMEZONE,
       config: config as unknown as Prisma.InputJsonValue,
     },
   })
+  if (!saved.count) throw new Error('Настройки или сопоставления изменились. Обновите страницу и повторите сохранение')
+  const workflow = await prisma.automationWorkflowSetting.findUniqueOrThrow({ where: { id: existingWorkflow.id } })
   for (const account of input.accounts) {
     if (!activeAccountIds.has(account.wbAccountId)) continue
     await prisma.automationWorkflowAccount.upsert({

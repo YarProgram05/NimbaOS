@@ -268,6 +268,13 @@ export function fbsProductTupleKey(accountKey: string, nmId: number, chrtId: num
   return `${normalizedTechnicalKey(accountKey)}:${nmId}:${chrtId}`
 }
 
+export class FbsProductNameMissingError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'FbsProductNameMissingError'
+  }
+}
+
 function accountKeyFromEventKey(value: unknown): string | null {
   const match = normalize(value).match(/^fbs-(?:order|cancel|return-accepted):([a-z0-9-]+):/)
   return match?.[1] ?? null
@@ -306,6 +313,7 @@ export function resolveFbsProductName(params: {
   const alias = params.productAliases?.get(tupleKey)
   if (alias) return alias
   const value = params.productNames.get(tupleKey)
+  if (value) return value
 
   const vendorCode = params.vendorCode?.trim() ?? ''
   const normalizedVendor = normalizeProductName(vendorCode)
@@ -324,7 +332,6 @@ export function resolveFbsProductName(params: {
       )
       if (shortenedExact.length === 1) return shortenedExact[0]
     }
-    if (value) return value
     const vendorTokens = productMatchTokens(normalizedVendor)
     const scored = params.allowedProductNames.map((name) => {
       const nameTokens = productMatchTokens(normalizeProductName(name))
@@ -346,9 +353,8 @@ export function resolveFbsProductName(params: {
       )
     }
   }
-  if (value) return value
   const vendor = vendorCode ? ` (${vendorCode})` : ''
-  throw new Error(
+  throw new FbsProductNameMissingError(
     `Нет названия товара в таблице для ${params.accountKey}, nmId ${params.nmId}, chrtId ${params.chrtId}${vendor}`,
   )
 }

@@ -36,7 +36,7 @@ export async function getSpreadsheetMetadata(spreadsheetId: string) {
   const sheets = await getGoogleSheetsClient()
   const response = await sheets.spreadsheets.get({
     spreadsheetId,
-    fields: 'spreadsheetId,properties(title,locale,timeZone),sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))',
+    fields: 'spreadsheetId,properties(title,locale,timeZone),sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)),merges)',
   })
   return response.data
 }
@@ -58,13 +58,14 @@ export async function getSheetValues(
 export async function batchUpdateSheetValues(
   spreadsheetId: string,
   data: Array<{ range: string; values: unknown[][] }>,
+  valueInputOption: 'USER_ENTERED' | 'RAW' = 'USER_ENTERED',
 ) {
   if (data.length === 0) return
   const sheets = await getGoogleSheetsClient()
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
     requestBody: {
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption,
       data: data.map((item) => ({
         range: item.range,
         majorDimension: 'ROWS',
@@ -72,6 +73,15 @@ export async function batchUpdateSheetValues(
       })),
     },
   })
+}
+
+export async function batchUpdateSpreadsheet(
+  spreadsheetId: string,
+  requests: sheets_v4.Schema$Request[],
+) {
+  if (!requests.length) return
+  const sheets = await getGoogleSheetsClient()
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
 }
 
 export async function clearSheetValues(spreadsheetId: string, ranges: string[]) {

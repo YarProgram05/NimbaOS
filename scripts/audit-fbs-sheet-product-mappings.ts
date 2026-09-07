@@ -8,6 +8,7 @@ import {
 } from '../src/lib/automations/fbs-sheet'
 import { getFbsMovementSheetWorkflow } from '../src/lib/automations/workflows'
 import { FBS_SHEET_ROLES } from '../src/lib/automations/sheet-template'
+import { FBS_REFERENCE_FIRST_ROW, FBS_REFERENCE_LAST_ROW } from '../src/lib/automations/fbs-reference'
 
 function quoteSheetName(value: string) {
   return `'${value.replace(/'/g, "''")}'`
@@ -42,7 +43,7 @@ async function main() {
     ),
     getSheetValues(
       workflow.config.spreadsheetId,
-      `${quoteSheetName(referenceSheet)}!A4:A`,
+      `${quoteSheetName(referenceSheet)}!A${FBS_REFERENCE_FIRST_ROW}:A${FBS_REFERENCE_LAST_ROW}`,
       'UNFORMATTED_VALUE',
     ),
     getSheetValues(

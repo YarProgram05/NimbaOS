@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import {
   batchUpdateSheetValues,
+  batchUpdateSpreadsheet,
   copySheetRowPresentation,
   getSheetValues,
   getSpreadsheetMetadata,
@@ -34,6 +35,17 @@ import {
   type FbsSheetExistingRow,
   type FbsWbStockSnapshot,
 } from '@/lib/automations/fbs-sheet'
+import { planFbsNomenclature } from '@/lib/automations/fbs-nomenclature'
+import { planFbsFulfillmentSummary, FBS_FULFILLMENT_SUMMARY_RANGE } from '@/lib/automations/fbs-fulfillment-summary'
+import { loadFbsSheetFulfillment } from '@/lib/services/fbs-sheet-fulfillment'
+import { FBS_CONFIRMED_PRODUCT_ALIASES } from '@/lib/automations/fbs-product-aliases'
+import {
+  assertFbsSummaryProductCoverage,
+  planFbsReferenceExpansion,
+  FBS_REFERENCE_FIRST_ROW,
+  FBS_REFERENCE_LAST_ROW,
+  FBS_SUMMARY_LAST_ROW,
+} from '@/lib/automations/fbs-reference'
 import { AUTOMATION_WORKFLOW_KINDS, type FbsMovementSheetConfig } from '@/types/automations'
 import {
   FBS_SHEET_ROLE_DEFINITIONS,
@@ -92,6 +104,11 @@ export interface FbsMovementSheetWorkflowResult {
   wbStockUnits: number
   warningsCount: number
   warnings: FbsLocalStockWarning[]
+  productsRegistered: string[]
+  fulfillment: Pick<Awaited<ReturnType<typeof loadFbsSheetFulfillment>>,
+    'dateFrom' | 'dateTo' | 'asOf' | 'status' | 'units' | 'lowerBound' |
+    'confirmedAcceptanceLowerBound' | 'unknownAcceptance' | 'sourceStatus' |
+    'unknown' | 'diagnostics' | 'sourceDiagnostics'>
   accounts: AccountLoadResult[]
   dryRun: boolean
 }
@@ -104,6 +121,7 @@ interface PreparedAccount {
   events: FbsSheetDesiredEvent[]
   stockSnapshots: FbsWbStockSnapshot[]
   ordersByDate: Map<string, number>
+  newReferenceNames: string[]
 }
 
 class FbsAccountPreparationError extends Error {
@@ -164,6 +182,7 @@ function configFromWorkflow(value: Prisma.JsonValue): FbsMovementSheetConfig {
   }
   return {
     ...raw,
+    productAliases: { ...FBS_CONFIRMED_PRODUCT_ALIASES, ...raw.productAliases },
     sheetTabs: validateSheetTabs(sheetTabs, FBS_SHEET_ROLE_DEFINITIONS),
   } as FbsMovementSheetConfig
 }
@@ -238,9 +257,6 @@ async function assertFbsDataFreshness(wbAccountId: string, targetDate: string) {
 
 async function loadAccountWbStock(params: {
   account: FbsSheetAccountIdentity
-  productNames: Map<string, string>
-  productAliases: Map<string, string>
-  allowedProductNames: string[]
   existingStockKeys: Set<string>
   now: Date
 }) {
@@ -273,16 +289,10 @@ async function loadAccountWbStock(params: {
   if (stale) {
     throw new Error(`Остаток WB устарел: перед загрузкой нужна успешная сверка FBS-остатков не старше ${WB_STOCK_MAX_AGE_MINUTES} минут`)
   }
-  return buildFbsWbStockSnapshots({
-    account: params.account,
-    productNames: params.productNames,
-    productAliases: params.productAliases,
-    allowedProductNames: params.allowedProductNames,
-    stocks: relevant.map((item) => ({
-      ...item,
-      wbStockSyncedAt: item.wbStockSyncedAt as Date,
-    })),
-  })
+  return relevant.map((item) => ({
+    ...item,
+    wbStockSyncedAt: item.wbStockSyncedAt as Date,
+  }))
 }
 
 async function loadAccountData(params: {
@@ -328,6 +338,7 @@ async function loadAccountData(params: {
 
   let events: FbsSheetDesiredEvent[]
   let stockSnapshots: FbsWbStockSnapshot[]
+  let newReferenceNames: string[] = []
   try {
     await assertFbsDataFreshness(params.wbAccountId, params.targetDate)
     const account = {
@@ -336,9 +347,18 @@ async function loadAccountData(params: {
       cabinetLabel: params.cabinetLabel,
       technicalKey: params.technicalKey,
     }
+    const stocks = await loadAccountWbStock({ account, existingStockKeys: params.existingStockKeys, now: params.now })
+    const nomenclature = planFbsNomenclature({
+      candidates: [...orders, ...stocks, ...returns.flatMap((movement) => movement.order ? [movement.order] : [])]
+        .map((item) => ({ ...item, accountKey: params.technicalKey })),
+      productNames: params.productNames,
+      productAliases: params.productAliases,
+      allowedProductNames: params.allowedProductNames,
+    })
+    newReferenceNames = nomenclature.newReferenceNames
     events = buildFbsDesiredEvents({
       account,
-      productNames: params.productNames,
+      productNames: nomenclature.productNames,
       productAliases: params.productAliases,
       allowedProductNames: params.allowedProductNames,
       orders: orders.map((order) => ({
@@ -356,13 +376,11 @@ async function loadAccountData(params: {
         wbStatus: movement.order.wbStatus,
       }] : []),
     })
-    stockSnapshots = await loadAccountWbStock({
-      account,
-      productNames: params.productNames,
+    stockSnapshots = buildFbsWbStockSnapshots({
+      account, stocks,
+      productNames: nomenclature.productNames,
       productAliases: params.productAliases,
       allowedProductNames: params.allowedProductNames,
-      existingStockKeys: params.existingStockKeys,
-      now: params.now,
     })
   } catch (error) {
     throw new FbsAccountPreparationError(
@@ -379,6 +397,7 @@ async function loadAccountData(params: {
     events,
     stockSnapshots,
     ordersByDate,
+    newReferenceNames,
   }
 }
 
@@ -448,6 +467,10 @@ function verifySummaryWbStock(params: {
   values: unknown[][]
   accounts: PreparedAccount[]
 }) {
+  assertFbsSummaryProductCoverage(params.values, params.accounts.flatMap((account) => [
+    ...account.events.map((event) => event.productName),
+    ...account.stockSnapshots.map((snapshot) => snapshot.productName),
+  ]))
   const header = params.values[0] ?? []
   const summaryRows = params.values.slice(1).filter((row) => normalize(row[0]))
   const mismatches: string[] = []
@@ -625,13 +648,15 @@ export async function runFbsMovementSheetWorkflow(
   validateSpreadsheetContract({ metadata, config })
   const operationsPrefix = quoteSheetName(sheetNames.operations)
   const wbStockPrefix = quoteSheetName(sheetNames.wbStock)
-  const [operationValues, controlValues, formulaValues, referenceProductValues, wbStockValues, summaryFormulaValues] = await Promise.all([
+  const fulfillmentRange = `${quoteSheetName(sheetNames.summary)}!${FBS_FULFILLMENT_SUMMARY_RANGE}`
+  const [operationValues, controlValues, formulaValues, referenceProductValues, wbStockValues, summaryFormulaValues, fulfillmentValues] = await Promise.all([
     getSheetValues(config.spreadsheetId, `${operationsPrefix}!A${FBS_OPERATIONS_HEADER_ROW}:M`, 'UNFORMATTED_VALUE'),
     getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.control)}!A${CONTROL_HEADER_ROW}:H`, 'UNFORMATTED_VALUE'),
     getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.summary)}!C14`, 'FORMULA'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.reference)}!A4:A`, 'UNFORMATTED_VALUE'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.reference)}!A${FBS_REFERENCE_FIRST_ROW}:A${FBS_REFERENCE_LAST_ROW}`, 'UNFORMATTED_VALUE'),
     getSheetValues(config.spreadsheetId, `${wbStockPrefix}!A1:I`, 'UNFORMATTED_VALUE'),
-    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.summary)}!A7:Z8`, 'FORMULA'),
+    getSheetValues(config.spreadsheetId, `${quoteSheetName(sheetNames.summary)}!A7:T${FBS_SUMMARY_LAST_ROW}`, 'FORMULA'),
+    getSheetValues(config.spreadsheetId, fulfillmentRange, 'FORMULA'),
   ])
   validateHeaderRow(operationValues[0] ?? [], FBS_OPERATIONS_HEADERS, 'Операции')
   validateHeaderRow(wbStockValues[0] ?? [], FBS_WB_STOCK_HEADERS, 'Остатки WB')
@@ -643,14 +668,12 @@ export async function runFbsMovementSheetWorkflow(
   const allowedProductNames = referenceProductValues.map((row) => normalize(row[0])).filter(Boolean)
   const productAliases = new Map<string, string>()
   for (const [tuple, productName] of Object.entries(config.productAliases ?? {})) {
-    if (!allowedProductNames.includes(productName)) {
-      throw new Error(`Сопоставление ${tuple} указывает на отсутствующий товар «${productName}»`)
-    }
     const parts = tuple.split(':')
     if (parts.length !== 3 || !Number.isInteger(Number(parts[1])) || !Number.isInteger(Number(parts[2]))) {
       throw new Error(`Некорректный ключ сопоставления товара: ${tuple}`)
     }
-    productAliases.set(fbsProductTupleKey(parts[0], Number(parts[1]), Number(parts[2])), productName)
+    if (!normalize(productName)) throw new Error(`Пустое учётное название для ${tuple}`)
+    productAliases.set(fbsProductTupleKey(parts[0], Number(parts[1]), Number(parts[2])), normalize(productName))
   }
   const keys = accountKeyMap(config)
   const existingStockKeys = new Set(existingWbStockRows.map((row) => normalize(row.values[8])).filter(Boolean))
@@ -690,6 +713,7 @@ export async function runFbsMovementSheetWorkflow(
         events: [],
         stockSnapshots: [],
         ordersByDate: error instanceof FbsAccountPreparationError ? error.ordersByDate : new Map(),
+        newReferenceNames: [],
       })
     }
   }
@@ -702,8 +726,30 @@ export async function runFbsMovementSheetWorkflow(
     throw new Error(`FBS-автоматизация остановлена до записи: ${details.join('; ')}`)
   }
 
+  // The summary uses all retained history, independently of the incremental
+  // operation sync start date. Prepare and validate its footprint before writes.
+  const fulfillment = await loadFbsSheetFulfillment({ accounts: prepared, existingRows, targetDate })
+  const fulfillmentPlan = planFbsFulfillmentSummary({
+    summarySheetId: sheetIdByTitle(metadata, sheetNames.summary),
+    currentValues: fulfillmentValues,
+    merges: metadata.sheets?.find((sheet) => sheet.properties?.title === sheetNames.summary)?.merges ?? [],
+    fulfillment,
+  })
+
   const desiredEvents = prepared.flatMap((account) => account.events)
   const desiredStockSnapshots = prepared.flatMap((account) => account.stockSnapshots)
+  const desiredProductNames = [
+    ...desiredEvents.map((event) => event.productName),
+    ...desiredStockSnapshots.map((snapshot) => snapshot.productName),
+    ...prepared.flatMap((account) => account.newReferenceNames),
+  ]
+  const referencePlan = planFbsReferenceExpansion({
+    referenceValues: referenceProductValues,
+    summaryValues: summaryFormulaValues,
+    desiredNames: desiredProductNames,
+    referenceSheetId: sheetIdByTitle(metadata, sheetNames.reference),
+    referenceSheetName: sheetNames.reference,
+  })
   const plan = planFbsSheetUpsert({ existingRows, desiredEvents, loadedAt })
   const stockPlan = planFbsWbStockUpsert({
     existingRows: existingWbStockRows,
@@ -724,10 +770,24 @@ export async function runFbsMovementSheetWorkflow(
     })
   }
   if (!options.dryRun) {
+    // Only approved names, as literal strings. No opening/movement/quantity is
+    // created here. Re-read on retries: a completed reference write is a no-op.
+    await batchUpdateSpreadsheet(config.spreadsheetId, referencePlan.requests)
+    const referenceReadback = await getSheetValues(config.spreadsheetId,
+      `${quoteSheetName(sheetNames.reference)}!A${FBS_REFERENCE_FIRST_ROW}:A${FBS_REFERENCE_LAST_ROW}`, 'UNFORMATTED_VALUE')
+    const referenceVerification = planFbsReferenceExpansion({
+      referenceValues: referenceReadback, summaryValues: summaryFormulaValues,
+      desiredNames: desiredProductNames,
+      referenceSheetId: sheetIdByTitle(metadata, sheetNames.reference), referenceSheetName: sheetNames.reference,
+    })
+    if (referenceVerification.requests.length) throw new Error('Не удалось подтвердить новые товары в справочнике')
+    const summaryNames = await getSheetValues(config.spreadsheetId,
+      `${quoteSheetName(sheetNames.summary)}!A7:A${FBS_SUMMARY_LAST_ROW}`, 'UNFORMATTED_VALUE')
+    assertFbsSummaryProductCoverage(summaryNames, desiredProductNames)
     await batchUpdateSheetValues(config.spreadsheetId, [
       ...writeRanges(sheetNames.operations, plan.writes),
       ...wbStockWriteRanges(sheetNames.wbStock, stockPlan.writes),
-    ])
+    ], 'RAW')
   }
 
   const readbackRows = options.dryRun
@@ -765,10 +825,10 @@ export async function runFbsMovementSheetWorkflow(
 
   let wbStockUnits = desiredStockSnapshots.reduce((sum, snapshot) => sum + snapshot.wbStock, 0)
   let reconciliationWarnings: FbsLocalStockWarning[] = []
-  if (!options.dryRun || stockPlan.writes.length === 0) {
+  if (!options.dryRun || (stockPlan.writes.length === 0 && referencePlan.requests.length === 0)) {
     const summaryValues = await getSheetValues(
       config.spreadsheetId,
-      `${quoteSheetName(sheetNames.summary)}!A7:Z`,
+      `${quoteSheetName(sheetNames.summary)}!A7:T${FBS_SUMMARY_LAST_ROW}`,
       'UNFORMATTED_VALUE',
     )
     const summaryVerification = verifySummaryWbStock({ values: summaryValues, accounts: prepared })
@@ -790,7 +850,7 @@ export async function runFbsMovementSheetWorkflow(
     await batchUpdateSheetValues(config.spreadsheetId, controlWrites.map((write) => ({
       range: `${quoteSheetName(sheetNames.control)}!A${write.rowNumber}:H${write.rowNumber}`,
       values: [write.values],
-    })))
+    })), 'RAW')
     await verifyControlRows({
       spreadsheetId: config.spreadsheetId,
       controlSheetName: sheetNames.control,
@@ -822,10 +882,17 @@ export async function runFbsMovementSheetWorkflow(
   })
   const accountsFailed = results.filter((result) => result.status === 'FAILED').length
   if (!options.dryRun && !accountsFailed) {
+    await batchUpdateSpreadsheet(config.spreadsheetId, fulfillmentPlan.requests)
+    const fulfillmentReadback = await getSheetValues(config.spreadsheetId, fulfillmentRange, 'UNFORMATTED_VALUE')
+    if (fulfillmentPlan.values.some((row, rowIndex) => row.some((value, columnIndex) => (
+      fulfillmentReadback[rowIndex]?.[columnIndex] !== value
+    )))) {
+      throw new Error('Не удалось подтвердить показатели передачи и приёмки WB в сводке')
+    }
     await batchUpdateSheetValues(config.spreadsheetId, [{
       range: `${quoteSheetName(sheetNames.reference)}!E12`,
       values: [[sheetSerialDate(targetDate)]],
-    }])
+    }], 'RAW')
     const lastSuccess = await getSheetValues(
       config.spreadsheetId,
       `${quoteSheetName(sheetNames.reference)}!E12`,
@@ -852,6 +919,21 @@ export async function runFbsMovementSheetWorkflow(
     wbStockUnits,
     warningsCount: reconciliationWarnings.length,
     warnings: reconciliationWarnings,
+    productsRegistered: referencePlan.addedNames,
+    fulfillment: {
+      dateFrom: fulfillment.dateFrom,
+      dateTo: fulfillment.dateTo,
+      asOf: fulfillment.asOf,
+      status: fulfillment.status,
+      units: fulfillment.units,
+      lowerBound: fulfillment.lowerBound,
+      confirmedAcceptanceLowerBound: fulfillment.confirmedAcceptanceLowerBound,
+      unknownAcceptance: fulfillment.unknownAcceptance,
+      sourceStatus: fulfillment.sourceStatus,
+      unknown: fulfillment.unknown,
+      diagnostics: fulfillment.diagnostics,
+      sourceDiagnostics: fulfillment.sourceDiagnostics,
+    },
     accounts: results,
     dryRun: Boolean(options.dryRun),
   }

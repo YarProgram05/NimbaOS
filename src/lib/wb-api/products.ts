@@ -49,7 +49,10 @@ export async function fetchCardsList(
     body,
   )
 
-  const cards = resp?.cards ?? []
+  if (!Array.isArray(resp?.cards)) {
+    throw new Error('WB API returned an invalid product cards response')
+  }
+  const cards = resp.cards
 
   return {
     cards,

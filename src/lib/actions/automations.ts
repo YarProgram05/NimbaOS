@@ -32,6 +32,8 @@ import type {
   EnqueuedAutomationRun,
 } from '@/types/automations'
 import type { RunHistoryPage } from '@/types/run-history'
+import { confirmFbsSheetMapping, getFbsSheetMappingReview } from '@/lib/services/fbs-sheet-mappings'
+import type { ConfirmFbsSheetMappingInput, FbsSheetMappingReview } from '@/types/fbs-sheet-mappings'
 
 async function requireSession() {
   const session = await getServerSession(authOptions)
@@ -43,6 +45,28 @@ async function requireManagerSession() {
   const session = await requireSession()
   if (!checkRole(session, 'MANAGER')) throw new Error('Недостаточно прав')
   return session
+}
+
+export async function getFbsSheetMappingReviewAction(): Promise<ActionResult<FbsSheetMappingReview>> {
+  try {
+    await requireSession()
+    return { success: true, data: await getFbsSheetMappingReview() }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Не удалось проверить новые товары FBS' }
+  }
+}
+
+export async function confirmFbsSheetMappingAction(
+  input: ConfirmFbsSheetMappingInput,
+): Promise<ActionResult<{ key: string; productName: string }>> {
+  try {
+    await requireManagerSession()
+    const result = await confirmFbsSheetMapping(input)
+    revalidatePath('/automations/fbs-movement-sheet')
+    return { success: true, data: result }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Не удалось подтвердить соответствие товара' }
+  }
 }
 
 export async function getMorningWbReportWorkflowAction(): Promise<ActionResult<AutomationWorkflowRow>> {

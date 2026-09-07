@@ -16,6 +16,8 @@ import {
 } from '@/lib/actions/automations'
 import { AutomationScheduleEditor } from './automation-schedule-editor'
 import { GoogleSheetTemplateEditor } from './google-sheet-template-editor'
+import { FbsMappingReview } from './fbs-mapping-review'
+import type { FbsSheetMappingReview } from '@/types/fbs-sheet-mappings'
 
 function yesterdayMoscow() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -41,18 +43,21 @@ export function FbsMovementSheetDetailsClient({
   name,
   description,
   sheetTemplate,
+  initialMappingReview,
 }: {
   initialWorkflow: FbsMovementSheetWorkflowRow
   canManage: boolean
   name: string
   description: string
   sheetTemplate: AutomationSheetTemplateDefinition
+  initialMappingReview: FbsSheetMappingReview
 }) {
   const [workflow, setWorkflow] = useState(initialWorkflow)
   const [targetDate, setTargetDate] = useState(yesterdayMoscow)
   const [isSaving, setIsSaving] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [isTemplateValid, setIsTemplateValid] = useState(true)
+  const [isConfirmingMapping, setIsConfirmingMapping] = useState(false)
   const [isRefreshing, startRefresh] = useTransition()
 
   function patchWorkflow(patch: Partial<FbsMovementSheetWorkflowRow>) {
@@ -125,6 +130,9 @@ export function FbsMovementSheetDetailsClient({
         </Button>
       </div>
 
+      <FbsMappingReview initialReview={initialMappingReview} canManage={canManage}
+        disabled={isSaving || isRunning} onBusyChange={setIsConfirmingMapping} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Состояние и расписание</CardTitle>
@@ -186,10 +194,10 @@ export function FbsMovementSheetDetailsClient({
             onChange={(event) => setTargetDate(event.target.value)} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={!canManage || isRunning} onClick={runWorkflow}>
+          <Button variant="outline" disabled={!canManage || isRunning || isConfirmingMapping} onClick={runWorkflow}>
             <Play className="mr-2 h-4 w-4" /> {isRunning ? 'Запускаем...' : 'Запустить сейчас'}
           </Button>
-          <Button disabled={!canManage || isSaving || !isTemplateValid} onClick={saveWorkflow}>
+          <Button disabled={!canManage || isSaving || isConfirmingMapping || !isTemplateValid} onClick={saveWorkflow}>
             <Save className="mr-2 h-4 w-4" /> {isSaving ? 'Сохраняем...' : 'Сохранить настройки'}
           </Button>
         </div>

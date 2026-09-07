@@ -2,7 +2,7 @@
 
 Только незавершенная работа и короткий список недавно закрытых изменений. Исторический список до 2026-09-02 сохранен в `docs/archive/snapshots/2026-09-02-pre-cleanup/DEV_CURRENT_TASKS.md` и `docs/development/DEV_LOG.md`.
 
-Last updated: 2026-09-04.
+Last updated: 2026-09-07.
 
 ## Active
 
@@ -14,6 +14,8 @@ Last updated: 2026-09-04.
   Risks: WB rate limits; production worker concurrency 1.
 
 ## Next
+
+- BUG-037 — Проверить и применить FBS nomenclature/mapping fix и две операционные метрики после отдельного rollout-решения; точные группы, ограничения данных и результаты в `DEV_LOG.md` за 2026-09-07.
 
 - ID: TASK-P7-P8-LIVE-VERIFY
   Status: Pending
