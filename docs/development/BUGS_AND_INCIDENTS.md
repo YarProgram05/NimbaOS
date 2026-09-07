@@ -46,10 +46,9 @@ Next step: Сохранять bounded periods и наблюдать rate-limit/r
 
 ## Fixed Locally, Pending Production Verification
 
-- BUG-037 — New FBS listings stopped the accounting Sheet on missing physical-product names. Fix includes approved nomenclature registration and manager-confirmed suggestions; deployment and Sheet verification pending. See 2026-09-07 in `DEV_LOG.md`.
-- BUG-036 — FBS Sheet wrong physical-product alias; Sheet исправлен, code deployment pending.
+- BUG-036 — FBS Sheet wrong physical-product alias; Sheet исправлен, separate production verification pending.
 - BUG-035 — phone layouts; local responsive pass complete.
-- BUG-034 — Google Sheet connection inspection lacked app-service credential mapping; Compose fix pending rollout.
+- BUG-034 — Google Sheet connection inspection lacked app-service credential mapping; separate production verification pending.
 
 ## Archive Rule
 

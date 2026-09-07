@@ -2,11 +2,11 @@
 
 Текущий snapshot реализации NimbaOS без хронологического журнала. История прежнего файла сохранена в `docs/archive/snapshots/2026-09-02-pre-cleanup/PROJECT_STATE.md`; implementation history — в role logs.
 
-Last updated: 2026-09-04.
+Last updated: 2026-09-07.
 
 ## Current Phase
 
-Основной MVP и последующие dashboard/FBS/automation расширения реализованы. Mini-PC production работает через Docker и доступен по trusted Tailscale path. Production runtime обновлён 2026-09-04 до `fdb3f5e0b3e8808b455a2f967c3b2680834a7a80`; последующий delta в `main` относится только к документации и памяти агента и не требует отдельного runtime rollout.
+Основной MVP и последующие dashboard/FBS/automation расширения реализованы. Mini-PC production работает через Docker и доступен по trusted Tailscale path. App и оба worker обновлены 2026-09-07 до `c04011a49e72cdae7ad141f551f6da0f7b41100c`, health endpoint возвращает HTTP 200. Восстановление FBS Sheet подтверждено независимым сравнением первого запуска и повторным запуском без новых или обновлённых операций, остатков и названий.
 
 ## Implemented
 
@@ -20,7 +20,7 @@ Last updated: 2026-09-04.
 - WB stocks and feedback: current stock snapshots, turnover/risk, reviews/questions and guarded replies.
 - Background processing: PostgreSQL + Redis/BullMQ sync jobs, persisted run history, schedules and automation catalog.
 - FBS Stage 1: seller warehouses, assortment, orders, supplies/stickers, local inventory movements, encrypted KIZ lifecycle, manual CRPT XLSX batches and audited WB write gates.
-- Google Sheets workflows: DB-only morning report and local FBS movement-sheet workflow.
+- Google Sheets workflows: DB-only morning report and local FBS movement-sheet workflow with approved nomenclature registration, manager mapping review and separate cumulative system-delivery/confirmed-acceptance indicators.
 - Production operations: Docker Compose on Windows mini-PC, healthcheck, workers, GitHub Actions owner-confirmed release path, backup/restore runbook and Tailscale administration.
 - Documentation memory: compact canonical current layer plus explicit historical archive; startup context is role-routed through `AGENTS.md` and `docs/DOCS_INDEX.md`.
 - Development tooling: Graphify 0.9.53 with SQL parsing is installed through `uv` and connected as a project-scoped Codex skill. Scoped tasks use direct sources; broad navigation may use one bounded read-only query; semantic refresh is a separate batch-maintenance task. Only `graphify-out/graph.json` and `graphify-out/manifest.json` are portable tracked artifacts.
@@ -44,7 +44,7 @@ Last updated: 2026-09-04.
 - Public employee access remains unreliable through Cloudflare for affected Russian IPv4 clients; Tailscale is the trusted path.
 - Monitoring/alerting beyond persisted run histories is limited.
 - Direct Chestny Znak True API integration is deferred.
-- FBS opening physical balances/replenishment warnings still require operator reconciliation; WB write gates remain disabled unless explicitly approved.
+- FBS physical-stock warnings and Excel receipt candidates require operator reconciliation. Legacy Sheet-date diagnostics and missing individual acceptance history limit fulfillment indicators to confirmed lower bounds; no historical receipt import or inferred acceptance date is implied. WB write gates remain disabled unless explicitly approved.
 - Persisted materialized aggregate layer is not implemented; reporting currently aggregates through services.
 
 ## Not Implemented

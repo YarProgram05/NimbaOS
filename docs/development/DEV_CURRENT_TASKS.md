@@ -15,7 +15,7 @@ Last updated: 2026-09-07.
 
 ## Next
 
-- BUG-037 — Проверить и применить FBS nomenclature/mapping fix и две операционные метрики после отдельного rollout-решения; точные группы, ограничения данных и результаты в `DEV_LOG.md` за 2026-09-07.
+- Review the Excel receipt candidates and unresolved individual WB acceptance evidence separately; no historical import or inferred acceptance dates. Findings and required owner decisions: `docs/marketplace/MARKETPLACE_ANALYSIS_LOG.md`, 2026-09-07.
 
 - ID: TASK-P7-P8-LIVE-VERIFY
   Status: Pending
@@ -35,6 +35,7 @@ Last updated: 2026-09-07.
 
 ## Done Recently
 
+- 2026-09-07 — BUG-037 закрыт: production `c04011a`, независимая сверка первого FBS Sheet run и повторный запуск без новых/обновлённых операций, остатков или названий успешны. Ограничения исторических дат и приёмки сохранены; подробности в `DEV_LOG.md`.
 - 2026-09-04 — Исправлен midnight drift ежедневных schedule fingerprints; CI и production rollout `fdb3f5e` успешны, отчёты и хранение запустились в 02:30.
 - 2026-09-04 — Graphify переведён в read-only-by-default режим с отдельным пакетным обслуживанием и без самореферентного `save-result` workflow.
 - 2026-09-02 — Production migrations и rollup проверены, локальная БД обновлена свежим production snapshot.
